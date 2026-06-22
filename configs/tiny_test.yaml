@@ -1,0 +1,109 @@
+# Minimal config for unit / e2e tests. Paths are written relative to project_root,
+# but tests typically point project_root at a tmp_path.
+
+project_root: .
+
+data:
+  bone_dir: data/bone
+  torso_skin: data/torso/skin.stl
+  vagus_left_glob: "data/vagus/*left*.stl"
+  vagus_right_glob: "data/vagus/*right*.stl"
+
+outputs:
+  base: outputs
+  geometry_mat: outputs/geometry/vagus_geometry.mat
+  geometry_png: outputs/geometry/vagus_geometry.png
+  fem_mat: outputs/fem/fem_vagus.mat
+  fem_png: outputs/fem/fem_vagus.png
+  sensors_mat: outputs/sensors/sensor_array.mat
+  sensors_png: outputs/sensors/sensor_array.png
+  electrodes_mat: outputs/sensors/electrode_array.mat
+  electrodes_png: outputs/sensors/electrode_array.png
+  forward_npz: outputs/forward/duneuro_leadfield_vagus.npz
+  forward_chunks_dir: outputs/forward/chunks
+  forward_eeg_npz: outputs/forward/duneuro_eeg_leadfield_vagus.npz
+  sensitivity_dir: outputs/forward/sensitivity
+  intermediate_bone_clean: outputs/intermediate/bone/clean
+  intermediate_bone_union: outputs/intermediate/bone/union.stl
+  logs_dir: outputs/logs
+
+geometry:
+  shrinkwrap:
+    mesh_skin:        {pitch: 5.0, n_samples: 5000, close_iter: 1, decimate_target: 2000, smooth_iter: 2}
+    mesh_vagus_left:  {pitch: 1.0, n_samples: 1000, close_iter: 1, decimate_target: 500,  smooth_iter: 1}
+  validate:
+    require_watertight: true
+    require_winding_consistent: true
+    require_euler_2: true
+
+fem:
+  pitch_mm: 5.0
+  pad_mm: 10.0
+  radbound: 4.0
+  maxvol: 60.0
+  vagus_dilate_voxels: 1
+  bone_closing_mm: 10.0
+  tissues: ["vagus_left", "skin"]
+  validate:
+    min_mesh_quality: 0.0
+    require_contiguous_tissue_ids: true
+    require_units_mm: true
+
+sensors:
+  resolution_mm: 50.0
+  depth_mm: 5.0
+  angular_margin_deg: 90.0
+  cylinder_radius_factor: 0.75
+  z_crop_low_factor: 0.0
+
+forward:
+  conductivities_sm:
+    vagus_left:  0.30
+    skin:        0.43
+  sigma_unit_scale: 1.0e-3
+  source_spacing_mm: 10.0
+  source_tissue: vagus_left
+  duneuro_path: null
+  solver:
+    type: cg
+    reduction: 1.0e-8
+    edge_norm_type: houston
+    penalty: 20
+    scheme: sipg
+    weights: tensorOnly
+    intorderadd: 5
+    post_process_meg: true
+    subtract_mean: true
+  validate:
+    require_finite: true
+    max_abs_fT_per_nAm: 1.0e+9
+
+electrodes:
+  shape: rectangular
+  rows: 2
+  cols: 4
+  contact_pitch_mm: 5.0
+  head_offset_mm: 15.0
+  foot_offset_mm: 15.0
+  target_tissue: vagus_left
+  target_z_low_factor: 0.0
+  target_z_high_factor: 1.0
+  label_prefix: elec
+  n_contacts: 100
+  sample_seed: 0
+
+noise:
+  opm_intrinsic_fT_sqrtHz: 15.0
+  eeg_amplifier_uV_sqrtHz: 0.5
+  eeg_electrode_skin_kohm: 50.0
+  bandwidth_hz: 1000.0
+
+cluster:
+  n_chunks: 2
+
+sensitivity:
+  perturbations: [1.0]
+  tissues: ["skin"]
+
+reproducibility:
+  seed: 0

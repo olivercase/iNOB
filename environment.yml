@@ -1,0 +1,50 @@
+# Conda environment for the Vagus_FM pipeline.
+#
+# This pins both the Python runtime AND the C++ toolchain needed to build
+# DUNEuro from source (DUNE 2.10 + duneuro + duneuro-py); duneuro has no
+# conda/PyPI package, so after creating this env you still run the build:
+#
+#   conda env create -f environment.yml
+#   conda activate vagus-fm
+#   bash scripts/build_duneuro_local.sh      # or cluster/build_duneuro.sh
+#
+# For a fully reproducible, platform-locked solve, generate a lock file:
+#
+#   conda install -n base conda-lock
+#   conda-lock -f environment.yml -p osx-arm64 -p linux-64   # → conda-lock.yml
+#   conda-lock install -n vagus-fm conda-lock.yml
+#
+# The Dockerfile is the heavier alternative that bakes the compiled duneuro.
+name: vagus-fm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  # ── C++ build toolchain for DUNEuro (matches build_duneuro_local.sh deps) ─
+  - cxx-compiler
+  - c-compiler
+  - cmake>=3.20
+  - make
+  - pkg-config
+  - git
+  - eigen>=3.4
+  - gmp
+  - metis
+  - superlu
+  - suitesparse
+  - tbb-devel
+  # ── Python runtime (pinned to the verified local build) ──────────────────
+  - numpy=2.4.6
+  - scipy=1.17.1
+  - h5py=3.16.0
+  - trimesh=4.12.2
+  - scikit-image=0.26.0
+  - matplotlib-base=3.10.9
+  - pyyaml=6.0.3
+  - pyvista>=0.43,<0.46
+  - rtree>=1.1,<1.4
+  - pip
+  # ── pip-only packages (no conda-forge build) ─────────────────────────────
+  - pip:
+      - iso2mesh>=0.2,<0.4
+      - pymeshfix>=0.16,<0.18

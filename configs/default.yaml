@@ -1,0 +1,131 @@
+# Vagus_FM default configuration — single source of truth for the pipeline.
+# All paths relative to project_root (auto-detected; can override with --project-root).
+
+project_root: .
+
+data:
+  bone_dir: data/bone
+  torso_skin: data/torso/FJ2810_BP22617_FMA7163_Skin.stl
+  vagus_left_glob: "data/vagus/*left*.stl"
+  vagus_right_glob: "data/vagus/*right*.stl"
+  muscle_dir: data/muscle      # neck muscles around the carotid sheath
+  vessel_dir: data/vessel      # carotid-sheath vessels (carotid, jugular)
+
+outputs:
+  base: outputs
+  geometry_mat: outputs/geometry/vagus_geometry.mat
+  geometry_png: outputs/geometry/vagus_geometry.png
+  fem_mat: outputs/fem/fem_vagus.mat
+  fem_png: outputs/fem/fem_vagus.png
+  sensors_mat: outputs/sensors/sensor_array.mat
+  sensors_png: outputs/sensors/sensor_array.png
+  electrodes_mat: outputs/sensors/electrode_array.mat
+  electrodes_png: outputs/sensors/electrode_array.png
+  forward_npz: outputs/forward/duneuro_leadfield_vagus.npz
+  forward_chunks_dir: outputs/forward/chunks
+  forward_eeg_npz: outputs/forward/duneuro_eeg_leadfield_vagus.npz
+  sensitivity_dir: outputs/forward/sensitivity
+  intermediate_bone_clean: outputs/intermediate/bone/clean
+  intermediate_bone_union: outputs/intermediate/bone/union.stl
+  logs_dir: outputs/logs
+
+geometry:
+  shrinkwrap:
+    mesh_skin:        {pitch: 3.0, n_samples: 300000, close_iter: 2, decimate_target: 30000, smooth_iter: 8}
+    mesh_bone:        {pitch: 2.0, n_samples: 400000, close_iter: 2, decimate_target: 25000, smooth_iter: 10}
+    mesh_vagus_left:  {pitch: 0.5, n_samples: 80000,  close_iter: 1, decimate_target: 8000,  smooth_iter: 4}
+    mesh_vagus_right: {pitch: 0.5, n_samples: 80000,  close_iter: 1, decimate_target: 8000,  smooth_iter: 4}
+    mesh_muscle:      {pitch: 1.0, n_samples: 150000, close_iter: 1, decimate_target: 15000, smooth_iter: 6}
+    mesh_blood_vessel: {pitch: 0.5, n_samples: 60000, close_iter: 1, decimate_target: 6000,  smooth_iter: 3}
+  validate:
+    require_watertight: true
+    require_winding_consistent: true
+    require_euler_2: true
+
+fem:
+  pitch_mm: 3.0
+  pad_mm: 50.0
+  radbound: 2.5
+  maxvol: 20.0
+  vagus_dilate_voxels: 1
+  bone_closing_mm: 30.0
+  tissues: ["vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin"]
+  validate:
+    min_mesh_quality: 0.05
+    require_contiguous_tissue_ids: true
+    require_units_mm: true
+
+sensors:
+  resolution_mm: 30.0
+  depth_mm: 10.0
+  angular_margin_deg: 90.0
+  cylinder_radius_factor: 0.75
+  z_crop_low_factor: 0.55     # crop_lo = z_lo + factor * (z_hi - z_lo)
+
+forward:
+  conductivities_sm:           # SINGLE source of truth — used locally + on cluster
+    vagus_left:   0.30
+    vagus_right:  0.30
+    blood_vessel: 0.70         # blood ≈ 0.7 S/m (carotid/jugular lumen)
+    muscle:       0.35         # skeletal muscle (isotropic mean)
+    bone:         0.0042
+    skin:         0.43
+  sigma_unit_scale: 1.0e-3     # S/m → S/mm (DUNEuro mm-mode)
+  source_spacing_mm: 5.0
+  source_tissue: vagus_left
+  duneuro_path: null           # optional override; default = use installed duneuropy
+  solver:
+    type: cg
+    reduction: 1.0e-10
+    edge_norm_type: houston
+    penalty: 20
+    scheme: sipg
+    weights: tensorOnly
+    intorderadd: 5
+    post_process_meg: true
+    subtract_mean: true
+  validate:
+    require_finite: true
+    max_abs_fT_per_nAm: 1.0e+6   # sanity bound; regulars are O(1e-3..1e2)
+
+electrodes:
+  # Real PEDOT:PSS hardware: 32-channel paddle layout (1 head + 5×6 body + 1 foot).
+  shape: paddle32                 # "rectangular" / "paddle32" / "whole_body"
+  rows: 6                         # body grid rows (paddle) or N rows (rectangular)
+  cols: 5                         # body grid cols (paddle) or N cols (rectangular)
+  contact_pitch_mm: 5.0
+  head_offset_mm: 15.0            # paddle: distance grid-top → head contact
+  foot_offset_mm: 15.0            # paddle: distance grid-bottom → foot contact
+  target_tissue: vagus_left
+  target_z_low_factor: 0.65
+  target_z_high_factor: 0.95
+  label_prefix: elec
+  n_contacts: 1000                # whole_body: number of skin-sampled electrodes
+  sample_seed: 0
+
+noise:
+  # Per-modality noise floors used by analysis/snr.py.
+  # OPMs: QuSpin Gen-3 (QZFM-3) typical ≈ 7 fT/√Hz (spec range 7-10).
+  # Gen-2 baseline was 15 fT/√Hz; pass --set noise.opm_intrinsic_fT_sqrtHz=15
+  # to recover the older Gen-2 prediction.
+  opm_intrinsic_fT_sqrtHz: 7.0
+  # PEDOT:PSS HD-EMG-style: amplifier ~0.3-1 µV/√Hz; electrode-skin
+  # interface contributes Johnson noise from contact impedance.
+  # Malliaras-group flexible-textile PEDOT:PSS contact impedance is ≈ 5-20
+  # kΩ at 1 kHz (Inal/Rivnay/Malliaras 2018; Pas et al. 2018), much lower
+  # than dry Ag/AgCl (≥ 100 kΩ). Use 10 kΩ as the typical operating value.
+  eeg_amplifier_uV_sqrtHz: 0.5
+  eeg_electrode_skin_kohm: 10.0
+  bandwidth_hz: 1000.0            # CAP-relevant band
+
+cluster:
+  n_chunks: 32
+
+sensitivity:
+  # Conductivity sensitivity sweep — multiplicative perturbations applied
+  # one tissue at a time to forward.conductivities_sm.
+  perturbations: [0.8, 1.0, 1.25]
+  tissues: ["bone", "skin"]       # the dominant uncertainty drivers
+
+reproducibility:
+  seed: 0

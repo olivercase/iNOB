@@ -1,0 +1,140 @@
+cff-version: 1.2.0
+title: >
+  Forward_Model_Vagus_Nerve — a dual-modality (OPM-MEG + HD-EEG)
+  torso-scale forward model for the cervical vagus nerve
+message: >
+  If you use this software, please cite it using these metadata.
+type: software
+authors:
+  - family-names: Case
+    given-names: Oliver
+    email: oliver@fizzymilk.com
+    affiliation: University College London
+repository-code: https://github.com/fizzymilk/Forward_Model_Vagus_Nerve
+url: https://github.com/fizzymilk/Forward_Model_Vagus_Nerve
+license: MIT
+keywords:
+  - magnetoencephalography
+  - MEG
+  - OPM
+  - vagus nerve
+  - finite-element method
+  - forward modelling
+  - HD-EMG
+  - EEG
+preferred-citation:
+  type: software
+  title: >
+    Forward_Model_Vagus_Nerve: dual-modality OPM-MEG + HD-EEG forward
+    modelling for the cervical vagus nerve
+  authors:
+    - family-names: Case
+      given-names: Oliver
+  year: 2026
+references:
+  - type: data
+    title: >
+      BodyParts3D: 3D structure database for anatomical concepts
+    authors:
+      - family-names: Mitsuhashi
+        given-names: N
+      - family-names: Fujieda
+        given-names: K
+      - family-names: Tamura
+        given-names: T
+      - family-names: Kawamoto
+        given-names: S
+      - family-names: Takagi
+        given-names: T
+      - family-names: Okubo
+        given-names: K
+    journal: Nucleic Acids Research
+    volume: 37
+    issue: Database issue
+    start: D782
+    end: D785
+    year: 2009
+    doi: 10.1093/nar/gkn613
+    notes: >
+      All anatomical meshes (and derived FEM/leadfield/figure artifacts) in
+      this repository originate from the BodyParts3D atlas, © The Database
+      Center for Life Science (DBCLS), licensed under CC BY-SA 2.1 Japan
+      (https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en). See
+      LICENSE-DATA. Source/viewer: https://lifesciencedb.jp/bp3d/
+  - type: article
+    authors:
+      - family-names: Sarvas
+        given-names: J
+    title: >
+      Basic mathematical and electromagnetic concepts of the biomagnetic
+      inverse problem
+    journal: Physics in Medicine and Biology
+    volume: 32
+    issue: 1
+    start: 11
+    end: 22
+    year: 1987
+    doi: 10.1088/0031-9155/32/1/004
+  - type: article
+    authors:
+      - family-names: Hämäläinen
+        given-names: M
+      - family-names: Hari
+        given-names: R
+      - family-names: Ilmoniemi
+        given-names: R J
+      - family-names: Knuutila
+        given-names: J
+      - family-names: Lounasmaa
+        given-names: O V
+    title: >
+      Magnetoencephalography — theory, instrumentation, and applications
+      to noninvasive studies of the working human brain
+    journal: Reviews of Modern Physics
+    volume: 65
+    start: 413
+    year: 1993
+    doi: 10.1103/RevModPhys.65.413
+  - type: article
+    authors:
+      - family-names: Doherty
+        given-names: T M
+    title: >
+      Non-invasive ventral cervical magnetoneurography as a proxy of in
+      vivo lipopolysaccharide-induced inflammation
+    journal: Communications Biology
+    volume: 7
+    start: 893
+    year: 2024
+    doi: 10.1038/s42003-024-06435-8
+  - type: article
+    authors:
+      - family-names: O'Neill
+        given-names: G C
+      - family-names: Spedden
+        given-names: M E
+      - family-names: Schmidt
+        given-names: M
+      - family-names: Mellor
+        given-names: S
+      - family-names: Stenroos
+        given-names: M
+      - family-names: Barnes
+        given-names: G R
+    title: Volume conductor models for magnetospinography
+    journal: Scientific Reports
+    volume: 15
+    start: 25649
+    year: 2025
+    doi: 10.1038/s41598-025-10770-z
+  - type: article
+    authors:
+      - family-names: Pelot
+        given-names: N A
+    title: >
+      Modeling vagus nerve fibre populations
+    journal: Frontiers in Neuroscience
+    volume: 12
+    start: 601
+    year: 2017
+    doi: 10.3389/fnins.2018.00601

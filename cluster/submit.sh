@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Single qsub wrapper. Usage:
+#
+#   CLUSTER_PROFILE=myriad bash cluster/submit.sh array
+#   CLUSTER_PROFILE=kathleen bash cluster/submit.sh build
+#   CLUSTER_PROFILE=myriad bash cluster/submit.sh reduce
+#
+# Reads the profile in cluster/profiles/<name>.env and translates its values
+# into SGE flags (queue, parallel-environment, walltime, memory, array shape).
+# Submits the matching cluster/run_<task>.sh body script.
+
+set -euo pipefail
+
+HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${HERE}/lib.sh"
+vagus_fm__init
+
+WHICH="${1:-}"
+case "${WHICH}" in
+    array|build|reduce) ;;
+    -h|--help|"") echo "usage: CLUSTER_PROFILE=<myriad|kathleen> bash cluster/submit.sh array|build|reduce" >&2; exit 2 ;;
+    *) echo "unknown task: ${WHICH}" >&2; exit 2 ;;
+esac
+
+# submit.sh runs ON the cluster, so expand the literal ``${HOME}`` to a real
+# path for the local mkdir and qsub -wd.
+eval "REMOTE_BASE_LIT=\"${REMOTE_BASE}\""
+LOG_DIR="${REMOTE_BASE_LIT}/logs"
+mkdir -p "${LOG_DIR}" 2>/dev/null || true
+
+# Common qsub flags built from the profile.
+COMMON_FLAGS=(
+    -S /bin/bash
+    -wd "${LOG_DIR}"
+    -j y
+    -V                                # forward env (so CLUSTER_PROFILE propagates)
+)
+
+case "${WHICH}" in
+    array)
+        JOB_NAME="vagus_fwd"
+        FLAGS=(
+            -N "${JOB_NAME}"
+            -pe ${PE_DIRECTIVE}
+            -l "h_rt=${WALLTIME_ARRAY},mem=${MEM_PER_TASK}"
+            -t "1-${TASKS}"
+            -o '$JOB_NAME.$JOB_ID.$TASK_ID.log'
+        )
+        BODY="${HERE}/run_array.sh"
+        ;;
+    build)
+        JOB_NAME="vagus_build"
+        FLAGS=(
+            -N "${JOB_NAME}"
+            -pe ${PE_DIRECTIVE}
+            -l "h_rt=${WALLTIME_BUILD},mem=${MEM_PER_TASK}"
+            -o '$JOB_NAME.$JOB_ID.log'
+        )
+        BODY="${HERE}/run_build.sh"
+        ;;
+    reduce)
+        JOB_NAME="vagus_reduce"
+        # Reduce is single-threaded; force the smaller PE if available.
+        REDUCE_PE="${PE_DIRECTIVE%% *} 1"
+        if [[ "${PE_DIRECTIVE}" == mpi* ]]; then
+            # On Kathleen MPI nodes the smallest viable allocation is the full node.
+            REDUCE_PE="${PE_DIRECTIVE}"
+        fi
+        FLAGS=(
+            -N "${JOB_NAME}"
+            -pe ${REDUCE_PE}
+            -l "h_rt=${WALLTIME_REDUCE},mem=${MEM_PER_TASK}"
+            -hold_jid vagus_fwd
+            -o '$JOB_NAME.$JOB_ID.log'
+        )
+        BODY="${HERE}/run_reduce.sh"
+        ;;
+esac
+
+vagus_fm__log "qsub ${COMMON_FLAGS[*]} ${FLAGS[*]} ${BODY}"
+qsub "${COMMON_FLAGS[@]}" "${FLAGS[@]}" "${BODY}"

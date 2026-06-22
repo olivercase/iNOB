@@ -1,0 +1,22 @@
+# Keep the build context small: the image carries CODE only. Mount data and
+# outputs at runtime, e.g.
+#   docker run --rm -v "$PWD/data:/work/data" -v "$PWD/outputs:/work/outputs" vagus-fm ...
+.git
+.github
+data
+outputs
+internal_meshes
+gui
+*.docx
+**/__pycache__
+**/*.pyc
+*.egg-info
+.pytest_cache
+.ruff_cache
+.venv
+venv
+# Large bundled archives / caches that are not needed to build the image.
+data/bodyparts3d
+**/*.glb
+**/*.mat
+**/*.npz

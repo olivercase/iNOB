@@ -1,0 +1,7 @@
+# GUI backend deps (in addition to the project's own requirements.txt).
+# Install into the same env that has `vagus_fm` importable:
+#   pip install -r gui/backend/requirements.txt
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pyyaml>=6.0
+websockets>=12.0

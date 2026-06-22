@@ -1,0 +1,45 @@
+DATA LICENSE — BodyParts3D anatomical meshes
+============================================
+
+The anatomical surface and volume meshes used by this project — including the
+STL inputs under `data/` (bone, torso skin, vagus, muscle, vessel), the OBJ
+meshes under `data/bodyparts3d/` and `internal_meshes/`, and every tetrahedral
+FEM, leadfield, sensor array and figure derived from them — originate from the
+**BodyParts3D** atlas and are NOT covered by the project's MIT code license
+(see `LICENSE`).
+
+BodyParts3D is © The Database Center for Life Science (DBCLS).
+
+It is licensed under the Creative Commons Attribution-Share Alike 2.1 Japan
+License (CC BY-SA 2.1 JP):
+
+    https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en
+
+Under this license you are free to share and adapt the meshes (and our
+derivatives of them) for any purpose, including commercially, provided that
+you:
+
+  * **Attribute** — credit "BodyParts3D, © The Database Center for Life
+    Science (DBCLS)" and indicate if changes were made (this project
+    voxel-shrink-wraps, unions, decimates, smooths and tetrahedralises the
+    original meshes; see docs/COORDINATES.md and the geometry/FEM builders);
+    and
+  * **ShareAlike** — distribute any derivative meshes under the same
+    CC BY-SA 2.1 JP license.
+
+Required citation for the dataset:
+
+    Mitsuhashi N, Fujieda K, Tamura T, Kawamoto S, Takagi T, Okubo K.
+    BodyParts3D: 3D structure database for anatomical concepts.
+    Nucleic Acids Research. 2009;37(Database issue):D782–D785.
+    doi:10.1093/nar/gkn613
+
+Source / viewer: https://lifesciencedb.jp/bp3d/  (Anatomography, RIKEN and
+the University of Tokyo).
+
+NOTE ON LICENSE SCOPE
+---------------------
+Because the FEM meshes, leadfields and figures in this repository are
+derivative works of CC BY-SA 2.1 JP data, those *derived data artifacts* are
+also distributed under CC BY-SA 2.1 JP, not MIT. The MIT license applies only
+to the Python source code, build scripts, and configuration.

@@ -1,0 +1,15 @@
+# Pinned local dev dependencies (snapshot for reproducible local installs).
+# `pip install -e .` will use the looser bounds in pyproject.toml.
+numpy>=1.26
+scipy>=1.11
+h5py>=3.10
+trimesh>=4.0
+scikit-image>=0.22
+matplotlib>=3.8
+pyvista>=0.43
+iso2mesh>=0.2
+pymeshfix>=0.16
+pyyaml>=6.0
+rtree>=1.1
+pytest>=8.0
+ruff>=0.4

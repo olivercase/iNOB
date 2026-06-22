@@ -1,0 +1,104 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vagus-fm"
+description = "Forward modelling pipeline for vagus nerve OPM-MEG (geometry → FEM → sensors → DUNEuro leadfield)"
+readme = "README.md"
+requires-python = ">=3.11"
+dynamic = ["version"]
+authors = [{ name = "Oliver Case", email = "oliver@fizzymilk.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+# Loose runtime pins so local dev works on whatever wheels are available.
+# Strict pins for the UCL clusters live in requirements-cluster.txt
+# (manylinux2014 / older glibc forces numpy<2 there).
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "h5py>=3.10",
+    "trimesh>=4.0",
+    "scikit-image>=0.22",
+    "matplotlib>=3.8",
+    "pyvista>=0.43",
+    "iso2mesh>=0.2",
+    "pymeshfix>=0.16",
+    "pyyaml>=6.0",
+    "rtree>=1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "h5py>=3.10",
+]
+
+[project.scripts]
+vagus-fm-pipeline   = "vagus_fm.cli.pipeline:main"
+vagus-fm-build-geom = "vagus_fm.cli.build_geom:main"
+vagus-fm-build-fem  = "vagus_fm.cli.build_fem:main"
+vagus-fm-sensors    = "vagus_fm.cli.generate_sensors:main"
+vagus-fm-electrodes = "vagus_fm.cli.generate_electrodes:main"
+vagus-fm-forward    = "vagus_fm.cli.run_forward:main"
+vagus-fm-eeg        = "vagus_fm.cli.run_eeg:main"
+vagus-fm-snr        = "vagus_fm.cli.snr:main"
+vagus-fm-sensitivity = "vagus_fm.cli.sensitivity:main"
+vagus-fm-sarvas     = "vagus_fm.cli.sarvas:main"
+vagus-fm-cross      = "vagus_fm.cli.cross_modality:main"
+vagus-fm-detect     = "vagus_fm.cli.detectability:main"
+vagus-fm-location   = "vagus_fm.cli.location:main"
+vagus-fm-calibrate  = "vagus_fm.cli.calibrate:main"
+vagus-fm-physiology = "vagus_fm.cli.physiology:main"
+vagus-fm-cap-compare = "vagus_fm.cli.cap_compare:main"
+vagus-fm-topoplot   = "vagus_fm.cli.topoplot:main"
+vagus-fm-visualise  = "vagus_fm.cli.visualise:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "vagus_fm.__version__" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# AppleDouble metadata files appear on macOS-mounted external volumes; they
+# are not source.
+extend-exclude = ["**/._*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "RUF"]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # default args in function defs (argparse-friendly)
+    "RUF001", # unicode in strings (intentional in scientific docstrings)
+    "RUF002", # unicode in docstrings
+    "RUF003", # unicode in comments
+    "B017",   # raises Exception in tests (we accept generic raises)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: tests that take >5s",
+    "duneuro: tests requiring duneuropy (auto-skipped if unavailable)",
+]

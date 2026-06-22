@@ -1,0 +1,24 @@
+# UCL SSH config example — copy to ~/.ssh/config and replace YOUR_UCL_USER
+# with your UCL user-id (e.g. zcqsabc). After this, `ssh myriad` works anywhere.
+
+Host myriad
+    HostName myriad.rc.ucl.ac.uk
+    User YOUR_UCL_USER
+    ForwardX11 yes
+    ForwardX11Trusted yes
+
+Host kathleen
+    HostName kathleen.rc.ucl.ac.uk
+    User YOUR_UCL_USER
+    ForwardX11 yes
+    ForwardX11Trusted yes
+
+Host aristotle
+    HostName aristotle.rc.ucl.ac.uk
+    User YOUR_UCL_USER
+    ForwardX11 yes
+    ForwardX11Trusted yes
+
+Host gateway
+    HostName ssh-gateway.ucl.ac.uk
+    User YOUR_UCL_USER

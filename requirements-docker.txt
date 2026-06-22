@@ -1,0 +1,19 @@
+# Pinned Python deps for the reproducible Docker image (see Dockerfile).
+# The forward-solve set (numpy…pyyaml) is pinned to the exact versions of the
+# verified local DUNEuro build (Python 3.11). The geometry/FEM extras below
+# are needed only for the build-geom / build-fem stages.
+
+# ── forward-solve core (verified with the duneuro build) ──────────────────
+numpy==2.4.6
+scipy==1.17.1
+h5py==3.16.0
+trimesh==4.12.2
+scikit-image==0.26.0
+matplotlib==3.10.9
+pyyaml==6.0.3
+
+# ── geometry / FEM build extras (looser; not exercised by the solve) ──────
+pyvista>=0.43,<0.46
+iso2mesh>=0.2,<0.4
+pymeshfix>=0.16,<0.18
+rtree>=1.1,<1.4
