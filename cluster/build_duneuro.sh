@@ -9,14 +9,14 @@ set -euo pipefail
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
-vagus_fm__init
+inob__init
 
-BASE="${HOME}/Scratch/vagus_fm"
+BASE="${HOME}/Scratch/inob"
 SRC="${BASE}/duneuro-src"
 mkdir -p "${SRC}" "${BASE}"
 
-vagus_fm__log "loading modules for ${PROFILE_NAME}"
-vagus_fm__load_modules
+inob__log "loading modules for ${PROFILE_NAME}"
+inob__load_modules
 export CC=gcc CXX=g++
 
 # ── python venv with manylinux2014-friendly pins ───────────────────────────
@@ -28,7 +28,7 @@ source "${BASE}/venv/bin/activate"
 pip install --upgrade pip wheel
 pip install --only-binary=:all: -r "${HERE}/../requirements-cluster.txt"
 
-# Install the vagus_fm package itself so cluster jobs can ``python -m vagus_fm.*``.
+# Install the inob package itself so cluster jobs can ``python -m inob.*``.
 pip install --no-deps -e "${HERE}/.."
 
 # ── DUNE 2.10 modules ──────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ for m in "${DUNE_MODS[@]}"; do
         elif git clone -b releases/2.10 "https://gitlab.dune-project.org/extensions/${m}.git"  2>/dev/null; then :;
         elif git clone -b releases/2.10 "https://gitlab.dune-project.org/pdelab/${m}.git"      2>/dev/null; then :;
         else
-            vagus_fm__log "ERROR: could not clone DUNE module ${m} from any namespace"
+            inob__log "ERROR: could not clone DUNE module ${m} from any namespace"
             exit 1
         fi
     fi
@@ -59,9 +59,9 @@ DUNEURO_COMMIT="8f344b4da9c128ddf3e47af5ec136d05a3aeb162"
 DUNEURO_PATCH="${HERE}/../scripts/patches/duneuro-eigen5-dune210.patch"
 git -C "${SRC}/duneuro" checkout -q "${DUNEURO_COMMIT}"
 if git -C "${SRC}/duneuro" apply --reverse --check "${DUNEURO_PATCH}" 2>/dev/null; then
-    vagus_fm__log "duneuro patch already applied — skipping"
+    inob__log "duneuro patch already applied — skipping"
 else
-    vagus_fm__log "applying duneuro patch"
+    inob__log "applying duneuro patch"
     git -C "${SRC}/duneuro" apply "${DUNEURO_PATCH}"
 fi
 
@@ -76,7 +76,7 @@ CMAKE_FLAGS="
 "
 OPTS
 
-vagus_fm__log "running dunecontrol all (this is the long step)"
+inob__log "running dunecontrol all (this is the long step)"
 "${SRC}/dune-common/bin/dunecontrol" --opts="${SRC}/release.opts" all
 
 # Install duneuro-py extension into the venv.
@@ -91,6 +91,6 @@ PYSITE="$(${BASE}/venv/bin/python -c 'import site; print(site.getsitepackages()[
 cp -r src/duneuropy* "${PYSITE}/" 2>/dev/null || \
     find . -name 'duneuropy*.so' -exec cp {} "${PYSITE}/" \;
 
-vagus_fm__log "verifying import"
+inob__log "verifying import"
 "${BASE}/venv/bin/python" -c "import duneuropy as dp; print('duneuro OK:', dir(dp)[:5])"
-vagus_fm__log "build complete"
+inob__log "build complete"

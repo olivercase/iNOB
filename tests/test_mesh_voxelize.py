@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import trimesh
 
-from vagus_fm.mesh.voxelize import (
+from inob.mesh.voxelize import (
     fill_internal_cavities,
     keep_largest_component,
     voxelize_mesh,

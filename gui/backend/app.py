@@ -1,13 +1,13 @@
 """FastAPI backend for the Vagus-FM GUI.
 
-Wraps the existing ``vagus_fm`` Python pipeline so a browser front-end
+Wraps the existing ``inob`` Python pipeline so a browser front-end
 (React + Blueprint + react-three-fiber) can:
 
   * read / edit / validate the YAML config            (``/api/config``)
   * fetch tissue surface meshes for the 3-D viewer     (``/api/meshes``)
   * launch the pipeline and stream logs live           (``ws /api/run``)
 
-There is no MATLAB here — the compute is pure Python (``vagus_fm``,
+There is no MATLAB here — the compute is pure Python (``inob``,
 ``iso2mesh`` python port, ``duneuropy``). The backend simply imports and
 calls the same functions the CLI uses, so the GUI and CLI stay in lock-step.
 
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import glob
+import json
 import logging
 import queue
 import tempfile
@@ -33,10 +34,16 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from vagus_fm.config import ConfigError, load_config
-from vagus_fm.cli.pipeline import ALL_STAGES, run_pipeline
+from inob.config import ConfigError, load_config
+from inob.cli.pipeline import ALL_STAGES, run_pipeline
+from inob.analysis.detect import compute_detectability
 
 logger = logging.getLogger(__name__)
+
+# Single-flight guard: a DUNEuro solve writes shared cfg.outputs artefacts, so
+# only one run may be in flight at a time (two concurrent runs would race on the
+# same files and the shared "inob" logger). Acquired non-blocking by /api/run.
+_RUN_LOCK = threading.Lock()
 
 # ── paths ───────────────────────────────────────────────────────────────────
 # gui/backend/app.py  →  project root is two parents up.
@@ -56,6 +63,15 @@ def _read_raw(path: Path) -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
+def _read_raw_safe(path: Path) -> tuple[dict[str, Any], list[str]]:
+    """Read a config dict, never raising — a hand-corrupted working file must
+    not 500 every endpoint and soft-lock the UI. Returns (dict, errors)."""
+    try:
+        return _read_raw(path), []
+    except (yaml.YAMLError, OSError) as e:
+        return {}, [f"could not read {path.name}: {e}"]
+
+
 def _validate_raw(raw: dict[str, Any]) -> list[str]:
     """Validate a raw config dict by constructing a ``Config``.
 
@@ -63,15 +79,17 @@ def _validate_raw(raw: dict[str, Any]) -> list[str]:
     the exact same loader the CLI uses, so GUI validation can never drift from
     pipeline validation.
     """
-    fd, tmp = tempfile.mkstemp(suffix=".yaml", prefix="vagusfm_cfg_")
+    fd, tmp = tempfile.mkstemp(suffix=".yaml", prefix="inob_cfg_")
     tmp_path = Path(tmp)
     try:
         with tmp_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(raw, f, sort_keys=False)
         try:
             load_config(tmp_path, project_root=PROJECT_ROOT)
-        except (ConfigError, ValueError, OSError) as e:
+        except ConfigError as e:
             return [str(e)]
+        except Exception as e:  # bad types etc. → a clean 422, not a 500
+            return [f"{type(e).__name__}: {e}"]
         return []
     finally:
         import os
@@ -86,7 +104,10 @@ app = FastAPI(title="Vagus-FM GUI backend", version="0.1.0")
 # In dev the React app runs on a different origin (Vite :5173); allow it.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", "http://127.0.0.1:5173",  # legacy Vite frontend
+        "http://localhost:3000", "http://127.0.0.1:3000",  # Next.js frontend (gui/web)
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -108,8 +129,8 @@ def health() -> dict[str, Any]:
 def get_config() -> dict[str, Any]:
     """Return the active config as a raw dict plus its validation status."""
     path = _active_config_path()
-    raw = _read_raw(path)
-    errors = _validate_raw(raw)
+    raw, read_errors = _read_raw_safe(path)
+    errors = read_errors or _validate_raw(raw)
     return {"source": str(path), "config": raw, "errors": errors}
 
 
@@ -150,7 +171,7 @@ def _resolve_mesh_paths() -> dict[str, Path]:
     Bones are 77 separate STLs — too heavy to stream individually here, so
     they are intentionally excluded from the default viewer payload.
     """
-    raw = _read_raw(_active_config_path())
+    raw, _ = _read_raw_safe(_active_config_path())
     data = raw.get("data", {})
     out: dict[str, Path] = {}
 
@@ -158,17 +179,34 @@ def _resolve_mesh_paths() -> dict[str, Path]:
         p = Path(rel)
         return p if p.is_absolute() else PROJECT_ROOT / p
 
+    def _safe(p: Path) -> Path | None:
+        """Only serve existing .stl files inside the project root — a config
+        path like ``data.torso_skin: /etc/passwd`` must not become readable."""
+        try:
+            rp = p.resolve()
+        except OSError:
+            return None
+        if rp.suffix.lower() != ".stl":
+            return None
+        if not rp.is_relative_to(PROJECT_ROOT.resolve()):
+            return None
+        return rp if rp.is_file() else None
+
     skin = data.get("torso_skin")
-    if skin and _abs(skin).exists():
-        out["skin"] = _abs(skin)
+    if skin:
+        safe = _safe(_abs(skin))
+        if safe:
+            out["skin"] = safe
     for name, key in (("vagus_left", "vagus_left_glob"),
                       ("vagus_right", "vagus_right_glob")):
         pat = data.get(key)
         if not pat:
             continue
-        matches = sorted(glob.glob(str(_abs(pat))))
-        if matches:
-            out[name] = Path(matches[0])
+        for match in sorted(glob.glob(str(_abs(pat)))):
+            safe = _safe(Path(match))
+            if safe:
+                out[name] = safe
+                break
     return out
 
 
@@ -211,7 +249,7 @@ class _QueueLogHandler(logging.Handler):
 
 @app.websocket("/api/run")
 async def run_ws(ws: WebSocket) -> None:
-    """Run pipeline stages and stream every ``vagus_fm`` log line to the client.
+    """Run pipeline stages and stream every ``inob`` log line to the client.
 
     Client sends ``{"stages": ["geom", ...] | "all", "force": bool}``.
     Server streams ``{"type": "log"|"status"|"done"|"error", ...}`` messages.
@@ -221,12 +259,35 @@ async def run_ws(ws: WebSocket) -> None:
         req = await ws.receive_json()
     except WebSocketDisconnect:
         return
+
+    # Single-flight: refuse a second concurrent run rather than race on the
+    # shared output artefacts / logger.
+    if not _RUN_LOCK.acquire(blocking=False):
+        await ws.send_json({"type": "error",
+                            "message": "a pipeline run is already in progress"})
+        await ws.close()
+        return
+
     stages_in = req.get("stages", "all")
     force = bool(req.get("force", False))
+    sources = req.get("sources") or []
+    threshold_snr = float(req.get("threshold_snr", 3.0))
+    modality = str(req.get("modality", "meg")).lower()
+
+    # Clicked sources reach the solver as a config override; their presence
+    # forces a re-solve of the selected stages so stale cached leadfields are
+    # not reported against new source positions.
+    overrides: list[str] = []
+    strengths: list[float] = []
+    if sources:
+        positions = [[float(s["x"]), float(s["y"]), float(s["z"])] for s in sources]
+        strengths = [float(s.get("strength_nAm", 70.0)) for s in sources]
+        overrides.append(f"forward.point_sources={json.dumps(positions)}")
+        force = True
 
     log_q: "queue.Queue[str]" = queue.Queue()
     handler = _QueueLogHandler(log_q)
-    vagus_logger = logging.getLogger("vagus_fm")
+    vagus_logger = logging.getLogger("inob")
     prev_level = vagus_logger.level
     vagus_logger.addHandler(handler)
     vagus_logger.setLevel(logging.INFO)
@@ -237,13 +298,24 @@ async def run_ws(ws: WebSocket) -> None:
 
     def _work() -> None:
         try:
-            cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+            cfg = load_config(_active_config_path(), overrides=overrides,
+                              project_root=PROJECT_ROOT)
             if stages_in == "all" or not stages_in:
                 stages = list(ALL_STAGES)
             else:
                 stages = [s for s in stages_in if s in ALL_STAGES]
             statuses = run_pipeline(cfg, stages=stages, force=force)
             result["statuses"] = statuses
+            # Turn the solved leadfield into the planning answer. Best-effort:
+            # if the required leadfield was not produced, the client falls back
+            # to its own estimate (see API_CONTRACT.md).
+            try:
+                result["detect"] = compute_detectability(
+                    cfg, strengths_nAm=strengths or None,
+                    threshold_snr=threshold_snr, modality=modality,
+                )
+            except FileNotFoundError as e:
+                logger.info("detectability skipped (no leadfield yet): %s", e)
         except Exception as e:  # surfaced to the client, not swallowed
             error["message"] = f"{type(e).__name__}: {e}"
         finally:
@@ -263,12 +335,15 @@ async def run_ws(ws: WebSocket) -> None:
         if error:
             await ws.send_json({"type": "error", **error})
         else:
+            if "detect" in result:
+                await ws.send_json({"type": "result", "detect": result["detect"]})
             await ws.send_json({"type": "done", "statuses": result.get("statuses", {})})
     except WebSocketDisconnect:
         pass
     finally:
         vagus_logger.removeHandler(handler)
         vagus_logger.setLevel(prev_level)
+        _RUN_LOCK.release()
         try:
             await ws.close()
         except Exception:

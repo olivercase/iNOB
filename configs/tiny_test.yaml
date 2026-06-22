@@ -8,6 +8,8 @@ data:
   torso_skin: data/torso/skin.stl
   vagus_left_glob: "data/vagus/*left*.stl"
   vagus_right_glob: "data/vagus/*right*.stl"
+  muscle_dir: data/muscle
+  vessel_dir: data/vessel
 
 outputs:
   base: outputs

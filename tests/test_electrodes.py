@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 import trimesh
 
-from vagus_fm.io.hdf5 import FemMesh, validate_sensors
-from vagus_fm.sensors.electrodes import ElectrodeArrayParams, build_electrode_array
+from inob.io.hdf5 import FemMesh, validate_sensors
+from inob.sensors.electrodes import ElectrodeArrayParams, build_electrode_array
 
 
 def _vagus_tube_in_skin() -> tuple[trimesh.Trimesh, FemMesh]:

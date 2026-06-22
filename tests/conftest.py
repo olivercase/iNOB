@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import trimesh
 
-from vagus_fm.io.hdf5 import (
+from inob.io.hdf5 import (
     CompartmentMesh,
     FemMesh,
     Geometry,

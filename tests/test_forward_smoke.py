@@ -10,14 +10,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vagus_fm.config import load_config
-from vagus_fm.forward.duneuro_driver import (
+from inob.config import load_config
+from inob.forward.duneuro_driver import (
     attach_coils,
     build_driver,
     build_orthogonal_dipoles,
     import_duneuro,
 )
-from vagus_fm.io.hdf5 import FemMesh
+from inob.io.hdf5 import FemMesh
 
 pytest.importorskip("duneuropy", reason="duneuropy not built locally")
 

@@ -1,6 +1,6 @@
 # Keep the build context small: the image carries CODE only. Mount data and
 # outputs at runtime, e.g.
-#   docker run --rm -v "$PWD/data:/work/data" -v "$PWD/outputs:/work/outputs" vagus-fm ...
+#   docker run --rm -v "$PWD/data:/work/data" -v "$PWD/outputs:/work/outputs" inob ...
 .git
 .github
 data

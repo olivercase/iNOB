@@ -7,7 +7,7 @@ versioning. Dates in ISO-8601.
 ## [Unreleased] — Nature-reviewer audit, 2026-05-01
 
 ### Fixed (showstopper)
-- **EEG forward calibration consistency.** `src/vagus_fm/forward/eeg.py`
+- **EEG forward calibration consistency.** `src/inob/forward/eeg.py`
   applied an *uncalibrated* `L * 1e3` factor in the in-pipeline forward
   solve, while figures used a separately-applied `L * 0.622` empirical
   calibration. The two never matched. Forward solve now applies the
@@ -22,11 +22,11 @@ versioning. Dates in ISO-8601.
 ### Added
 - **Bootstrap confidence intervals** on:
     * The Sarvas-vs-FEM peak ratio
-      (`vagus_fm.analysis.sarvas_compare._bootstrap_ratio_ci`,
+      (`inob.analysis.sarvas_compare._bootstrap_ratio_ci`,
       written to `outputs/sarvas_vs_fem.json` as
       `ratio_fem_to_sarvas_peak_band_ci95`).
     * The cross-modality MEG-from-EEG recovery error
-      (`vagus_fm.analysis.cross_modality.bootstrap_recovery_error_ci`).
+      (`inob.analysis.cross_modality.bootstrap_recovery_error_ci`).
 - **Determinism tests** for the canonical source-set sampler
   (`tests/test_sources_vagus.py`):
     * Sampling the same FEM twice produces byte-identical sources.

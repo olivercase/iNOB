@@ -13,8 +13,8 @@ machine-confirmed)`.
 ## Citation hygiene — corrections to the existing codebase
 
 These are the citation errors discovered in the present repository
-(`README.md`, `docs/VALIDATION.md`, `src/vagus_fm/analysis/sarvas_compare.py`,
-`src/vagus_fm/viz/sarvas_plot.py`) and must be fixed before submission:
+(`README.md`, `docs/VALIDATION.md`, `src/inob/analysis/sarvas_compare.py`,
+`src/inob/viz/sarvas_plot.py`) and must be fixed before submission:
 
 1. **"Doherty TM et al. 2024 *Comm Biol* 7:893" is the wrong author
    string.** The paper at `10.1038/s42003-024-06435-8` is by
@@ -248,7 +248,7 @@ A-fibre (d = 10 µm, σ_in = 1 S/m, ΔV = 70 mV), a single-fibre Q ≈
 Q ≈ 4 × 10⁻¹⁷ A·m. Summed over a synchronous A+C volley at the
 ~80 000-fibre mid-cervical vagus this gives the literature
 Q ≈ 70 nA·m used as the physiological-scaling anchor in
-`vagus-fm-sarvas`.
+`inob-sarvas`.
 
 ---
 

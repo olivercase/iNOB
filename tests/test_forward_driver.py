@@ -6,12 +6,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vagus_fm.config import load_config
-from vagus_fm.forward.duneuro_driver import (
+from inob.config import load_config
+from inob.forward.duneuro_driver import (
     build_conductivity_vector,
     build_driver_config,
 )
-from vagus_fm.io.hdf5 import FemMesh
+from inob.io.hdf5 import FemMesh
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CFG = REPO_ROOT / "configs" / "default.yaml"
@@ -36,8 +36,9 @@ def test_conductivity_missing_label_raises(tmp_path: Path) -> None:
     nodes[0] = 0
     tets = np.array([[0, 1, 2, 3]], dtype=np.int32)
     tissue = np.array([1], dtype=np.int32)
-    fem = FemMesh(nodes, tets, tissue, ("muscle",), "mm")
-    with pytest.raises(KeyError, match="muscle"):
+    # a tissue label with no entry in forward.conductivities_sm must fail loudly
+    fem = FemMesh(nodes, tets, tissue, ("ghost_tissue",), "mm")
+    with pytest.raises(KeyError, match="ghost_tissue"):
         build_conductivity_vector(cfg, fem)
 
 

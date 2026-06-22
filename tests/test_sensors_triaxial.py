@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import trimesh
 
-from vagus_fm.io.hdf5 import validate_sensors
-from vagus_fm.sensors.triaxial import build_triaxial, cylindrical_raycast
+from inob.io.hdf5 import validate_sensors
+from inob.sensors.triaxial import build_triaxial, cylindrical_raycast
 
 
 def test_build_triaxial_orthogonality() -> None:

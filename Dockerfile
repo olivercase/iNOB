@@ -1,13 +1,13 @@
-# Reproducible build of the Vagus_FM pipeline INCLUDING DUNEuro.
+# Reproducible build of the iNOB pipeline INCLUDING DUNEuro.
 #
 # DUNEuro has no PyPI wheel; it is compiled from source (DUNE 2.10 +
 # duneuro + duneuro-py) with the Eigen-5 / DUNE-2.10 patches captured in
 # scripts/patches/. This image bakes the whole toolchain so reviewers can
 # regenerate every leadfield without a local build.
 #
-#   docker build -t vagus-fm .
-#   docker run --rm -v "$PWD/outputs:/work/outputs" vagus-fm \
-#       vagus-fm-forward --config configs/default.yaml
+#   docker build -t inob .
+#   docker run --rm -v "$PWD/outputs:/work/outputs" inob \
+#       inob-forward --config configs/default.yaml
 #
 # Build is long (DUNE+duneuro compile from source). The DUNE layer is cached
 # separately from the duneuro layer so iterating on the patch is cheap.
@@ -69,7 +69,7 @@ RUN set -eux; \
     cp ${DUNE_SRC}/duneuro-py/build-cmake/src/*.py "${PYSITE}/" 2>/dev/null || true; \
     python -c "import duneuropy as dp; print('duneuro OK:', dir(dp)[:4])"
 
-# ── install the vagus_fm package itself ────────────────────────────────────
+# ── install the inob package itself ────────────────────────────────────
 WORKDIR /work
 COPY . /work
 RUN pip install --no-cache-dir --no-deps -e /work

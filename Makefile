@@ -16,22 +16,22 @@ test:
 	$(PYTHON) -m pytest -q
 
 pipeline:
-	$(PYTHON) -m vagus_fm.cli.pipeline --config $(CONFIG)
+	$(PYTHON) -m inob.cli.pipeline --config $(CONFIG)
 
 geom:
-	$(PYTHON) -m vagus_fm.cli.build_geom --config $(CONFIG)
+	$(PYTHON) -m inob.cli.build_geom --config $(CONFIG)
 
 fem:
-	$(PYTHON) -m vagus_fm.cli.build_fem --config $(CONFIG)
+	$(PYTHON) -m inob.cli.build_fem --config $(CONFIG)
 
 sensors:
-	$(PYTHON) -m vagus_fm.cli.generate_sensors --config $(CONFIG)
+	$(PYTHON) -m inob.cli.generate_sensors --config $(CONFIG)
 
 forward:
-	$(PYTHON) -m vagus_fm.cli.run_forward --config $(CONFIG)
+	$(PYTHON) -m inob.cli.run_forward --config $(CONFIG)
 
 viz:
-	$(PYTHON) -m vagus_fm.cli.visualise --config $(CONFIG)
+	$(PYTHON) -m inob.cli.visualise --config $(CONFIG)
 
 clean:
 	rm -rf build dist *.egg-info src/*.egg-info

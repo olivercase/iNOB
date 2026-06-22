@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import trimesh
 
-from vagus_fm.mesh.repair import (
+from inob.mesh.repair import (
     boolean_union_overlapping,
     cheap_repair,
     is_perfect,

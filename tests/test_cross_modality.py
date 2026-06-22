@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vagus_fm.analysis.cross_modality import (
+from inob.analysis.cross_modality import (
     CrossModalityStats,
     amplitude_correlation,
     fit_moment_from_eeg,

@@ -4,12 +4,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vagus_fm.io.npz import Leadfield
-from vagus_fm.physiology.scenarios import (
+from inob.io.npz import Leadfield
+from inob.physiology.scenarios import (
     baroreceptor_scenario,
     respiratory_scenario,
 )
-from vagus_fm.physiology.simulate import (
+from inob.physiology.simulate import (
     SimulatedSignal,
     best_channel_index,
     channel_snr,
@@ -69,7 +69,7 @@ def test_simulate_train_shape_and_amplitude() -> None:
 
 def test_simulate_train_zero_for_empty_scenario() -> None:
     lf = _make_tiny_leadfield()
-    from vagus_fm.physiology.scenarios import Scenario
+    from inob.physiology.scenarios import Scenario
     empty = Scenario(name="empty", description="", duration_s=1.0,
                      events=[], rate_hz=0.0)
     with pytest.raises(ValueError, match="no events"):

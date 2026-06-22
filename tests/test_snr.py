@@ -6,13 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vagus_fm.analysis.snr import (
+from inob.analysis.snr import (
     array_summary,
     compute_noise_floors,
     per_source_amplitude,
     snr_per_source,
 )
-from vagus_fm.config import load_config
+from inob.config import load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

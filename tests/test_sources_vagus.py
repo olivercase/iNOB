@@ -4,8 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vagus_fm.io.hdf5 import FemMesh
-from vagus_fm.sources.vagus import vagus_sources
+from inob.io.hdf5 import FemMesh
+from inob.sources.vagus import vagus_sources
 
 
 def _build_tube_fem(length_mm: float = 100.0, n_slabs: int = 50) -> FemMesh:

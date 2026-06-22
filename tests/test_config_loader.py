@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from vagus_fm.config import (
+from inob.config import (
     Config,
     ConfigError,
     apply_overrides,
@@ -25,7 +25,9 @@ def test_load_default() -> None:
     assert cfg.forward.conductivities_sm["bone"] == 0.0042
     assert cfg.forward.source_tissue == "vagus_left"
     assert cfg.forward.solver.scheme == "sipg"
-    assert cfg.fem.tissues == ("vagus_left", "vagus_right", "bone", "skin")
+    assert cfg.fem.tissues == (
+        "vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin",
+    )
 
 
 def test_load_tiny() -> None:

@@ -13,12 +13,12 @@ number was established.
 | Claim | Validated by | Status | Where |
 | --- | --- | :-: | --- |
 | MEG forward conversion factor (×10⁶) | Sarvas analytic match (Bu 2024 1–4 pT range) + MNE `_do_sphere_field` cross-validation (rtol 1e-12) | ✓ | `tests/test_analytic_sphere.py::test_sarvas_matches_mne_to_machine_precision` |
-| EEG forward conversion factor (×0.622) | Berg-Scherg analytic on a controlled homogeneous sphere FEM | ✓ | `outputs/calibration/calibration.json` + `vagus-fm-calibrate` |
+| EEG forward conversion factor (×0.622) | Berg-Scherg analytic on a controlled homogeneous sphere FEM | ✓ | `outputs/calibration/calibration.json` + `inob-calibrate` |
 | EEG calibration is geometry-stable | (R, depth, σ) sweep across 27 cases: CV = 6.8% | ✓ | `outputs/calibration/sweep.json` |
 | Vagus position is anatomically anterior | Three independent landmark checks against the FEM | ✓ | `docs/COORDINATES.md` |
-| FEM mesh quality | per-element Joe–Liu metric; min ≥ `cfg.fem.validate.min_mesh_quality` | ✓ | `src/vagus_fm/mesh/quality.py::assert_mesh_ok` (current FEM: min 0.092, p1 0.241, p5 0.301, mean 0.524, max 1.000 over 789 342 tets) |
-| Schema validation on every output | HDF5 / NPZ shape, finiteness, units, contiguity gates | ✓ | `src/vagus_fm/io/{hdf5,npz}.py` |
-| Stationary-dipole approx vs propagating CAP | Moving-wavelet benchmark on real FEM; cervical-localised peak ratio 0.72 (28% reduction) | ✓ | `vagus-fm-cap-compare` → `outputs/cap_compare.png`; `src/vagus_fm/viz/cap_compare.py` |
+| FEM mesh quality | per-element Joe–Liu metric; min ≥ `cfg.fem.validate.min_mesh_quality` | ✓ | `src/inob/mesh/quality.py::assert_mesh_ok` (current FEM: min 0.092, p1 0.241, p5 0.301, mean 0.524, max 1.000 over 789 342 tets) |
+| Schema validation on every output | HDF5 / NPZ shape, finiteness, units, contiguity gates | ✓ | `src/inob/io/{hdf5,npz}.py` |
+| Stationary-dipole approx vs propagating CAP | Moving-wavelet benchmark on real FEM; cervical-localised peak ratio 0.72 (28% reduction) | ✓ | `inob-cap-compare` → `outputs/cap_compare.png`; `src/inob/viz/cap_compare.py` |
 
 ## 1. MEG units (×10⁶)
 
@@ -31,7 +31,7 @@ fibre summation Q ≈ 70 nA·m).
 Reproducing the validation:
 
 ```bash
-vagus-fm-sarvas --Q-nAm 70   # Sarvas peak ≈ 2.9 pT — within Bu's 1–4 pT band
+inob-sarvas --Q-nAm 70   # Sarvas peak ≈ 2.9 pT — within Bu's 1–4 pT band
 ```
 
 Independent gold-standard check: `tests/test_analytic_sphere.py` runs four
@@ -55,7 +55,7 @@ EEG forward; compute Berg-Scherg analytic at the same electrode positions.
 The ratio analytic / DUNEuro_raw is the calibration factor.
 
 ```bash
-vagus-fm-calibrate                  # writes outputs/calibration/calibration.json
+inob-calibrate                  # writes outputs/calibration/calibration.json
 ```
 
 ### 2.2 Headline calibration
@@ -70,7 +70,7 @@ vagus-fm-calibrate                  # writes outputs/calibration/calibration.jso
 | Peak factor | 0.307 |
 
 Applied: `L_uV_per_nAm = L_raw * EEG_CALIBRATION_FACTOR` in
-`src/vagus_fm/forward/eeg.py` (constant defined at module top, value 0.622).
+`src/inob/forward/eeg.py` (constant defined at module top, value 0.622).
 The factor is deliberately exposed as a named constant so the calibration
 provenance is grep-able and so the saved NPZ on disk and a freshly re-run
 forward solve are byte-identical.
@@ -102,7 +102,7 @@ cat outputs/calibration/sweep.json
 
 ## 3. Sarvas vs FEM benchmark
 
-`vagus-fm-sarvas` runs the moving-sphere Sarvas analytic against the
+`inob-sarvas` runs the moving-sphere Sarvas analytic against the
 multi-tissue FEM forward for every (source, coil) pair on the cervical
 vagus. Headline: peak FEM/Sarvas ratio = 6.8× — consistent with the
 secondary-current contribution (Geselowitz 1970) documented for body MEG
@@ -113,10 +113,10 @@ Median ratio is much lower (~0.9) — the 6.8× is a peak over 7 333
 
 ## 3a. Stationary-dipole approximation vs propagating CAP
 
-The physiology simulator (`vagus_fm.physiology.simulate.simulate_train`)
+The physiology simulator (`inob.physiology.simulate.simulate_train`)
 collapses each event to a biphasic moment trace at the cervical hot-spot
 (highest-Z source on the vagus polyline). To benchmark this approximation,
-`vagus-fm-cap-compare` runs three source models on the real MEG leadfield
+`inob-cap-compare` runs three source models on the real MEG leadfield
 at the same total event moment Q_total = N_fibres × ⟨Q_per_fibre⟩_w:
 
   1. **Stationary at hot-spot** (manuscript convention).
@@ -147,7 +147,7 @@ be inflated by 1/0.72² ≈ 1.93× under the propagating model
 Reproducing:
 
 ```bash
-vagus-fm-cap-compare           # writes outputs/cap_compare.png
+inob-cap-compare           # writes outputs/cap_compare.png
 ```
 
 ## 4. Anatomy — vagus is anterior to spine
@@ -160,15 +160,15 @@ cervical electrode patch.
 ## 5. Schema + reproducibility
 
 * Every leadfield output (HDF5 / NPZ) is validated against a typed
-  schema before write (`src/vagus_fm/io/{hdf5,npz}.py:validate_*`).
+  schema before write (`src/inob/io/{hdf5,npz}.py:validate_*`).
   Validation includes: shape, finiteness, contiguous tissue ids, unit
   bbox bounds, max amplitude.
 * Every CLI entry point seeds `np.random` and `random` from
   `cfg.reproducibility.seed` at startup
-  (`src/vagus_fm/cli/_common.py::setup`).
+  (`src/inob/cli/_common.py::setup`).
 * CGAL meshing is non-deterministic between iso2mesh versions but produces
   meshes within the validated quality band on every run (mesh-quality
-  gate in `src/vagus_fm/fem/cgal_builder.py`).
+  gate in `src/inob/fem/cgal_builder.py`).
 
 ## 6. Known limitations the paper should acknowledge front-and-centre
 
@@ -187,7 +187,7 @@ Nature reviewer will ask about each:
 3. **Conductivities are static.** No frequency dependence, no anisotropy
    (muscle in particular has a 5–10× longitudinal/transverse conductivity
    anisotropy).
-4. **CAP source model is simplified.** `vagus_fm.sources.cap` has a
+4. **CAP source model is simplified.** `inob.sources.cap` has a
    propagating-fibre-population model with diameter-dependent CV; the
    current SNR figures use a static-dipole approximation. Wiring CAP into
    the SNR pipeline is a one-week job.

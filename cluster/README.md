@@ -7,15 +7,15 @@ cluster; the only thing that changes is `CLUSTER_PROFILE`.
 
 1. **SSH aliases.** Add entries for the clusters you use to `~/.ssh/config`
    (host names like `myriad`, `kathleen`).
-2. **Create `~/.vagus_fm.env`** (optional) to override defaults without editing
+2. **Create `~/.inob.env`** (optional) to override defaults without editing
    anything in this repo:
    ```bash
-   # ~/.vagus_fm.env
+   # ~/.inob.env
    VAGUS_FM_LOCAL_DIR=$HOME/code/Forward_Model_Vagus_Nerve
    VAGUS_FM_REMOTE_HOST=myriad
-   # VAGUS_FM_REMOTE_BASE=$HOME/Scratch/vagus_fm   # default
+   # VAGUS_FM_REMOTE_BASE=$HOME/Scratch/inob   # default
    ```
-   Defaults work for any cluster account: `${HOME}/Scratch/vagus_fm`.
+   Defaults work for any cluster account: `${HOME}/Scratch/inob`.
 
 ## Workflow
 
@@ -33,18 +33,18 @@ CLUSTER_PROFILE=myriad bash cluster/stage.sh
 CLUSTER_PROFILE=kathleen bash cluster/stage.sh --dry-run   # preview only
 ```
 
-This rsyncs `outputs/{fem,sensors}/*.mat`, the `vagus_fm` package, configs,
-and the cluster scripts to `${HOME}/Scratch/vagus_fm` on the cluster.
+This rsyncs `outputs/{fem,sensors}/*.mat`, the `inob` package, configs,
+and the cluster scripts to `${HOME}/Scratch/inob` on the cluster.
 
 ### 3. Build DUNEuro on the cluster (one-time)
 
 ```bash
 ssh myriad
-cd ~/Scratch/vagus_fm/code
+cd ~/Scratch/inob/code
 
 # Interactive compute node (Myriad shape):
 qrsh -pe smp 4 -l mem=8G,h_rt=2:00:00 -now no
-cd ~/Scratch/vagus_fm/code
+cd ~/Scratch/inob/code
 CLUSTER_PROFILE=myriad bash cluster/build_duneuro.sh
 
 # Or as a batch job:
@@ -61,7 +61,7 @@ CLUSTER_PROFILE=myriad bash cluster/submit.sh reduce   # waits on vagus_fwd
 ### 5. Pull the leadfield back
 
 ```bash
-scp myriad:~/Scratch/vagus_fm/duneuro_leadfield_vagus.npz outputs/forward/
+scp myriad:~/Scratch/inob/duneuro_leadfield_vagus.npz outputs/forward/
 ```
 
 ## How profiles work
@@ -83,6 +83,6 @@ To add a new cluster: drop a new `profiles/<name>.env`, then run with
 | `submit_build.sh` + `submit_build_kathleen.sh` | one `run_build.sh` + profile |
 | `submit_reduce.sh` + `submit_reduce_kathleen.sh` | one `run_reduce.sh` + profile |
 | `stage.sh` + `stage_kathleen.sh` | one `stage.sh` + profile |
-| `cluster/run_chunk.py` (duplicated logic) | `python -m vagus_fm.forward.chunk` |
-| `cluster/reduce.py` (missing `source_pos`) | `python -m vagus_fm.forward.reduce` (schema-correct) |
+| `cluster/run_chunk.py` (duplicated logic) | `python -m inob.forward.chunk` |
+| `cluster/reduce.py` (missing `source_pos`) | `python -m inob.forward.reduce` (schema-correct) |
 | Hardcoded `rmgpohk` username, `~olivercase` path | `${HOME}/Scratch/...` + env var overrides |

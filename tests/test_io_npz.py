@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vagus_fm.io.npz import (
+from inob.io.npz import (
     REQUIRED_KEYS,
     Leadfield,
     SchemaError,

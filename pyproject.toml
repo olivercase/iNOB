@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vagus-fm"
+name = "inob"
 description = "Forward modelling pipeline for vagus nerve OPM-MEG (geometry → FEM → sensors → DUNEuro leadfield)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -43,26 +43,32 @@ dev = [
     "ruff>=0.4",
     "h5py>=3.10",
 ]
+# GUI backend (gui/backend/app.py). `pip install inob[gui]` is self-contained.
+gui = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "websockets>=12.0",
+]
 
 [project.scripts]
-vagus-fm-pipeline   = "vagus_fm.cli.pipeline:main"
-vagus-fm-build-geom = "vagus_fm.cli.build_geom:main"
-vagus-fm-build-fem  = "vagus_fm.cli.build_fem:main"
-vagus-fm-sensors    = "vagus_fm.cli.generate_sensors:main"
-vagus-fm-electrodes = "vagus_fm.cli.generate_electrodes:main"
-vagus-fm-forward    = "vagus_fm.cli.run_forward:main"
-vagus-fm-eeg        = "vagus_fm.cli.run_eeg:main"
-vagus-fm-snr        = "vagus_fm.cli.snr:main"
-vagus-fm-sensitivity = "vagus_fm.cli.sensitivity:main"
-vagus-fm-sarvas     = "vagus_fm.cli.sarvas:main"
-vagus-fm-cross      = "vagus_fm.cli.cross_modality:main"
-vagus-fm-detect     = "vagus_fm.cli.detectability:main"
-vagus-fm-location   = "vagus_fm.cli.location:main"
-vagus-fm-calibrate  = "vagus_fm.cli.calibrate:main"
-vagus-fm-physiology = "vagus_fm.cli.physiology:main"
-vagus-fm-cap-compare = "vagus_fm.cli.cap_compare:main"
-vagus-fm-topoplot   = "vagus_fm.cli.topoplot:main"
-vagus-fm-visualise  = "vagus_fm.cli.visualise:main"
+inob-pipeline   = "inob.cli.pipeline:main"
+inob-build-geom = "inob.cli.build_geom:main"
+inob-build-fem  = "inob.cli.build_fem:main"
+inob-sensors    = "inob.cli.generate_sensors:main"
+inob-electrodes = "inob.cli.generate_electrodes:main"
+inob-forward    = "inob.cli.run_forward:main"
+inob-eeg        = "inob.cli.run_eeg:main"
+inob-snr        = "inob.cli.snr:main"
+inob-sensitivity = "inob.cli.sensitivity:main"
+inob-sarvas     = "inob.cli.sarvas:main"
+inob-cross      = "inob.cli.cross_modality:main"
+inob-detect     = "inob.cli.detectability:main"
+inob-location   = "inob.cli.location:main"
+inob-calibrate  = "inob.cli.calibrate:main"
+inob-physiology = "inob.cli.physiology:main"
+inob-cap-compare = "inob.cli.cap_compare:main"
+inob-topoplot   = "inob.cli.topoplot:main"
+inob-visualise  = "inob.cli.visualise:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -71,7 +77,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.dynamic]
-version = { attr = "vagus_fm.__version__" }
+version = { attr = "inob.__version__" }
 
 [tool.ruff]
 line-length = 100

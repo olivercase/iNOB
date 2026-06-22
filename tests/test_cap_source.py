@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vagus_fm.sources.cap import (
+from inob.sources.cap import (
     biphasic_waveform,
     cap_signal,
     conduction_velocity_m_per_s,

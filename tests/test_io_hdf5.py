@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vagus_fm.io.hdf5 import (
+from inob.io.hdf5 import (
     CompartmentMesh,
     FemMesh,
     Geometry,
@@ -116,7 +116,9 @@ def test_fem_load_legacy_artifact() -> None:
         pytest.skip("legacy FEM artifact not present")
     mesh = load_fem(artifact)
     validate_fem(mesh)
-    assert mesh.tissue_labels == ("vagus_left", "vagus_right", "bone", "skin")
+    assert mesh.tissue_labels == (
+        "vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin",
+    )
     assert mesh.nodes.shape[1] == 3
     assert mesh.tets.shape[1] == 4
 

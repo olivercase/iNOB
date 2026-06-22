@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import trimesh
 
-from vagus_fm.io.stl import (
+from inob.io.stl import (
     STLLoadError,
     concat_stls,
     load_first_stl,

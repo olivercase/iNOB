@@ -62,11 +62,11 @@ irrelevant for an anteriorly-sited HD-EMG patch. This rules out
 
 ## Where this is used in the code
 
-* `src/vagus_fm/sensors/electrodes.py` — cervical paddle is positioned over
+* `src/inob/sensors/electrodes.py` — cervical paddle is positioned over
   the vagus polyline projected to the *anterior* skin (more negative Y).
-* `src/vagus_fm/viz/topoplot.py:_format_3d_axis` — viewing angles assume
+* `src/inob/viz/topoplot.py:_format_3d_axis` — viewing angles assume
   this convention (elev=14°, azim=42° gives a roughly anterolateral view).
-* `src/vagus_fm/analysis/sarvas_compare.py:estimate_cervical_axis_xy` —
+* `src/inob/analysis/sarvas_compare.py:estimate_cervical_axis_xy` —
   sphere centre is biased toward the bone XY-centroid (i.e. posterior) so
   that "source-to-axis distance" reflects the anterior offset of the
   vagus.

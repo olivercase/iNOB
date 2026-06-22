@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vagus_fm.mesh.quality import (
+from inob.mesh.quality import (
     MeshQualityError,
     assert_mesh_ok,
     assert_units_mm,

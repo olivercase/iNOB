@@ -12,8 +12,8 @@ scikit-image==0.26.0
 matplotlib==3.10.9
 pyyaml==6.0.3
 
-# ── geometry / FEM build extras (looser; not exercised by the solve) ──────
-pyvista>=0.43,<0.46
-iso2mesh>=0.2,<0.4
-pymeshfix>=0.16,<0.18
-rtree>=1.1,<1.4
+# ── geometry / FEM build extras (pinned to the verified build) ────────────
+pyvista==0.48.4
+iso2mesh==0.5.5
+pymeshfix==0.18.1
+rtree==1.4.1

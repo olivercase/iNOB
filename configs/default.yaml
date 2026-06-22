@@ -1,4 +1,4 @@
-# Vagus_FM default configuration — single source of truth for the pipeline.
+# iNOB default configuration — single source of truth for the pipeline.
 # All paths relative to project_root (auto-detected; can override with --project-root).
 
 project_root: .

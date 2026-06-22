@@ -201,7 +201,7 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s",
                         datefmt="%H:%M:%S")
     sys.path.insert(0, "src")
-    from vagus_fm.io.hdf5 import load_fem
+    from inob.io.hdf5 import load_fem
     mesh = load_fem(args.fem)
     logger.info("loaded FEM: %d tets, tissues=%s", len(mesh.tets), mesh.tissue_labels)
     args.out.mkdir(parents=True, exist_ok=True)

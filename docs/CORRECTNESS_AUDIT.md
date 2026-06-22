@@ -10,7 +10,7 @@ pipeline. Every claim of a problem cites a file path and line number.
 
 ### 1.1 EEG forward-solve calibration was inconsistent with figure pipeline
 
-**Bug.** `src/vagus_fm/forward/eeg.py:119` (pre-fix) applied
+**Bug.** `src/inob/forward/eeg.py:119` (pre-fix) applied
 `L_uV_per_nAm = L * 1e3` while the figure / analysis pipeline relies on
 the empirically-calibrated factor `0.622` (median over 27-case
 (R, depth, σ) sweep, CV = 6.8%; see `outputs/calibration/calibration.json`
@@ -21,7 +21,7 @@ produced by the in-pipeline `*1e3` code path. A re-run of the EEG forward
 solve from the unmodified source would have produced numbers ~1600× too
 large.
 
-**Fix.** `src/vagus_fm/forward/eeg.py:38-46` now defines a module-level
+**Fix.** `src/inob/forward/eeg.py:38-46` now defines a module-level
 constant
 
 ```python
@@ -48,7 +48,7 @@ The ratio matches `EEG_CALIBRATION_FACTOR` exactly. Peak |L| = 0.136
 
 ### 1.2 NPZ schema docstring lied about EEG semantics
 
-`src/vagus_fm/io/npz.py:1-15` (pre-fix) documented `L_fT_per_nAm` as
+`src/inob/io/npz.py:1-15` (pre-fix) documented `L_fT_per_nAm` as
 `L * 1e6` with no mention that EEG NPZs reuse the same field with µV
 units. **Fixed.** The docstring now says explicitly that the field is
 modality-dependent: `L * 1e6` (fT/nAm) for MEG, `L * 0.622` (µV/nAm) for
@@ -56,7 +56,7 @@ EEG, and how to disambiguate via channel names.
 
 ### 1.3 Source-set determinism was untested
 
-The cluster pipeline (`src/vagus_fm/forward/{chunk,reduce}.py`) re-derives
+The cluster pipeline (`src/inob/forward/{chunk,reduce}.py`) re-derives
 the source set from the FEM in the chunk worker *and* in the reduce step.
 If `vagus_sources` were non-deterministic, the chunk-to-reduce mapping
 would silently misalign rows. **Fix.** Added two regression tests in
@@ -82,13 +82,13 @@ Two reviewer-blocking gaps:
 
 **Fix.**
 
-* `src/vagus_fm/analysis/sarvas_compare.py:_bootstrap_ratio_ci` (n=2000,
+* `src/inob/analysis/sarvas_compare.py:_bootstrap_ratio_ci` (n=2000,
   deterministic, seed=0). Output JSON now includes
   `ratio_fem_to_sarvas_peak_band_ci95` and median: **CI95 = [5.86, 6.94]**
   around point 6.84. The narrow CI reflects that the peak is dominated
   by a small set of very-best-aligned coils that are reliably present in
   every bootstrap resample.
-* `src/vagus_fm/analysis/cross_modality.py:bootstrap_recovery_error_ci`
+* `src/inob/analysis/cross_modality.py:bootstrap_recovery_error_ci`
   resamples noise realisations (n_boot=1000, seed=0). Available for
   scripted use; to wire into the figure the CLI needs a small extension
   (out of scope for this fix — see High-priority §2.1 below).
@@ -99,7 +99,7 @@ The `outputs/detectability.png` "trials to SNR=3" numbers assume
 independent white noise across averages. This is wrong for OPM-MEG in
 practice: heartbeat artefacts and shielding-residual noise are
 spatially / temporally correlated. **Fix.** Added an explicit caveat in
-the figure caption (`src/vagus_fm/viz/detectability.py:240-256`): "Trial
+the figure caption (`src/inob/viz/detectability.py:240-256`): "Trial
 counts assume independent white noise across averages — spatially /
 temporally correlated environmental MEG noise (heartbeat artefacts,
 magnetic shielding residual; cf. Boto et al. 2018) inflates the required
@@ -110,8 +110,8 @@ N by a factor of 1–10× depending on shielding quality."
 Two functions silently used `σ_intracellular = 1 S/m` (Hämäläinen 1993)
 without acknowledging Pelot 2017's lower 0.35 S/m for peripheral axons
 — a 3× scaling on every Q. **Fix.** Both
-`src/vagus_fm/sources/cap.py:hamalainen_per_fibre_nAm` (lines 79-99) and
-`src/vagus_fm/analysis/sarvas_compare.py:hamalainen_dipole_moment_nAm`
+`src/inob/sources/cap.py:hamalainen_per_fibre_nAm` (lines 79-99) and
+`src/inob/analysis/sarvas_compare.py:hamalainen_dipole_moment_nAm`
 (lines 101-119) now document the choice and justify it (consistency with
 Bu et al. 2024's 70 nA·m benchmark).
 
@@ -130,7 +130,7 @@ Bu et al. 2024's 70 nA·m benchmark).
 
 `bootstrap_recovery_error_ci` is implemented and tested; the
 `render_cross_modality` function in
-`src/vagus_fm/viz/cross_modality_plot.py:185-194` still reports a single
+`src/inob/viz/cross_modality_plot.py:185-194` still reports a single
 point error. The simple wire-in is one extra line in the title format.
 Left unwired because it requires re-rendering the figure with DUNEuro
 present (the bootstrap doesn't, but the rest of the figure does), which
@@ -138,9 +138,9 @@ needs ~30 s and a duneuropy environment.
 
 ### 2.2 Physiology simulator is stationary; CAP propagation not wired in
 
-`src/vagus_fm/physiology/simulate.py` admits in its docstring (lines
+`src/inob/physiology/simulate.py` admits in its docstring (lines
 9-19) that it uses a stationary-source approximation. The propagating
-CAP source already exists in `src/vagus_fm/sources/cap.py:cap_signal` but
+CAP source already exists in `src/inob/sources/cap.py:cap_signal` but
 is not wired into `viz/physiology_plot.py`. A reviewer will read the
 docstring and ask for the comparison. **Action needed:** add a
 side-by-side figure (stationary vs propagating) to the physiology output,
@@ -158,7 +158,7 @@ numbers are for the FEM currently on disk. **Action needed:** decide if
 the headline numbers should be quoted from the FEM in `outputs/fem/` (as
 done now) or recomputed and committed alongside any FEM rebuild. CI-side
 mesh quality assertion is already in
-`src/vagus_fm/fem/cgal_builder.py:228-229`.
+`src/inob/fem/cgal_builder.py:228-229`.
 
 ### 2.4 Source spacing of 5 mm (87 sources) — appropriate for cervical only
 
@@ -174,7 +174,7 @@ that we report only the cervical subset.
 
 ### 2.5 Bone STL voxelisation is convex-hull per-bone
 
-`src/vagus_fm/fem/cgal_builder.py:_voxelise_bones` (line 97) uses
+`src/inob/fem/cgal_builder.py:_voxelise_bones` (line 97) uses
 `voxelize_solid_for_mesh` which is per-bone convex-hull; clipped to skin
 but otherwise lossy. The cervical-cross-section diagnostic at z=1285
 (documented in `docs/COORDINATES.md`) shows bone at y∈[-90, -2] vs
@@ -218,18 +218,18 @@ by the 27-case sweep already on disk and that the audit confirmed it.
 
 | # | Severity | File:line | Issue |
 |---|---|---|---|
-| 3.1 | medium | `src/vagus_fm/analysis/snr.py:75-79` | `per_source_amplitude(moment="rms")` divides by `sqrt(3)` — that's a per-axis convention assuming isotropic moments. The docstring says it but the formula could trip up a reviewer; consider naming the option `iso_per_axis` to be explicit. |
-| 3.2 | medium | `src/vagus_fm/forward/duneuro_driver.py:84-103` | Solver defaults (`type=cg`, `reduction=1e-10`, `intorderadd=5`, `scheme=sipg`) are not justified with a citation. They match the DUNEuro tutorials but a reviewer will ask. Add a one-line doc citing Engwer et al. 2017 (the DUNEuro paper). |
-| 3.3 | medium | `src/vagus_fm/sensors/triaxial.py:103-113` | The two tangent vectors come from `np.linalg.svd(normal)` — the resulting (T1, T2) frame has an *arbitrary* sign convention per coil. This is fine for the leadfield (each coil is independent) but means T1/T2 channel labels are not anatomically interpretable across coils. Should be flagged in the docstring. |
-| 3.4 | medium | `src/vagus_fm/sources/vagus.py:42` | `edges = np.arange(z_lo, z_hi + spacing_mm, spacing_mm)` — adding `spacing_mm` to the upper bound can include or exclude the last slab depending on rounding. Tests cover the ±1 source tolerance but the off-by-one is a hidden footgun. Switch to `np.linspace(z_lo, z_hi, n_slabs+1)` for clarity. |
-| 3.5 | minor | `src/vagus_fm/viz/style.py:67-95` | Helvetica is the requested font but `apply_nature_style` doesn't check it's installed — falls back silently to DejaVu Sans. Nature requires Helvetica or Arial; add a warning if neither is available. |
+| 3.1 | medium | `src/inob/analysis/snr.py:75-79` | `per_source_amplitude(moment="rms")` divides by `sqrt(3)` — that's a per-axis convention assuming isotropic moments. The docstring says it but the formula could trip up a reviewer; consider naming the option `iso_per_axis` to be explicit. |
+| 3.2 | medium | `src/inob/forward/duneuro_driver.py:84-103` | Solver defaults (`type=cg`, `reduction=1e-10`, `intorderadd=5`, `scheme=sipg`) are not justified with a citation. They match the DUNEuro tutorials but a reviewer will ask. Add a one-line doc citing Engwer et al. 2017 (the DUNEuro paper). |
+| 3.3 | medium | `src/inob/sensors/triaxial.py:103-113` | The two tangent vectors come from `np.linalg.svd(normal)` — the resulting (T1, T2) frame has an *arbitrary* sign convention per coil. This is fine for the leadfield (each coil is independent) but means T1/T2 channel labels are not anatomically interpretable across coils. Should be flagged in the docstring. |
+| 3.4 | medium | `src/inob/sources/vagus.py:42` | `edges = np.arange(z_lo, z_hi + spacing_mm, spacing_mm)` — adding `spacing_mm` to the upper bound can include or exclude the last slab depending on rounding. Tests cover the ±1 source tolerance but the off-by-one is a hidden footgun. Switch to `np.linspace(z_lo, z_hi, n_slabs+1)` for clarity. |
+| 3.5 | minor | `src/inob/viz/style.py:67-95` | Helvetica is the requested font but `apply_nature_style` doesn't check it's installed — falls back silently to DejaVu Sans. Nature requires Helvetica or Arial; add a warning if neither is available. |
 | 3.6 | minor | `outputs/detectability.png` | Caption mentions "QuSpin gen-2" but `configs/default.yaml:103` sets `15.0 fT/√Hz` which is the gen-2 number. Citation OK, but the same figure caption should also say which of `noise.opm_intrinsic_fT_sqrtHz` was used so it's reproducible from the figure alone. |
 | 3.7 | minor | `outputs/cross_modality.png` (panel d title) | "Actual MEG (FEM) · prediction RMS error = X%" — at high SNR this is sub-1%, at low SNR it caps at "1000%". Add the bootstrap CI from `bootstrap_recovery_error_ci` to give the reviewer a stability indicator. |
 | 3.8 | nit | `README.md:196` table | Says "Sarvas peak \|B\| at Q=70 nA·m = 2.9 pT" but `docs/VALIDATION.md:33` says "≈ 4.22 pT". The README quotes the peak in the *literature band* (n=7 333 pairs); the validation doc quotes the peak across the *full array* (different denominator). One of the two should explicitly say which band. The actual numbers from `outputs/sarvas_vs_fem.json`: full-array Sarvas peak = 41.4 fT/nAm = 2.90 pT @ Q=70; literature-band Sarvas peak = same number (the band currently includes the global peak coil). |
 | 3.9 | nit | `docs/VALIDATION.md:33` | The comment `Sarvas peak ≈ 4.22 pT` no longer matched the actual JSON (`2.896 pT`). **Fixed during this audit** — now reads `≈ 2.9 pT`. |
 | 3.10 | nit | `tests/conftest.py` | Not visited in this audit; consider adding a session-scoped fixture for the small-tube `FemMesh` used in three test files. |
 | 3.11 | nit | `outputs/calibration/calibration.json` | File ends without trailing newline (cosmetic). |
-| 3.12 | nit | `src/vagus_fm/io/npz.py:131` | Schema validator has `if lf.L_fT_per_nAm.shape != lf.L.shape: raise SchemaError("L_fT_per_nAm shape != L shape")` — message could include the actual shapes. |
+| 3.12 | nit | `src/inob/io/npz.py:131` | Schema validator has `if lf.L_fT_per_nAm.shape != lf.L.shape: raise SchemaError("L_fT_per_nAm shape != L shape")` — message could include the actual shapes. |
 | 3.13 | nit | `outputs/dual_topoplot.png` | Not personally inspected pixel-by-pixel here; if any axis lacks a unit (the audit asked) it will need an editor pass. |
 
 ---
@@ -245,14 +245,14 @@ by the 27-case sweep already on disk and that the audit confirmed it.
 | | `docs/VALIDATION.md:103` | "6.8×" | ✓ |
 | | `outputs/sarvas_vs_fem.json` | `"ratio_fem_to_sarvas_peak_band": 6.836` | ground truth |
 | | `outputs/sarvas_vs_fem.json` | CI95 = [5.86, 6.94] | (new this audit) |
-| EEG calibration factor | `src/vagus_fm/forward/eeg.py:46` | `EEG_CALIBRATION_FACTOR = 0.622` | (post-fix; was *implicit* mismatch before) |
+| EEG calibration factor | `src/inob/forward/eeg.py:46` | `EEG_CALIBRATION_FACTOR = 0.622` | (post-fix; was *implicit* mismatch before) |
 | | `outputs/calibration/calibration.json` | `"factor_median": 0.6220384272598165` | ground truth |
 | | `README.md` | not quoted | OK |
 | | `docs/VALIDATION.md:65-71` | "Median factor 0.622" | ✓ |
 | | `outputs/calibration/sweep.json` | one of 27 cases (R=100, src=50, σ=0.43): `0.6220384272598183` | ✓ |
-| MEG fT-conversion | `src/vagus_fm/forward/solve.py:74` | `L * 1e6` | ✓ self-consistent |
-| | `src/vagus_fm/forward/reduce.py:72` | `L * 1e6` | ✓ |
-| | `src/vagus_fm/io/npz.py` (docstring, post-fix) | "MEG: L × 1e6" | ✓ |
+| MEG fT-conversion | `src/inob/forward/solve.py:74` | `L * 1e6` | ✓ self-consistent |
+| | `src/inob/forward/reduce.py:72` | `L * 1e6` | ✓ |
+| | `src/inob/io/npz.py` (docstring, post-fix) | "MEG: L × 1e6" | ✓ |
 | Recording time, baroreceptor MEG | `README.md` | not quoted as a headline number; figure caption says it depends on Q |  — |
 | | `outputs/physiology.png` (panel c title) | varies with scenario | OK |
 

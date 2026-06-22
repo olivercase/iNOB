@@ -14,7 +14,7 @@ set -euo pipefail
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
-vagus_fm__init
+inob__init
 
 WHICH="${1:-}"
 case "${WHICH}" in
@@ -78,5 +78,5 @@ case "${WHICH}" in
         ;;
 esac
 
-vagus_fm__log "qsub ${COMMON_FLAGS[*]} ${FLAGS[*]} ${BODY}"
+inob__log "qsub ${COMMON_FLAGS[*]} ${FLAGS[*]} ${BODY}"
 qsub "${COMMON_FLAGS[@]}" "${FLAGS[@]}" "${BODY}"

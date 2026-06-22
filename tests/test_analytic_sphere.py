@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vagus_fm.analysis.analytic_sphere import (
+from inob.analysis.analytic_sphere import (
     homogeneous_sphere_eeg_potential,
     sarvas_meg_field,
 )

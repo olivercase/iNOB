@@ -6,11 +6,11 @@ set -euo pipefail
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
-vagus_fm__init
-vagus_fm__load_modules
+inob__init
+inob__load_modules
 
-BASE="${HOME}/Scratch/vagus_fm"
-vagus_fm__activate_venv "${BASE}"
+BASE="${HOME}/Scratch/inob"
+inob__activate_venv "${BASE}"
 
 # BLAS thread fan-out (so 16 chunks × N threads matches the reservation).
 export OMP_NUM_THREADS="${BLAS_THREADS}"
@@ -20,14 +20,14 @@ export MKL_NUM_THREADS="${BLAS_THREADS}"
 CONFIG="${BASE}/configs/default.yaml"
 CHUNKS_DIR="${BASE}/out"
 
-# Make ``python -m vagus_fm.*`` work both from a pip-install and from the staged tree.
+# Make ``python -m inob.*`` work both from a pip-install and from the staged tree.
 export PYTHONPATH="${BASE}/code/src:${PYTHONPATH:-}"
 
 if [[ "${CHUNKS_PER_TASK}" -le 1 ]]; then
     # One chunk per array task (Myriad-style).
     CHUNK_ID=$(( SGE_TASK_ID - 1 ))
-    vagus_fm__log "task ${SGE_TASK_ID} → chunk ${CHUNK_ID}/${N_CHUNKS}"
-    python -u -m vagus_fm.forward.chunk \
+    inob__log "task ${SGE_TASK_ID} → chunk ${CHUNK_ID}/${N_CHUNKS}"
+    python -u -m inob.forward.chunk \
         --config "${CONFIG}" \
         --chunk-id "${CHUNK_ID}" \
         --n-chunks "${N_CHUNKS}" \
@@ -36,13 +36,13 @@ else
     # N chunks per task in parallel (Kathleen full-node).
     START=$(( (SGE_TASK_ID - 1) * CHUNKS_PER_TASK ))
     END=$(( START + CHUNKS_PER_TASK - 1 ))
-    vagus_fm__log "task ${SGE_TASK_ID} → chunks ${START}..${END} on $(hostname)"
+    inob__log "task ${SGE_TASK_ID} → chunks ${START}..${END} on $(hostname)"
     seq "${START}" "${END}" | xargs -P "${CHUNKS_PER_TASK}" -I {} \
-        bash -c "python -u -m vagus_fm.forward.chunk \
+        bash -c "python -u -m inob.forward.chunk \
             --config '${CONFIG}' \
             --chunk-id {} --n-chunks ${N_CHUNKS} \
             --set outputs.forward_chunks_dir='${CHUNKS_DIR}' \
             > '${BASE}/logs/chunk_{}.log' 2>&1"
 fi
 
-vagus_fm__log "task ${SGE_TASK_ID} complete"
+inob__log "task ${SGE_TASK_ID} complete"

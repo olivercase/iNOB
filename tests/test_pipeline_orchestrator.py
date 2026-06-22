@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from vagus_fm.cli.pipeline import (
+from inob.cli.pipeline import (
     ALL_STAGES,
     STAGES,
     Stage,
     _parse_stages,
     run_pipeline,
 )
-from vagus_fm.config import load_config
+from inob.config import load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -47,7 +47,7 @@ def test_run_pipeline_skips_when_outputs_exist(tmp_path: Path, monkeypatch) -> N
         name: Stage(s.name, s.description, s.output_paths, lambda c, n=name: calls.append(n))
         for name, s in STAGES.items()
     }
-    monkeypatch.setattr("vagus_fm.cli.pipeline.STAGES", fake_stages)
+    monkeypatch.setattr("inob.cli.pipeline.STAGES", fake_stages)
 
     statuses = run_pipeline(cfg, stages=list(ALL_STAGES))
     assert calls == [], f"unexpected stage runs: {calls}"
@@ -68,7 +68,7 @@ def test_run_pipeline_force_runs_everything(tmp_path: Path, monkeypatch) -> None
         name: Stage(s.name, s.description, s.output_paths, lambda c, n=name: calls.append(n))
         for name, s in STAGES.items()
     }
-    monkeypatch.setattr("vagus_fm.cli.pipeline.STAGES", fake_stages)
+    monkeypatch.setattr("inob.cli.pipeline.STAGES", fake_stages)
 
     run_pipeline(cfg, stages=list(ALL_STAGES), force=True)
     assert calls == list(ALL_STAGES)
@@ -82,7 +82,7 @@ def test_run_pipeline_failed_marker(tmp_path: Path, monkeypatch) -> None:
         raise RuntimeError("boom")
 
     fake_stage = Stage("geom", "test", ("geometry_mat",), raises)
-    monkeypatch.setattr("vagus_fm.cli.pipeline.STAGES", {"geom": fake_stage})
+    monkeypatch.setattr("inob.cli.pipeline.STAGES", {"geom": fake_stage})
     with pytest.raises(RuntimeError):
         run_pipeline(cfg, stages=["geom"])
     marker = cfg.outputs.geometry_mat.parent / ".geom.FAILED"

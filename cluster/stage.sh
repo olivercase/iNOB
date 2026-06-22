@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage inputs (FEM + sensors) and the vagus_fm package to the cluster.
+# Stage inputs (FEM + sensors) and the inob package to the cluster.
 # Profile-driven: select with CLUSTER_PROFILE=myriad|kathleen.
 #
 #   CLUSTER_PROFILE=myriad bash cluster/stage.sh
@@ -10,7 +10,7 @@ set -euo pipefail
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
-vagus_fm__init
+inob__init
 
 DRY_RUN=""
 for arg in "$@"; do
@@ -25,16 +25,16 @@ done
 # remote shell expands ${HOME}. No local rewrite needed.
 REMOTE_BASE_LIT="${REMOTE_BASE}"
 
-vagus_fm__log "ensuring remote dirs on ${REMOTE_HOST}: ${REMOTE_BASE_LIT}"
+inob__log "ensuring remote dirs on ${REMOTE_HOST}: ${REMOTE_BASE_LIT}"
 ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_BASE_LIT}/{inputs,code,out,logs,configs}"
 
-vagus_fm__log "rsyncing inputs (FEM + sensors)"
+inob__log "rsyncing inputs (FEM + sensors)"
 rsync -avh ${DRY_RUN} --progress \
     "${LOCAL_DIR}/outputs/fem/fem_vagus.mat" \
     "${LOCAL_DIR}/outputs/sensors/sensor_array.mat" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/inputs/"
 
-vagus_fm__log "rsyncing package source (src/ + cluster/ + configs/)"
+inob__log "rsyncing package source (src/ + cluster/ + configs/)"
 rsync -avh ${DRY_RUN} \
     --exclude '__pycache__' --exclude '*.egg-info' \
     "${LOCAL_DIR}/src/" \
@@ -54,10 +54,10 @@ rsync -avh ${DRY_RUN} \
     "${LOCAL_DIR}/requirements-cluster.txt" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/code/"
 
-vagus_fm__log "marking scripts executable"
+inob__log "marking scripts executable"
 ssh "${REMOTE_HOST}" "chmod +x ${REMOTE_BASE_LIT}/code/cluster/*.sh 2>/dev/null || true"
 
-vagus_fm__log "remote layout:"
+inob__log "remote layout:"
 ssh "${REMOTE_HOST}" "ls -lh ${REMOTE_BASE_LIT}/inputs ${REMOTE_BASE_LIT}/configs"
 
 cat <<EOF
