@@ -25,31 +25,35 @@ done
 # remote shell expands ${HOME}. No local rewrite needed.
 REMOTE_BASE_LIT="${REMOTE_BASE}"
 
+# Exclude macOS AppleDouble / Finder junk (the repo lives on an external
+# /Volumes mount that sprays ._* and .DS_Store files) from every transfer.
+EXCL=(--exclude '._*' --exclude '.DS_Store')
+
 inob__log "ensuring remote dirs on ${REMOTE_HOST}: ${REMOTE_BASE_LIT}"
 ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_BASE_LIT}/{inputs,code,out,logs,configs}"
 
 inob__log "rsyncing inputs (FEM + sensors)"
-rsync -avh ${DRY_RUN} --progress \
+rsync -avh ${DRY_RUN} "${EXCL[@]}" --progress \
     "${LOCAL_DIR}/outputs/fem/fem_vagus.mat" \
     "${LOCAL_DIR}/outputs/sensors/sensor_array.mat" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/inputs/"
 
 inob__log "rsyncing package source (src/ + cluster/ + configs/)"
-rsync -avh ${DRY_RUN} \
+rsync -avh ${DRY_RUN} "${EXCL[@]}" \
     --exclude '__pycache__' --exclude '*.egg-info' \
     "${LOCAL_DIR}/src/" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/code/src/"
 
-rsync -avh ${DRY_RUN} \
+rsync -avh ${DRY_RUN} "${EXCL[@]}" \
     --exclude '*.md' \
     "${LOCAL_DIR}/cluster/" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/code/cluster/"
 
-rsync -avh ${DRY_RUN} \
+rsync -avh ${DRY_RUN} "${EXCL[@]}" \
     "${LOCAL_DIR}/configs/" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/configs/"
 
-rsync -avh ${DRY_RUN} \
+rsync -avh ${DRY_RUN} "${EXCL[@]}" \
     "${LOCAL_DIR}/pyproject.toml" \
     "${LOCAL_DIR}/requirements-cluster.txt" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/code/"

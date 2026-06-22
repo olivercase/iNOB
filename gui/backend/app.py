@@ -312,16 +312,19 @@ async def run_ws(ws: WebSocket) -> None:
     threshold_snr = float(req.get("threshold_snr", 3.0))
     modality = str(req.get("modality", "meg")).lower()
 
-    # Clicked sources reach the solver as a config override; their presence
-    # forces a re-solve of the selected stages so stale cached leadfields are
-    # not reported against new source positions.
+    # Clicked sources reach the solver as a config override. They only change
+    # the dipole positions, so re-running geom/fem/sensors is both wasteful and
+    # would rebuild the (cached) geometry unnecessarily — restrict the run to
+    # the forward solve and force only that.
     overrides: list[str] = []
     strengths: list[float] = []
+    sources_only_forward = False
     if sources:
         positions = [[float(s["x"]), float(s["y"]), float(s["z"])] for s in sources]
         strengths = [float(s.get("strength_nAm", 70.0)) for s in sources]
         overrides.append(f"forward.point_sources={json.dumps(positions)}")
         force = True
+        sources_only_forward = True
 
     log_q: queue.Queue[str] = queue.Queue()
     handler = _QueueLogHandler(log_q)
@@ -338,7 +341,9 @@ async def run_ws(ws: WebSocket) -> None:
         try:
             cfg = load_config(_active_config_path(), overrides=overrides,
                               project_root=PROJECT_ROOT)
-            if stages_in == "all" or not stages_in:
+            if sources_only_forward:
+                stages = ["forward"]      # explicit sources → re-solve only
+            elif stages_in == "all" or not stages_in:
                 stages = list(ALL_STAGES)
             else:
                 stages = [s for s in stages_in if s in ALL_STAGES]
