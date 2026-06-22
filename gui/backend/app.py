@@ -34,9 +34,10 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from inob.config import ConfigError, load_config
-from inob.cli.pipeline import ALL_STAGES, run_pipeline
+from gui.backend import cluster
 from inob.analysis.detect import compute_detectability
+from inob.cli.pipeline import ALL_STAGES, run_pipeline
+from inob.config import ConfigError, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -229,12 +230,49 @@ def get_mesh(name: str) -> FileResponse:
     return FileResponse(meshes[name], media_type="model/stl", filename=f"{name}.stl")
 
 
+# ── cluster submission ──────────────────────────────────────────────────────────
+
+@app.get("/api/cluster/profiles")
+def cluster_profiles() -> dict[str, Any]:
+    return {"profiles": cluster.list_profiles()}
+
+
+@app.post("/api/cluster/submit")
+def cluster_submit(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return cluster.submit(
+            payload.get("profile"),
+            stages=payload.get("stages"),
+            sources=payload.get("sources"),
+            threshold_snr=float(payload.get("threshold_snr", 3.0)),
+            modality=str(payload.get("modality", "meg")),
+        )
+    except cluster.ClusterError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@app.get("/api/cluster/status")
+def cluster_status(profile: str, job_id: str) -> dict[str, Any]:
+    try:
+        return cluster.status(profile, job_id)
+    except cluster.ClusterError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@app.post("/api/cluster/fetch")
+def cluster_fetch(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return cluster.fetch(payload.get("profile"), payload.get("job_id"))
+    except cluster.ClusterError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
 # ── run (streaming logs over WebSocket) ─────────────────────────────────────────
 
 class _QueueLogHandler(logging.Handler):
     """A logging handler that pushes formatted records onto a thread-safe queue."""
 
-    def __init__(self, q: "queue.Queue[str]") -> None:
+    def __init__(self, q: queue.Queue[str]) -> None:
         super().__init__()
         self._q = q
         self.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
@@ -285,7 +323,7 @@ async def run_ws(ws: WebSocket) -> None:
         overrides.append(f"forward.point_sources={json.dumps(positions)}")
         force = True
 
-    log_q: "queue.Queue[str]" = queue.Queue()
+    log_q: queue.Queue[str] = queue.Queue()
     handler = _QueueLogHandler(log_q)
     vagus_logger = logging.getLogger("inob")
     prev_level = vagus_logger.level

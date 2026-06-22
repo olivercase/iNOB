@@ -2,25 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { Button, Navbar, Tag } from "@blueprintjs/core";
 import {
-  getHealth,
-  getConfig,
-  putConfig,
-  getMeshes,
-  runSimulation,
-  detectFallback,
-  type MeshInfo,
-  type PointSource,
-  type DetectResult,
+  getHealth, getConfig, putConfig, getMeshes, runSimulation, detectFallback,
+  type MeshInfo, type PointSource, type DetectResult,
 } from "@/lib/api";
 import { type Cfg, getPath } from "@/lib/config";
 import SourceList from "@/components/SourceList";
 import ParamPanels from "@/components/ParamPanels";
 import RunConsole from "@/components/RunConsole";
 import ResultsPanel from "@/components/ResultsPanel";
+import ClusterPanel from "@/components/ClusterPanel";
 
-// three.js cannot render server-side.
 const Viewer3D = dynamic(() => import("@/components/Viewer3D"), { ssr: false });
+const ALL_STAGES = ["geom", "fem", "sensors", "forward", "viz"];
 
 export default function Page() {
   const [healthy, setHealthy] = useState<boolean | null>(null);
@@ -37,9 +32,7 @@ export default function Page() {
 
   useEffect(() => {
     getHealth().then((h) => setHealthy(!!h));
-    getConfig()
-      .then((r) => setConfig(r.config))
-      .catch(() => setHealthy(false));
+    getConfig().then((r) => setConfig(r.config)).catch(() => setHealthy(false));
     getMeshes().then((m) => {
       setMeshes(m);
       setVisible(Object.fromEntries(m.map((x) => [x.name, true])));
@@ -67,97 +60,82 @@ export default function Page() {
     setLogs([]);
     setStatuses({});
     setResult(null);
-    // Persist the (valid) config edits first; ignore failures so a run can
-    // still proceed against the last-saved config.
     await putConfig(config);
-
     let gotResult = false;
-    runSimulation(
-      stages,
-      force,
-      {
-        onLog: (line) => setLogs((l) => [...l, line]),
-        onStatuses: (s) => setStatuses(s),
-        onResult: (d) => {
-          gotResult = true;
-          setResult(d);
-        },
-        onDone: async () => {
-          if (!gotResult) {
-            // backend did not emit a detectability result — use the dev mock.
-            const d = await detectFallback(sources, threshold, noiseFloorFt);
-            if (d) setResult(d);
-          }
-          setRunning(false);
-        },
-        onError: (m) => {
-          setLogs((l) => [...l, `ERROR: ${m}`]);
-          setRunning(false);
-        },
+    runSimulation(stages, force, {
+      onLog: (line) => setLogs((l) => [...l, line]),
+      onStatuses: (s) => setStatuses(s),
+      onResult: (d) => { gotResult = true; setResult(d); },
+      onDone: async () => {
+        if (!gotResult) {
+          const d = await detectFallback(sources, threshold, noiseFloorFt);
+          if (d) setResult(d);
+        }
+        setRunning(false);
       },
-      { sources, threshold_snr: threshold },
-    );
+      onError: (m) => { setLogs((l) => [...l, `ERROR: ${m}`]); setRunning(false); },
+    }, { sources, threshold_snr: threshold });
   };
 
   return (
     <div className="app">
-      <div className="topbar">
-        <div className="brand">
-          iNOB <span className="dim">· vagus nerve forward model</span>
-        </div>
-        <div className="spacer" />
-        {saveMsg && <span className="pill">{saveMsg}</span>}
-        <button className="ghost" onClick={save} disabled={!config}>
-          Save config
-        </button>
-        <span className={`pill ${healthy ? "ok" : healthy === false ? "bad" : ""}`}>
-          {healthy == null ? "connecting…" : healthy ? "backend online" : "backend offline"}
-        </span>
-      </div>
+      <Navbar>
+        <Navbar.Group align="left">
+          <Navbar.Heading>
+            <b>iNOB</b> <span className="bp6-text-muted">· vagus nerve forward model</span>
+          </Navbar.Heading>
+        </Navbar.Group>
+        <Navbar.Group align="right">
+          {saveMsg && <Tag minimal style={{ marginRight: 8 }}>{saveMsg}</Tag>}
+          <Button icon="floppy-disk" minimal disabled={!config} onClick={save}>Save config</Button>
+          <Navbar.Divider />
+          <Tag
+            minimal
+            intent={healthy ? "success" : healthy === false ? "danger" : "none"}
+            icon={healthy ? "dot" : "offline"}
+          >
+            {healthy == null ? "connecting…" : healthy ? "backend online" : "backend offline"}
+          </Tag>
+        </Navbar.Group>
+      </Navbar>
 
       <div className="main">
         <div className="col">
-          <div style={{ height: 440, borderBottom: "1px solid var(--border)" }}>
+          <div className="viewerWrap" style={{ height: 420 }}>
             <Viewer3D
               meshes={meshes}
               visible={visible}
               sources={sources}
-              onAddSource={(p) =>
-                setSources((s) => [...s, { ...p, strength_nAm: 70 }])
-              }
+              onAddSource={(p) => setSources((s) => [...s, { ...p, strength_nAm: 70 }])}
             />
           </div>
           <div className="panel">
-            <h3>Mesh visibility</h3>
-            <div>
+            <h3 className="section-title">Mesh visibility</h3>
+            <div className="chips">
               {meshes.map((m) => (
-                <span
-                  key={m.name}
-                  className={`chip ${visible[m.name] ? "on" : ""}`}
-                  onClick={() => setVisible((v) => ({ ...v, [m.name]: !v[m.name] }))}
-                >
-                  {visible[m.name] ? "✓" : "○"} {m.name}
-                </span>
+                <Tag key={m.name} interactive minimal={!visible[m.name]}
+                     intent={visible[m.name] ? "primary" : "none"}
+                     icon={visible[m.name] ? "eye-open" : "eye-off"}
+                     onClick={() => setVisible((v) => ({ ...v, [m.name]: !v[m.name] }))}>
+                  {m.name}
+                </Tag>
               ))}
-              {meshes.length === 0 && <span className="hint">no meshes from backend</span>}
+              {meshes.length === 0 && <span className="bp6-text-muted">no meshes from backend</span>}
             </div>
           </div>
           <SourceList sources={sources} onChange={setSources} />
+          <ClusterPanel sources={sources} threshold={threshold} modality="meg" stages={ALL_STAGES} />
         </div>
 
         <div className="col">
           {config ? (
-            <ParamPanels
-              config={config}
-              onChange={setConfig}
-              threshold={threshold}
-              onThreshold={setThreshold}
-            />
+            <ParamPanels config={config} onChange={setConfig}
+                         threshold={threshold} onThreshold={setThreshold} />
           ) : (
             <div className="panel">
-              <p className="hint">
+              <span className="bp6-text-muted">
                 Waiting for backend config (start the FastAPI backend on :8000).
-              </p>
+              </span>
             </div>
           )}
         </div>

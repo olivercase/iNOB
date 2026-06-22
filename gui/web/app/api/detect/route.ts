@@ -44,12 +44,14 @@ export async function POST(req: Request) {
 
   const snrs = per_source.map((p) => p.snr);
   return NextResponse.json({
+    modality: "meg",
     per_source,
     array: {
       n_sensors: 8190,
       mean_snr: snrs.length ? Number((snrs.reduce((a, b) => a + b, 0) / snrs.length).toFixed(3)) : 0,
       max_snr: snrs.length ? Math.max(...snrs) : 0,
       noise_floor_fT: noise,
+      noise_unit: "fT",
       threshold_snr: thr,
     },
     mocked: true,

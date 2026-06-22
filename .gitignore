@@ -46,3 +46,6 @@ data/bodyparts3d/raw_4.3/_quarantine_*/
 
 # Old git history moved aside during the iNOB migration
 .git.old-*/
+
+# GUI working config (generated)
+configs/gui_working.yaml

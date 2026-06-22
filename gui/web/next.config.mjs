@@ -15,6 +15,7 @@ const nextConfig = {
       { source: "/api/config", destination: `${BACKEND}/api/config` },
       { source: "/api/meshes/:path*", destination: `${BACKEND}/api/meshes/:path*` },
       { source: "/api/meshes", destination: `${BACKEND}/api/meshes` },
+      { source: "/api/cluster/:path*", destination: `${BACKEND}/api/cluster/:path*` },
     ];
   },
 };

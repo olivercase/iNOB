@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import "@blueprintjs/core/lib/css/blueprint.css";
+import "@blueprintjs/icons/lib/css/blueprint-icons.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,8 +15,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className="bp6-dark">
+      <body className="bp6-dark">{children}</body>
     </html>
   );
 }

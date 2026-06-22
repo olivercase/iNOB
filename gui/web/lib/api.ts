@@ -31,12 +31,14 @@ export interface PerSourceDetect {
 }
 
 export interface DetectResult {
+  modality: string;
   per_source: PerSourceDetect[];
   array: {
     n_sensors: number;
     mean_snr: number;
     max_snr: number;
     noise_floor_fT: number;
+    noise_unit?: string;
     threshold_snr: number;
   };
   mocked?: boolean;

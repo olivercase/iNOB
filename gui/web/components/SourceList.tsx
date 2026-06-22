@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Card, InputGroup } from "@blueprintjs/core";
 import type { PointSource } from "@/lib/api";
 
 interface Props {
@@ -14,45 +15,44 @@ export default function SourceList({ sources, onChange }: Props) {
     onChange(next);
   };
   const remove = (i: number) => onChange(sources.filter((_, j) => j !== i));
-  const add = () =>
-    onChange([...sources, { x: 0, y: 0, z: 0, strength_nAm: 70 }]);
+  const add = () => onChange([...sources, { x: 0, y: 0, z: 0, strength_nAm: 70 }]);
 
   return (
-    <div className="panel">
-      <h3>Sources ({sources.length})</h3>
+    <Card className="panel" compact>
+      <h3 className="section-title">Sources ({sources.length})</h3>
       {sources.length === 0 && (
-        <p className="hint">
+        <p className="bp6-text-muted">
           Click <b>Place source</b> in the viewer to drop dipoles, or add one manually.
         </p>
       )}
       {sources.map((s, i) => (
         <div className="srcrow" key={i}>
-          <span style={{ color: "var(--muted)", width: 16 }}>{i + 1}</span>
+          <span className="bp6-text-muted" style={{ width: 16 }}>{i + 1}</span>
           {(["x", "y", "z"] as const).map((k) => (
-            <input
+            <InputGroup
               key={k}
               type="number"
-              value={s[k]}
+              value={String(s[k])}
               title={`${k} (mm)`}
-              onChange={(e) => update(i, k, parseFloat(e.target.value) || 0)}
+              small
+              onValueChange={(v) => update(i, k, parseFloat(v) || 0)}
             />
           ))}
-          <input
+          <InputGroup
             type="number"
-            value={s.strength_nAm}
+            value={String(s.strength_nAm)}
             title="strength (nA·m)"
+            small
             style={{ width: 78 }}
-            onChange={(e) => update(i, "strength_nAm", parseFloat(e.target.value) || 0)}
+            onValueChange={(v) => update(i, "strength_nAm", parseFloat(v) || 0)}
           />
-          <button className="ghost" onClick={() => remove(i)} title="remove">
-            ✕
-          </button>
+          <Button icon="cross" minimal small onClick={() => remove(i)} title="remove" />
         </div>
       ))}
-      <div className="row" style={{ marginTop: 8 }}>
-        <button className="ghost" onClick={add}>+ Add source</button>
-        <span className="hint">x, y, z in mm · strength in nA·m</span>
-      </div>
-    </div>
+      <Button icon="add" minimal small onClick={add} style={{ marginTop: 6 }}>
+        Add source
+      </Button>
+      <span className="bp6-text-muted" style={{ marginLeft: 8 }}>x, y, z mm · strength nA·m</span>
+    </Card>
   );
 }

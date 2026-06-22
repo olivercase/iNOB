@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Canvas, ThreeEvent, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Button, Tag } from "@blueprintjs/core";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { MeshInfo, PointSource } from "@/lib/api";
@@ -112,13 +113,14 @@ export default function Viewer3D({ meshes, visible, sources, onAddSource }: Prop
         <OrbitControls makeDefault enableDamping />
       </Canvas>
       <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 8 }}>
-        <button
-          className={placing ? "btn" : "ghost"}
+        <Button
+          icon={placing ? "selection" : "new-object"}
+          intent={placing ? "primary" : "none"}
           onClick={() => setPlacing((p) => !p)}
         >
-          {placing ? "● Click a mesh to drop a source" : "Place source"}
-        </button>
-        {!loaded.length && <span className="pill">loading meshes…</span>}
+          {placing ? "Click a mesh to drop a source" : "Place source"}
+        </Button>
+        {!loaded.length && <Tag minimal>loading meshes…</Tag>}
       </div>
     </div>
   );
