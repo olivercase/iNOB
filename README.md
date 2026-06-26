@@ -3,14 +3,15 @@
 A whole-body **forward-modelling and sensor-planning** package for non-invasive
 recording of peripheral and autonomic nerves. You pick a target structure and a
 source configuration, choose which anatomical meshes to include and their
-conductivities, generate an OPM and/or surface-electrode array, and run one
-pipeline — from atlas meshes → multi-tissue tetrahedral FEM → calibrated **MEG
-and EEG leadfields** (DUNEuro) — from a single command or a browser GUI.
+conductivities, generate an OPM and/or surface-electrode array, and run the
+pipeline from atlas meshes through a multi-tissue tetrahedral FEM to calibrated
+**MEG and EEG leadfields** (via DUNEuro). It runs from a single command or a
+browser GUI.
 
 It answers one planning question: **given a sensor noise floor, how many
 averaged trials are needed to detect a given source?** Both leadfields come
-from the same FEM and conductivities and are calibrated to absolute units (fT,
-µV) against analytic solutions.
+from the same FEM and the same conductivities, and are calibrated to absolute
+units (fT, µV) against analytic solutions.
 
 ```
 data/{bone,torso,vagus,muscle,vessel}/*.stl
@@ -26,16 +27,22 @@ data/{bone,torso,vagus,muscle,vessel}/*.stl
 
 ## Install
 
+The anatomical meshes (`*.stl`, `*.obj`) are stored with **Git LFS**, so you
+need Git LFS installed *before* cloning. Without it the clone pulls 132-byte
+pointer files instead of meshes and the pipeline fails.
+
 ```bash
+git lfs install                      # once per machine (brew install git-lfs)
 git clone https://github.com/olivercase/iNOB.git
 cd iNOB
-python3 -m pip install -e .[dev]     # editable install with dev deps
+git lfs pull                         # fetch the meshes if the clone didn't
+python3 -m pip install -e .[dev]     # editable install with dev deps (Python 3.11+)
 make test                            # 140 tests, no DUNEuro required
 ```
 
 The DUNEuro forward solve needs the `duneuropy` extension. Build it locally or
-on a cluster with `cluster/build_duneuro.sh` (see **Cluster** below); every
-other stage runs without it.
+on a cluster with `cluster/build_duneuro.sh` (see [Cluster](#cluster-ucl-myriad--kathleen-sge)).
+Every other stage runs without it.
 
 ## Run the full pipeline
 
@@ -68,19 +75,19 @@ inob-detect            # trials-to-detect for the configured sources
 Model the magnetic field of a single current dipole placed at the centre of a
 neck muscle, pointing along the muscle's long axis.
 
-**Quick look — analytic, no DUNEuro (seconds):** paints the radial field on the
+**Quick look (analytic, no DUNEuro, seconds):** paints the radial field on the
 torso skin using the Sarvas single-sphere solution.
 
 ```bash
-inob-pipeline --stages geom,sensors            # build skin + sensor array once
+inob-pipeline --stages geom                    # build the skin surface once
 python scripts/muscle_field_sarvas.py          # default: scalene group at C7
 python scripts/muscle_field_sarvas.py sternocleido   # or any muscle substring
-# → outputs/muscle_skin_topoplot.png
+# writes outputs/muscle_skin_topoplot.png
 ```
 
-**Full FEM — DUNEuro (head-to-head MEG/EEG, absolute units):** place explicit
-dipoles with `forward.point_sources` (mm, in the atlas frame). Centroids of the
-left/right scalenus anterior + medius are shown here:
+**Full FEM (DUNEuro, head-to-head MEG/EEG, absolute units):** place explicit
+dipoles with `forward.point_sources` (mm, in the atlas frame). The coordinates
+below are the centroids of the left/right scalenus anterior and medius:
 
 ```bash
 inob-pipeline --stages all --set \
@@ -95,9 +102,9 @@ Muscle is a FEM tissue by default (`fem.tissues` includes `muscle`,
 ## Browser GUI
 
 ```bash
-# backend (FastAPI) — serves config, meshes, runs, cluster submission
+# backend (FastAPI): serves config, meshes, runs, cluster submission
 uvicorn gui.backend.app:app --port 8000
-# frontend (Next.js) — 3-D viewer, click-to-place sources, live run console
+# frontend (Next.js): 3-D viewer, click-to-place sources, live run console
 cd gui/web && npm install && npm run dev        # http://localhost:3000
 ```
 
@@ -126,7 +133,7 @@ drives the same flow.
 
 ```
 src/inob/        the package: geometry, fem, sensors, forward, analysis, viz, cli
-configs/         default.yaml — the single source of truth
+configs/         default.yaml, the single source of truth
 data/            anatomical meshes (BodyParts3D-derived STLs)
 gui/             web/ (Next.js frontend) + backend/ (FastAPI)
 cluster/         SGE job scripts + DUNEuro build for UCL Myriad/Kathleen
