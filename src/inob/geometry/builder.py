@@ -1,7 +1,6 @@
 """Build a watertight, manifold geometry from per-tissue STLs.
 
-Replaces the legacy ``build_geom.py`` script with a config-driven, logging,
-typed-IO version. Per-compartment shrinkwrap parameters come from
+Per-compartment shrinkwrap parameters come from
 ``cfg.geometry.shrinkwrap``; outputs land at ``cfg.outputs.geometry_mat``.
 
 Pipeline (per compartment):

@@ -71,14 +71,10 @@ def _row_for_modality(
     else:
         sigma = floors.eeg_per_channel_uV
 
-    # Convert raw → human units
     sig_h, unit = _to_human_units(sim.signal, modality=modality)
-
-    # Pick best channel for the time-trace panel
     best_c = best_channel_index(sig_h)
     trace = sig_h[best_c]
 
-    # Time trace
     ax_a = fig.add_subplot(gs_row[0])
     ax_a.plot(sim.t_s, trace, color=(NATURE_PALETTE["blue"]
               if modality == "meg" else NATURE_PALETTE["red"]), lw=0.8)
@@ -139,7 +135,6 @@ def render_physiology(
         meg_sim = simulate_train(meg_lf, sc, fs_hz=fs_hz)
         eeg_sim = simulate_train(eeg_lf, sc, fs_hz=fs_hz)
 
-        # human units
         meg_h = meg_sim.signal * 1e15        # T → fT
         eeg_h = eeg_sim.signal * 1e6         # V → µV
 

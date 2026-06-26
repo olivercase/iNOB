@@ -61,11 +61,7 @@ def _build_grid(
 
 
 def _load_tissue_surfaces(cfg: Config):
-    """Return ``(m_skin, m_vagus_left, m_vagus_right, bone_paths, muscle_paths, vessel_paths)``.
-
-    Friendly errors (via :class:`inob.io.stl.STLLoadError`) replace the
-    legacy ``next(glob)``-explodes pattern.
-    """
+    """Return ``(m_skin, m_vagus_left, m_vagus_right, bone_paths, muscle_paths, vessel_paths)``."""
     m_skin = load_stl(cfg.data.torso_skin)
     vl_paths = load_stl_glob(cfg.data.vagus_left_glob)
     vr_paths = load_stl_glob(cfg.data.vagus_right_glob)

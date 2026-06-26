@@ -1,9 +1,7 @@
 """Source-dipole sampling along the vagus nerve.
 
 A single canonical implementation, used by both the local forward solver
-(``inob.forward.solve``) and the cluster chunk worker
-(``inob.forward.chunk``). Replaces three separate copies in the legacy
-scripts (``run_fem_duneuro.py``, ``cluster/run_chunk.py``).
+(``inob.forward.solve``) and the cluster chunk worker (``inob.forward.chunk``).
 """
 from __future__ import annotations
 

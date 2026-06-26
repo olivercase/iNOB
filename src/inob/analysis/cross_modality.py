@@ -6,9 +6,7 @@ orthogonal moments per position). That shared structure means the EEG
 leadfield ``L_E`` and MEG leadfield ``L_M`` are coupled: any source moment
 ``q`` induces both ``V = L_E q`` and ``B = L_M q``.
 
-This module turns that coupling into testable predictions.
-
-Two questions you'd ask:
+Two questions:
 
   Q1.  *Given a measured EEG topo from a **known** source position, what
        should the MEG topo look like for the same source?*
@@ -25,10 +23,9 @@ Two questions you'd ask:
   Q2.  *Across all source positions, how correlated are the two
        modalities' amplitudes?*
        For each source, take the per-modality amplitude (RMS over moments
-       and channels). A high correlation says "if you see a strong EEG
-       response, you'll also see a strong MEG response from the same
-       location". A flat scatter says the two modalities probe different
-       parts of the source space.
+       and channels). High correlation ⇒ a strong EEG response implies a
+       strong MEG response from the same location; a flat scatter ⇒ the two
+       modalities probe different parts of the source space.
 
 References
 ----------

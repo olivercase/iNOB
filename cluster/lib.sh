@@ -53,6 +53,17 @@ inob__load_profile() {
 
 inob__load_modules() {
     if ! command -v module >/dev/null 2>&1; then
+        # SGE runs body scripts with ``-S /bin/bash`` (non-login), so /etc/profile
+        # is not sourced and the ``module`` function is undefined even though
+        # MODULESHOME/MODULEPATH are imported via ``qsub -V``. Initialise it.
+        for _init in "${MODULESHOME:-}/init/bash" /etc/profile.d/modules.sh; do
+            if [[ -n "${_init}" && -f "${_init}" ]]; then
+                # shellcheck disable=SC1090,SC1091
+                source "${_init}" && break
+            fi
+        done
+    fi
+    if ! command -v module >/dev/null 2>&1; then
         echo "[lib.sh] 'module' not available; skipping module loads (dev machine?)" >&2
         return 0
     fi

@@ -1,4 +1,4 @@
-# Cluster runtime constraints (UCL Myriad / Kathleen — manylinux2014).
+# Cluster runtime constraints (UCL Myriad / Kathleen - manylinux2014).
 # Older glibc forces a numpy<2.0 wheel and matching scipy/h5py majors.
 # Used by cluster/build_duneuro.sh inside the Scratch venv.
 numpy>=1.26,<2.0

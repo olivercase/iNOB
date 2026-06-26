@@ -26,7 +26,6 @@
     "@types/three": "0.169.0",
     "eslint": "8.57.1",
     "eslint-config-next": "15.1.12",
-    "puppeteer-core": "^23.11.1",
     "typescript": "5.7.3"
   }
 }

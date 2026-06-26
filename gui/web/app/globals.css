@@ -41,9 +41,10 @@ html, body {
 .panel { margin: 10px; }
 .panel .bp6-form-group { margin-bottom: 8px; }
 .section-title {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
-  margin: 0 0 10px; color: #abb3bf;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px;
+  margin: 0 0 10px; color: #8a93a0; font-weight: 600;
 }
+.brand { letter-spacing: 0.5px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 .field-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; }
 .field-row label { color: #abb3bf; flex: 1; }
@@ -63,7 +64,34 @@ html, body {
   height: 150px; overflow: auto; white-space: pre-wrap; margin: 10px;
   border-radius: 3px; border: 1px solid var(--border);
 }
-.srcrow { display: flex; gap: 6px; align-items: center; margin: 5px 0; }
+.srcrow {
+  display: flex; gap: 6px; align-items: center; margin: 3px 0;
+  padding: 3px 6px; border-radius: 4px; cursor: pointer;
+  border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
+}
+.srcrow:hover { background: rgba(122, 162, 255, 0.06); }
+.srcrow--sel { background: rgba(90, 209, 196, 0.12); border-color: rgba(90, 209, 196, 0.5); }
 .srcrow .bp6-input { width: 64px; }
+.srcnum { color: #8a93a0; font-family: var(--mono); text-align: center; }
+.srcrow--sel .srcnum { color: #7ef9ec; font-weight: 700; }
 .big { font-size: 26px; font-weight: 700; color: #48aff0; font-family: var(--mono); }
 .mono { font-family: var(--mono); }
+
+/* ── 3-D viewer overlays ─────────────────────────────────────────── */
+.viewerHud {
+  position: absolute; display: flex; align-items: center; gap: 8px;
+  z-index: 5; pointer-events: none;
+}
+.viewerHud > * { pointer-events: auto; }
+.viewerHud--tl { top: 10px; left: 10px; flex-wrap: wrap; max-width: calc(100% - 20px); }
+.viewerHud--bl { bottom: 10px; left: 10px; }
+.hudSwitch { margin: 0 !important; align-self: center; }
+.hudSwitch .bp6-control-indicator { margin-top: 0; }
+
+/* dipole label rendered in-scene via drei <Html> */
+.srcLabel {
+  font-family: var(--mono); font-size: 11px; white-space: nowrap;
+  background: rgba(10, 13, 19, 0.85); color: #7ef9ec;
+  border: 1px solid rgba(90, 209, 196, 0.5); border-radius: 4px;
+  padding: 2px 7px; transform: translateY(-150%); pointer-events: none;
+}

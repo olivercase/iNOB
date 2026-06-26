@@ -58,6 +58,11 @@ rsync -avh ${DRY_RUN} "${EXCL[@]}" \
     "${LOCAL_DIR}/requirements-cluster.txt" \
     "${REMOTE_HOST}:${REMOTE_BASE_LIT}/code/"
 
+# DUNEuro source patch (Eigen-5 / DUNE-2.10), applied by build_duneuro.sh.
+rsync -avh ${DRY_RUN} "${EXCL[@]}" \
+    "${LOCAL_DIR}/scripts/patches/" \
+    "${REMOTE_HOST}:${REMOTE_BASE_LIT}/code/scripts/patches/"
+
 inob__log "marking scripts executable"
 ssh "${REMOTE_HOST}" "chmod +x ${REMOTE_BASE_LIT}/code/cluster/*.sh 2>/dev/null || true"
 

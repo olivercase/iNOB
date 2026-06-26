@@ -2,9 +2,9 @@
 
 For each (tissue, perturbation) in ``cfg.sensitivity``, recompute the
 forward solution with that tissue's conductivity scaled, then summarise the
-per-channel relative change. This is the cleanest finding for the paper:
-the magnetic forward solution is insensitive to bone/skin conductivity
-uncertainty, while the electric (surface-potential) one is dominated by it.
+per-channel relative change. The magnetic forward solution is insensitive
+to bone/skin conductivity uncertainty, while the electric (surface-potential)
+one is dominated by it.
 
 Output: ``cfg.outputs.sensitivity_dir/sensitivity_<modality>.json`` with
 per-tissue, per-perturbation summaries (rms, p50, p95 of the relative change

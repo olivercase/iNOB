@@ -109,19 +109,8 @@ def run_eeg_forward(cfg: Config) -> Path:
     attach_electrodes(driver, dp, electrodes.coilpos)
 
     L = compute_eeg_leadfield(driver, dp, driver_cfg, src_pos_mm)
-    # DUNEuro mm-mode EEG conversion: ×EEG_CALIBRATION_FACTOR.
-    # The factor is set empirically by ``inob.analysis.sphere_calibration``
-    # against the Berg-Scherg analytic solution on a homogeneous sphere.
-    # Headline calibration (outputs/calibration/calibration.json):
-    #     median factor = 0.622  (R = 100 mm, σ = 0.43 S/m, depth 50 mm)
-    # 27-case (R, depth, σ) sweep: median 0.62-0.75, CV = 6.8%, σ-invariant.
-    # See docs/VALIDATION.md §2 for the full derivation and sweep.
-    #
-    # Earlier dev iterations used ×1e3 (Frank-model rough order-of-magnitude
-    # match) but that is inconsistent with the only available reference
-    # (Berg-Scherg). The 0.622 factor matches the analytic series to within
-    # the calibration-sweep CV and is the value used throughout downstream
-    # figures and reports.
+    # DUNEuro mm-mode EEG → µV/(nA·m): ×EEG_CALIBRATION_FACTOR (see constant
+    # above; derivation in docs/VALIDATION.md §2).
     L_uV_per_nAm = L * EEG_CALIBRATION_FACTOR
     logger.info(
         "µV/(nA·m): min=%.3e max=%.3e rms=%.3e",

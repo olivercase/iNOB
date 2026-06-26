@@ -72,7 +72,7 @@ def render_sarvas_vs_fem(
     # ── panel b: per-coil residual vs distance ─────────────────────────────
     ax_b = fig.add_subplot(gs[0, 1])
     res_d = fem_disp[:, source_idx] - sarvas_disp[:, source_idx]
-    # distance_to_axis_mm is now (C, S) — pull this source's column.
+    # distance_to_axis_mm is (C, S) — pull this source's column.
     dist = result.distance_to_axis_mm
     if dist.ndim == 2:
         dist = dist[:, source_idx]
@@ -138,7 +138,6 @@ def render_sarvas_vs_fem(
         f"·  Q = {result.Q_nAm:g} nA·m",
         fontsize=11, fontweight="bold", y=0.985,
     )
-    # Footer: explain the FEM/Sarvas amplification physics in one line.
     fig.text(
         0.5, 0.005,
         "FEM ≠ Sarvas reflects secondary (volume) currents in the multi-tissue "

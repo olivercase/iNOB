@@ -3,7 +3,7 @@
 Encapsulates the pieces every forward path needs: import the duneuropy
 extension (with an optional ``cfg.forward.duneuro_path`` shim for legacy
 absolute-path installs), build the conductivity vector from the YAML, and
-construct the ``MEEGDriver3d`` config dict — once, in one place.
+construct the ``MEEGDriver3d`` config dict.
 
 Used by:
   * :mod:`inob.forward.solve` — single-machine forward solve

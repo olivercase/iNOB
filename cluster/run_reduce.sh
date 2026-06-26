@@ -4,6 +4,8 @@
 set -euo pipefail
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Under SGE the body runs from a spool copy; fall back to the staged dir.
+[[ -f "${HERE}/lib.sh" ]] || HERE="${INOB_REMOTE_BASE:-${HOME}/Scratch/inob}/code/cluster"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
 inob__init

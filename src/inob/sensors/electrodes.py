@@ -75,7 +75,6 @@ def _vagus_neck_centre(fem: FemMesh, target_tissue: str,
     z_hi = body_z_lo + z_high_factor * (body_z_hi - body_z_lo)
     sel = (centroids[:, 2] >= z_lo) & (centroids[:, 2] <= z_hi)
     if not sel.any():
-        # fall back to whatever we have
         logger.warning(
             "no %s centroids in Z [%g, %g]; using full-tissue mean",
             target_tissue, z_lo, z_hi,

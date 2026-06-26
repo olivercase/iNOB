@@ -1,8 +1,7 @@
 """Stitch per-chunk leadfields into the canonical NPZ.
 
 Produces an output identical in schema to the local
-:mod:`inob.forward.solve` (the legacy ``cluster/reduce.py`` was missing
-``source_pos``; this module fixes that regression).
+:mod:`inob.forward.solve` (``source_pos`` included).
 """
 from __future__ import annotations
 

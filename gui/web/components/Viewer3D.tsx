@@ -1,29 +1,44 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, ThreeEvent, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import { Button, Tag } from "@blueprintjs/core";
+import { GizmoHelper, GizmoViewport, Html, OrbitControls } from "@react-three/drei";
+import { Button, Switch, Tag } from "@blueprintjs/core";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { MeshInfo, PointSource } from "@/lib/api";
 
-const TISSUE_COLOR: Record<string, string> = {
-  skin: "#d9a06b",
-  vagus_left: "#ffd23f",
-  vagus_right: "#ffa23f",
+// Whole-body anatomical palette. No structure is privileged — iNOB images any
+// target, so colours are per tissue category and the *selected target* (which
+// the user picks) is what gets emphasised, whatever it is.
+const TISSUE: Record<string, { color: string; opacity: number }> = {
+  skin: { color: "#d9b08c", opacity: 0.1 },
+  bone: { color: "#cdd3da", opacity: 0.32 },
+  muscle: { color: "#b5566a", opacity: 0.42 },
+  blood_vessel: { color: "#4a6fb0", opacity: 0.5 },
+  vagus_left: { color: "#ffcf4d", opacity: 0.85 },
+  vagus_right: { color: "#ffb24d", opacity: 0.85 },
 };
+// Anything the backend serves that we don't have a colour for: stable hash hue.
+function tissueStyle(name: string): { color: string; opacity: number } {
+  if (TISSUE[name]) return TISSUE[name];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return { color: `hsl(${h}, 55%, 62%)`, opacity: 0.55 };
+}
 
 interface LoadedMesh {
   name: string;
   geometry: THREE.BufferGeometry;
 }
 
-function useStlMeshes(meshes: MeshInfo[]): LoadedMesh[] {
+function useStlMeshes(meshes: MeshInfo[]): { loaded: LoadedMesh[]; error: string | null } {
   const [loaded, setLoaded] = useState<LoadedMesh[]>([]);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     const loader = new STLLoader();
+    setError(null);
     Promise.all(
       meshes.map(async (m) => {
         const buf = await fetch(m.url).then((r) => r.arrayBuffer());
@@ -33,18 +48,60 @@ function useStlMeshes(meshes: MeshInfo[]): LoadedMesh[] {
       }),
     )
       .then((res) => !cancelled && setLoaded(res))
-      .catch(() => !cancelled && setLoaded([]));
+      .catch((e) => {
+        if (cancelled) return;
+        setLoaded([]);
+        setError(e?.message ?? "failed to load meshes");
+      });
     return () => {
       cancelled = true;
     };
   }, [meshes]);
-  return loaded;
+  return { loaded, error };
 }
 
-function FitCamera({ meshes }: { meshes: LoadedMesh[] }) {
+// Nearest mesh vertex to a point, across the given geometries. Used to snap a
+// dropped dipole onto the chosen target structure so sources sit on anatomy.
+function snapToGeometries(point: THREE.Vector3, geoms: THREE.BufferGeometry[]): THREE.Vector3 | null {
+  let best: THREE.Vector3 | null = null;
+  let bestD = Infinity;
+  const v = new THREE.Vector3();
+  for (const g of geoms) {
+    const pos = g.getAttribute("position");
+    if (!pos) continue;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const d = v.distanceToSquared(point);
+      if (d < bestD) {
+        bestD = d;
+        best = v.clone();
+      }
+    }
+  }
+  return best;
+}
+
+// Fit the camera to the model exactly once (when meshes first load) and again
+// whenever `recenter` changes. Toggling tissue visibility must NOT move the view.
+function CameraRig({
+  meshes,
+  recenter,
+  controls,
+  onFit,
+}: {
+  meshes: LoadedMesh[];
+  recenter: number;
+  controls: React.RefObject<{ target: THREE.Vector3; update: () => void } | null>;
+  onFit: (size: number) => void;
+}) {
   const { camera } = useThree();
+  const fitted = useRef(false);
   useEffect(() => {
-    if (!meshes.length) return;
+    if (!meshes.length) {
+      fitted.current = false;
+      return;
+    }
+    if (fitted.current && recenter === 0) return;
     const box = new THREE.Box3();
     for (const m of meshes) {
       m.geometry.computeBoundingBox();
@@ -53,12 +110,18 @@ function FitCamera({ meshes }: { meshes: LoadedMesh[] }) {
     if (box.isEmpty()) return;
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3()).length() || 200;
-    camera.position.set(center.x + size * 0.6, center.y + size * 0.2, center.z + size * 0.6);
+    camera.position.set(center.x + size * 0.55, center.y + size * 0.18, center.z + size * 0.55);
     camera.near = size / 1000;
     camera.far = size * 10;
     camera.lookAt(center);
     camera.updateProjectionMatrix();
-  }, [meshes, camera]);
+    if (controls.current) {
+      controls.current.target.copy(center);
+      controls.current.update();
+    }
+    fitted.current = true;
+    onFit(size);
+  }, [meshes, recenter, camera, controls, onFit]);
   return null;
 }
 
@@ -66,61 +129,200 @@ interface Props {
   meshes: MeshInfo[];
   visible: Record<string, boolean>;
   sources: PointSource[];
+  selected: number | null;
+  target: string | null;
+  onSelect: (i: number | null) => void;
   onAddSource: (p: { x: number; y: number; z: number }) => void;
 }
 
-export default function Viewer3D({ meshes, visible, sources, onAddSource }: Props) {
-  const loaded = useStlMeshes(meshes);
+export default function Viewer3D({
+  meshes,
+  visible,
+  sources,
+  selected,
+  target,
+  onSelect,
+  onAddSource,
+}: Props) {
+  const { loaded, error } = useStlMeshes(meshes);
   const [placing, setPlacing] = useState(false);
-  const shown = useMemo(
-    () => loaded.filter((m) => visible[m.name] !== false),
-    [loaded, visible],
-  );
+  const [snap, setSnap] = useState(true);
+  const [recenter, setRecenter] = useState(0);
+  const [hover, setHover] = useState<THREE.Vector3 | null>(null);
+  const [missed, setMissed] = useState(false);
+  const [modelSize, setModelSize] = useState(300);
+  const controls = useRef<{ target: THREE.Vector3; update: () => void } | null>(null);
+
+  const shown = useMemo(() => loaded.filter((m) => visible[m.name] !== false), [loaded, visible]);
+  // Snap onto the chosen target if one is set; otherwise fall back to whatever
+  // is currently shown so placement always lands on visible anatomy.
+  const snapGeoms = useMemo(() => {
+    if (target) {
+      const t = loaded.find((m) => m.name === target);
+      if (t) return [t.geometry];
+    }
+    return shown.map((m) => m.geometry);
+  }, [loaded, shown, target]);
+  const canSnap = snap && snapGeoms.length > 0;
+  const markerR = modelSize * 0.011;
+
+  useEffect(() => {
+    if (!placing) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPlacing(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placing]);
+
+  const resolvePoint = (raw: THREE.Vector3): THREE.Vector3 => {
+    if (canSnap) {
+      const s = snapToGeometries(raw, snapGeoms);
+      if (s) return s;
+    }
+    return raw;
+  };
+
+  const handleMove = (e: ThreeEvent<PointerEvent>) => {
+    if (!placing) return;
+    setMissed(false);
+    setHover(resolvePoint(e.point.clone()));
+  };
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     if (!placing) return;
     e.stopPropagation();
-    const p = e.point;
+    const p = resolvePoint(e.point.clone());
     onAddSource({ x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2) });
   };
 
   return (
-    <div className="viewerWrap">
-      <Canvas camera={{ fov: 45, position: [200, 80, 200] }} dpr={[1, 2]}>
-        <color attach="background" args={["#0b0e14"]} />
-        <ambientLight intensity={0.7} />
-        <directionalLight position={[1, 1, 1]} intensity={1.1} />
-        <directionalLight position={[-1, -0.5, -1]} intensity={0.4} />
-        <FitCamera meshes={shown} />
-        {shown.map((m) => (
-          <mesh key={m.name} geometry={m.geometry} onClick={handleClick}>
-            <meshStandardMaterial
-              color={TISSUE_COLOR[m.name] ?? "#7aa2ff"}
-              transparent
-              opacity={m.name === "skin" ? 0.28 : 0.9}
-              roughness={0.6}
-              metalness={0.0}
-              side={THREE.DoubleSide}
-            />
+    <div className="viewerWrap" style={{ cursor: placing ? "crosshair" : "default" }}>
+      <Canvas camera={{ fov: 42, position: [200, 80, 200] }} dpr={[1, 2]}>
+        <color attach="background" args={["#0a0d13"]} />
+        <fog attach="fog" args={["#0a0d13", modelSize * 1.6, modelSize * 4.5]} />
+        <hemisphereLight args={["#aeb9ff", "#161a22", 0.7]} />
+        <directionalLight position={[1, 1.2, 0.8]} intensity={1.1} />
+        <directionalLight position={[-1, -0.4, -1]} intensity={0.35} />
+
+        <CameraRig meshes={loaded} recenter={recenter} controls={controls} onFit={setModelSize} />
+
+        <group onClick={handleClick} onPointerMove={handleMove} onPointerMissed={() => placing && setMissed(true)}>
+          {shown.map((m) => {
+            const t = tissueStyle(m.name);
+            const isTarget = m.name === target;
+            const opacity = isTarget ? 1 : t.opacity;
+            return (
+              <mesh key={m.name} geometry={m.geometry}>
+                <meshStandardMaterial
+                  color={t.color}
+                  emissive={isTarget ? t.color : "#000000"}
+                  emissiveIntensity={isTarget ? 0.5 : 0}
+                  transparent={opacity < 1}
+                  opacity={opacity}
+                  depthWrite={opacity > 0.6}
+                  roughness={isTarget ? 0.35 : 0.7}
+                  metalness={0}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+            );
+          })}
+        </group>
+
+        {/* Live placement preview — a ghost marker tracking the cursor. */}
+        {placing && hover && (
+          <mesh position={hover} renderOrder={10}>
+            <sphereGeometry args={[markerR, 20, 20]} />
+            <meshBasicMaterial color="#5ad1c4" transparent opacity={0.45} depthTest={false} />
           </mesh>
-        ))}
-        {sources.map((s, i) => (
-          <mesh key={i} position={[s.x, s.y, s.z]}>
-            <sphereGeometry args={[3, 16, 16]} />
-            <meshStandardMaterial color="#5ad1c4" emissive="#2a6f66" />
-          </mesh>
-        ))}
-        <OrbitControls makeDefault enableDamping />
+        )}
+
+        {sources.map((s, i) => {
+          const sel = i === selected;
+          return (
+            <group key={i} position={[s.x, s.y, s.z]}>
+              <mesh
+                renderOrder={11}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(i);
+                }}
+              >
+                <sphereGeometry args={[markerR * (sel ? 1.45 : 1), 24, 24]} />
+                <meshStandardMaterial
+                  color={sel ? "#7ef9ec" : "#5ad1c4"}
+                  emissive={sel ? "#2bb6a6" : "#1f7d72"}
+                  emissiveIntensity={sel ? 1.1 : 0.6}
+                  depthTest={false}
+                />
+              </mesh>
+              {sel && (
+                <Html center distanceFactor={modelSize * 1.4} zIndexRange={[20, 0]}>
+                  <div className="srcLabel">
+                    #{i + 1} · {s.strength_nAm} nA·m
+                  </div>
+                </Html>
+              )}
+            </group>
+          );
+        })}
+
+        <OrbitControls ref={controls as never} makeDefault enableDamping />
+        <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
+          <GizmoViewport axisColors={["#e06666", "#7bd88f", "#6f9bff"]} labelColor="#0a0d13" />
+        </GizmoHelper>
       </Canvas>
-      <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 8 }}>
+
+      {/* Top-left controls */}
+      <div className="viewerHud viewerHud--tl">
         <Button
           icon={placing ? "selection" : "new-object"}
           intent={placing ? "primary" : "none"}
-          onClick={() => setPlacing((p) => !p)}
+          small
+          onClick={() => {
+            setPlacing((p) => !p);
+            setMissed(false);
+          }}
         >
-          {placing ? "Click a mesh to drop a source" : "Place source"}
+          {placing ? "Placing — Esc to stop" : "Place source"}
         </Button>
-        {!loaded.length && <Tag minimal>loading meshes…</Tag>}
+        {placing && (
+          <Switch
+            checked={snap}
+            label={target ? `Snap to ${target}` : "Snap to anatomy"}
+            disabled={snapGeoms.length === 0}
+            onChange={() => setSnap((s) => !s)}
+            className="hudSwitch"
+          />
+        )}
+        <Button icon="reset" small minimal title="Recenter view" onClick={() => setRecenter((n) => n + 1)} />
+      </div>
+
+      {/* Bottom-left status: load state, errors, live coordinate readout. */}
+      <div className="viewerHud viewerHud--bl">
+        {error ? (
+          <Tag intent="danger" minimal icon="error">
+            mesh load failed
+          </Tag>
+        ) : !loaded.length ? (
+          <Tag minimal icon="cloud-download">
+            loading anatomy…
+          </Tag>
+        ) : (
+          <Tag minimal icon="cube">
+            {shown.length}/{loaded.length} tissues
+          </Tag>
+        )}
+        {placing && hover && (
+          <Tag minimal className="mono">
+            {hover.x.toFixed(1)}, {hover.y.toFixed(1)}, {hover.z.toFixed(1)} mm
+            {canSnap ? " · snapped" : ""}
+          </Tag>
+        )}
+        {missed && (
+          <Tag intent="warning" minimal>
+            click landed off-model
+          </Tag>
+        )}
       </div>
     </div>
   );

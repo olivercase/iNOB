@@ -1,7 +1,7 @@
 """Propagating compound action potential (CAP) source model.
 
-A research-grade source for vagus-nerve forward modelling. Each fibre is
-represented as a moving current dipole travelling along the nerve at its
+Each fibre is represented as a moving current dipole travelling along the
+nerve at its
 fibre-diameter-dependent conduction velocity (CV). The recorded signal is a
 fibre-population integral of these dipoles over time, weighted by the
 fibre-diameter histogram.

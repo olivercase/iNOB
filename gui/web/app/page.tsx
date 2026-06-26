@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Button, Navbar, Tag } from "@blueprintjs/core";
+import { Button, HTMLSelect, Navbar, Tag } from "@blueprintjs/core";
 import {
   getHealth, getConfig, putConfig, getMeshes, runSimulation, detectFallback,
   type MeshInfo, type PointSource, type DetectResult,
@@ -23,6 +23,8 @@ export default function Page() {
   const [meshes, setMeshes] = useState<MeshInfo[]>([]);
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [sources, setSources] = useState<PointSource[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(3);
   const [logs, setLogs] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
@@ -36,6 +38,9 @@ export default function Page() {
     getMeshes().then((m) => {
       setMeshes(m);
       setVisible(Object.fromEntries(m.map((x) => [x.name, true])));
+      // Default the imaging target to the first non-skin structure available.
+      const t = m.find((x) => x.name !== "skin") ?? m[0];
+      if (t) setTarget(t.name);
     });
   }, []);
 
@@ -82,7 +87,8 @@ export default function Page() {
       <Navbar>
         <Navbar.Group align="left">
           <Navbar.Heading>
-            <b>iNOB</b> <span className="bp6-text-muted">· vagus nerve forward model</span>
+            <b className="brand">iNOB</b>{" "}
+            <span className="bp6-text-muted">· imaging neuroscience outside the brain</span>
           </Navbar.Heading>
         </Navbar.Group>
         <Navbar.Group align="right">
@@ -106,24 +112,43 @@ export default function Page() {
               meshes={meshes}
               visible={visible}
               sources={sources}
-              onAddSource={(p) => setSources((s) => [...s, { ...p, strength_nAm: 70 }])}
+              selected={selected}
+              target={target}
+              onSelect={setSelected}
+              onAddSource={(p) =>
+                setSources((s) => {
+                  setSelected(s.length);
+                  return [...s, { ...p, strength_nAm: 70 }];
+                })
+              }
             />
           </div>
           <div className="panel">
-            <h3 className="section-title">Mesh visibility</h3>
-            <div className="chips">
+            <h3 className="section-title">Anatomy</h3>
+            <div className="field-row">
+              <label title="Structure that sources snap to and is highlighted in the viewer">
+                Imaging target
+              </label>
+              <HTMLSelect
+                value={target ?? ""}
+                disabled={meshes.length === 0}
+                onChange={(e) => setTarget(e.currentTarget.value || null)}
+                options={meshes.map((m) => m.name)}
+              />
+            </div>
+            <div className="chips" style={{ marginTop: 6 }}>
               {meshes.map((m) => (
                 <Tag key={m.name} interactive minimal={!visible[m.name]}
                      intent={visible[m.name] ? "primary" : "none"}
                      icon={visible[m.name] ? "eye-open" : "eye-off"}
                      onClick={() => setVisible((v) => ({ ...v, [m.name]: !v[m.name] }))}>
-                  {m.name}
+                  {m.name === target ? `★ ${m.name}` : m.name}
                 </Tag>
               ))}
               {meshes.length === 0 && <span className="bp6-text-muted">no meshes from backend</span>}
             </div>
           </div>
-          <SourceList sources={sources} onChange={setSources} />
+          <SourceList sources={sources} selected={selected} onSelect={setSelected} onChange={setSources} />
           <ClusterPanel sources={sources} threshold={threshold} modality="meg" stages={ALL_STAGES} />
         </div>
 

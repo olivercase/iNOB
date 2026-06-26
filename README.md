@@ -1,260 +1,140 @@
-# Forward Model — Vagus Nerve
+# iNOB — imaging neuroscience outside the brain
 
-A **dual-modality** torso-scale forward model for non-invasive recording of
-the cervical vagus nerve. From a single subject anatomy and a single source
-model we predict, in one pass:
+A whole-body **forward-modelling and sensor-planning** package for non-invasive
+recording of peripheral and autonomic nerves. You pick a target structure and a
+source configuration, choose which anatomical meshes to include and their
+conductivities, generate an OPM and/or surface-electrode array, and run one
+pipeline — from atlas meshes → multi-tissue tetrahedral FEM → calibrated **MEG
+and EEG leadfields** (DUNEuro) — from a single command or a browser GUI.
 
-* **MEG** — magnetic field at a triaxial OPM array (radial + 2 tangents per
-  position, 8 190 channels in the default array).
-* **EEG** — surface potential at a high-density (PEDOT:PSS-style) electrode
-  patch over the cervical vagus (8 × 16 = 128 contacts at 5 mm pitch).
-
-Both leadfields come from the *same* tetrahedral FEM, the *same*
-conductivities, and the *same* dipole sources, so MEG-vs-EEG SNR /
-localisability / array-design comparisons are head-to-head.
+It answers one planning question: **given a sensor noise floor, how many
+averaged trials are needed to detect a given source?** Both leadfields come
+from the same FEM and conductivities and are calibrated to absolute units (fT,
+µV) against analytic solutions.
 
 ```
-data/{bone,torso,vagus}/*.stl
-        │
-        │  build_geom         watertighten + shrinkwrap → outputs/geometry/vagus_geometry.mat
-        ▼
-  outputs/geometry/vagus_geometry.mat
-        │
-        │  build_fem          iso2mesh + CGAL multi-region → outputs/fem/fem_vagus.mat
-        ▼                                ▲                ▲
-  outputs/fem/fem_vagus.mat              │                │
-        │              sensors / generate_sensors    electrodes / generate_electrodes
-        │              (OPM triaxial array)          (HD-EMG patch on skin)
-        │                                ▼                ▼
-        ├────────► forward (MEG)  ─────────────────────────►  outputs/forward/duneuro_leadfield_vagus.npz
-        ├────────► forward (EEG)  ─────────────────────────►  outputs/forward/duneuro_eeg_leadfield_vagus.npz
-        ▼
-  Analyses (analysis/{snr, sensitivity, analytic_sphere}, sources/cap)
-  Topoplots (viz/topoplot)  →  outputs/dual_topoplot.png
+data/{bone,torso,vagus,muscle,vessel}/*.stl
+   │  geom      watertighten + shrinkwrap
+   ▼
+ outputs/geometry        │  fem       iso2mesh + CGAL multi-tissue tetra mesh
+   ▼                     ▼
+ outputs/fem ── sensors (OPM array) / electrodes (HD-EMG patch)
+   │  forward   DUNEuro  →  MEG + EEG leadfields (fT, µV per nA·m)
+   ▼
+ outputs/forward  ── viz (topoplots) / snr / detect (trials-to-detect)
 ```
 
-**Headline figure.** `inob-topoplot --target dual` renders a four-panel
-Nature Reviews-styled comparison (anatomy, MEG topoplot, EEG topoplot, and
-amplitude distributions) for a single source along the cervical vagus, in
-units of fT and µV per 1 nA·m source.
-
-## Quickstart
+## Install
 
 ```bash
-git clone <this repo>
-cd Forward_Model_Vagus_Nerve
-
-python3 -m pip install -e .[dev]      # editable install, with dev deps
-make test                              # 80+ tests, no DUNEuro required
-
-# Build everything except the forward solve (which needs DUNEuro):
-make pipeline                          # geom → fem → sensors → viz
-
-# Run the local DUNEuro forward solve (needs duneuropy + a built FEM):
-python3 -m inob.cli.run_forward \
-    --set forward.duneuro_path=/path/to/duneuro-py/src
+git clone https://github.com/olivercase/iNOB.git
+cd iNOB
+python3 -m pip install -e .[dev]     # editable install with dev deps
+make test                            # 140 tests, no DUNEuro required
 ```
 
-The `--config` flag (default `configs/default.yaml`) is the single source
-of truth for paths, mesh sizes, sensor params, conductivities, and solver
-settings. Override individual fields with `--set key.path=value`.
+The DUNEuro forward solve needs the `duneuropy` extension. Build it locally or
+on a cluster with `cluster/build_duneuro.sh` (see **Cluster** below); every
+other stage runs without it.
 
-## Pipeline orchestrator
+## Run the full pipeline
+
+`configs/default.yaml` is the single source of truth for paths, mesh sizes,
+sensor params, conductivities, and solver settings. Override any field with
+`--set key.path=value`.
 
 ```bash
-inob-pipeline                      # run all stages, skip those whose outputs exist
-inob-pipeline --stages geom,fem    # just two
-inob-pipeline --force              # ignore existing outputs
-inob-pipeline --skip-viz           # everything but the PNGs
+# Build anatomy → FEM → sensor array → forward solve → figures, in order.
+# Stages whose outputs already exist are skipped (use --force to rebuild).
+inob-pipeline --stages all                       # needs duneuropy for 'forward'
+inob-pipeline --stages geom,fem,sensors          # everything except the solve
 ```
 
-Each stage validates its output against a schema before declaring success;
-a failed stage drops a `.<name>.FAILED` marker so reruns retry it.
-
-## Per-stage CLIs
-
-| Command | What it does |
-|---|---|
-| `inob-build-geom`        | STL → watertight geometry HDF5 |
-| `inob-build-fem`         | Geometry → CGAL multi-tissue tet mesh |
-| `inob-sensors`           | Skin → triaxial OPM array |
-| `inob-electrodes`        | Skin + FEM → HD electrode patch over the vagus |
-| `inob-forward`           | FEM + OPMs → MEG leadfield (DUNEuro) |
-| `inob-eeg`               | FEM + electrodes → EEG leadfield (DUNEuro) |
-| `inob-snr`               | Predicted per-source SNR for either modality |
-| `inob-topoplot --target dual\|meg\|eeg\|montage` | Nature-styled topoplots |
-| `inob-visualise --target geom\|fem\|all`        | Geometry + FEM PNGs |
-
-All of them accept `--config / --set / --project-root / --log-level / --log-file`.
-
-## Cluster execution (UCL Myriad / Kathleen)
-
-See [cluster/README.md](cluster/README.md). Tldr:
+Individual stages (same effect, finer control):
 
 ```bash
-# Locally:
-make pipeline                                            # build inputs
-CLUSTER_PROFILE=myriad bash cluster/stage.sh             # rsync to cluster
-# On the cluster:
-CLUSTER_PROFILE=myriad bash cluster/build_duneuro.sh     # one-time
-CLUSTER_PROFILE=myriad bash cluster/submit.sh array      # forward solve (32 chunks)
-CLUSTER_PROFILE=myriad bash cluster/submit.sh reduce     # waits on the array job
-# Locally:
-scp myriad:~/Scratch/inob/duneuro_leadfield_vagus.npz outputs/forward/
+inob-build-geom        # STLs → watertight geometry
+inob-build-fem         # geometry → multi-tissue tetrahedral FEM
+inob-sensors           # place the OPM triaxial array
+inob-electrodes        # place the HD-EMG surface patch
+inob-forward           # MEG leadfield via DUNEuro
+inob-eeg               # EEG leadfield via DUNEuro
+inob-topoplot --target dual    # MEG + EEG field topoplots
+inob-detect            # trials-to-detect for the configured sources
 ```
 
-Switching to Kathleen is `CLUSTER_PROFILE=kathleen` — same scripts.
+## Example: field from a neck muscle (around C7)
 
-## Configuration
+Model the magnetic field of a single current dipole placed at the centre of a
+neck muscle, pointing along the muscle's long axis.
 
-`configs/default.yaml` controls the whole pipeline. The fields that change
-most often:
-
-| Field | Meaning |
-|---|---|
-| `geometry.shrinkwrap.<tissue>.{pitch,n_samples,close_iter,decimate_target,smooth_iter}` | Per-tissue voxel-shrinkwrap params |
-| `fem.{pitch_mm,radbound,maxvol}` | CGAL meshing params |
-| `fem.tissues` | Which tissues to include (subset of vagus_left, vagus_right, bone, skin) |
-| `sensors.{resolution_mm,depth_mm,z_crop_low_factor}` | OPM grid resolution + stand-off + chest crop |
-| `forward.conductivities_sm` | Per-tissue σ (S/m); single source of truth, used locally + on cluster |
-| `forward.source_spacing_mm` | Dipole spacing along the vagus nerve |
-| `forward.duneuro_path` | Optional shim path for source-built duneuropy |
-| `cluster.n_chunks` | How many array tasks the forward solve splits into |
-
-## Cross-modality coupling: predict MEG from EEG, given a known source
-
-Both leadfields share the same FEM and the same source space. **For a
-known source position** (anatomical landmark on the cervical-vagus
-polyline), the EEG response is `V = L_E q` and the MEG response is
-`B = L_M q` with the same dipole moment `q`. Given a measured EEG topo
-and 32 ≫ 3 sensor channels, the moment `q` is over-determined and you can
-plug it back into `L_M` to predict what the MEG topo *should* look like.
-
-This is **not** the inverse problem — we do not localise `r₀` from the
-EEG observation alone. The figure illustrates the *forward consistency*
-of the dual-modality model conditioned on an MR-/anatomy-derived source
-position, with realistic HD-EMG noise added to the EEG observation so the
-inversion is meaningfully tested rather than being exact-by-construction.
-
-Run `inob-cross` to render the four-panel diagnostic: per-source
-amplitude scatter (MEG vs EEG, coloured by Z position), the observed EEG
-topo, the predicted MEG topo derived from the (noisy) EEG observation, and
-the actual FEM MEG topo with the prediction RMS error overlaid.
-
-## Multi-tissue divergence from Sarvas: why FEM ≠ single-sphere
-
-The `inob-sarvas` benchmark shows FEM peak fields larger than the
-homogeneous-sphere Sarvas (Sarvas 1987) prediction by a factor of ~5–10×
-in the cervical-axis literature band (40 mm source-axis, 58.5 mm
-sensor-axis; Bu et al. 2024). This divergence reflects the
-secondary-current contribution to the magnetic field, captured by
-Geselowitz reciprocity but absent from any single-sphere model:
-
-* In a homogeneous conductor, the magnetic field from a current dipole is
-  independent of conductivity (Sarvas 1987; Geselowitz 1970).
-* In a *multi-tissue* conductor, conductivity contrasts (skin vs bone vs
-  vagus) reroute the volume currents. Those secondary currents themselves
-  generate additional magnetic field via Biot–Savart.
-* For cervical/spinal MEG specifically, O'Neill et al. 2025 (Sci Rep)
-  show that **bone significantly attenuates lateral (left-right and
-  anterior-posterior) currents** while longitudinal (superior-inferior)
-  currents are nearly conductor-invariant. The implication: our FEM
-  amplification is concentrated in particular geometries (close to the
-  spine, with the right tangent direction) and the headline ratio
-  depends sensitively on which (source, coil) pairs are sampled.
-
-**Numerical headline** (current run, Q = 1 nA·m, longitudinal moment
-along the vagus, literature-band coils only):
-
-| quantity                      | value         |
-|-------------------------------|---------------|
-| Sarvas peak \|B\|             | 41 fT/nAm     |
-| Sarvas peak at Q = 70 nA·m    | 2.9 pT  ✓ matches Bu 2024 1–4 pT range |
-| FEM peak \|B\|                | 283 fT/nAm    |
-| FEM peak at Q = 70 nA·m       | 19.8 pT       |
-| FEM/Sarvas ratio (peak)       | ~6.8×         |
-
-The 19.8 pT FEM peak is a single best-aligned coil — averaged over the
-literature-band geometry (40/58.5 mm) the median is much smaller, and
-**the Sarvas band peak (2.9 pT) sits squarely inside Bu et al.'s
-"1–4 pT consistently across subjects" measurement range.**
-
-**Practical consequence for the dual-modality paper.** The amplification
-is real but tissue-conductivity-dependent — exactly the conductivity
-sensitivity that `inob`'s `analysis.sensitivity` sweep is designed to
-quantify. Reporting Sarvas (analytic baseline) and FEM (full
-secondary-current solution) side-by-side with a conductivity-uncertainty
-band is the rigorous thing to do.
-
-## Source-strength convention — one unified rule
-
-**Every leadfield, every figure, every CLI output is reported per 1 nA·m
-source moment, in fT (MEG) or µV (EEG).** This is the leadfield calibration
-that every other plot in this repo uses.
-
-* MEG axes / colour bars: `fT  (1 nA·m source)`.
-* EEG axes / colour bars: `µV  (1 nA·m source)`.
-* Sarvas vs FEM benchmark (`inob-sarvas`): defaults to `--Q-nAm 1`,
-  same convention.
-
-The value 70 nA·m only appears as a *physiological scaling* (Hämäläinen
-1993 summation over the A + C fibre population at full activation) when
-you want to predict the actual measured pT-scale real-CAP signal. To do
-so, run `inob-sarvas --Q-nAm 70` — the y-axis numbers can then be read
-as pT directly (1 fT × 70 = 70 fT = 0.07 pT … per the linear scaling).
-The output JSON reports both conventions side-by-side
-(`*_fT_per_nAm` and `*_pT_at_Q70`).
-
-**No conflict with the previous "Q = 70" framing.** The earlier Sarvas
-default was Q = 70 nA·m to match the literature 1–4 pT range directly. We
-have switched to the unified Q = 1 nA·m default so every figure speaks the
-same units. The literature comparison is now an opt-in flag.
-
-## Layout
-
-```
-src/inob/        — package: config, io, mesh, geometry, fem, sensors, sources, forward, viz, cli
-cluster/             — profile-driven Myriad / Kathleen submission scripts
-configs/             — YAML configs (default.yaml + tiny_test.yaml for tests)
-data/{bone,torso,vagus}/  — raw STL inputs (74 bones + 1 skin + 2 vagus trunks)
-outputs/             — generated artefacts (gitignored): geometry/, fem/, sensors/, forward/, logs/
-tests/               — pytest suite (~86 tests; DUNEuro smoke auto-skips)
-scripts/             — small utilities (e.g. inob_obj2stl.py)
-```
-
-## Development
+**Quick look — analytic, no DUNEuro (seconds):** paints the radial field on the
+torso skin using the Sarvas single-sphere solution.
 
 ```bash
-make install-dev    # editable install + pytest + ruff
-make lint           # ruff
-make test           # pytest
-make clean          # remove build/, __pycache__, etc.
-make clean-outputs  # nuke outputs/
+inob-pipeline --stages geom,sensors            # build skin + sensor array once
+python scripts/muscle_field_sarvas.py          # default: scalene group at C7
+python scripts/muscle_field_sarvas.py sternocleido   # or any muscle substring
+# → outputs/muscle_skin_topoplot.png
 ```
 
-CI (.github/workflows/ci.yml) runs ruff + pytest on Python 3.11 / 3.12.
-DUNEuro tests auto-skip when `duneuropy` is unavailable.
+**Full FEM — DUNEuro (head-to-head MEG/EEG, absolute units):** place explicit
+dipoles with `forward.point_sources` (mm, in the atlas frame). Centroids of the
+left/right scalenus anterior + medius are shown here:
 
-## Troubleshooting
+```bash
+inob-pipeline --stages all --set \
+  'forward.point_sources=[[33.8,-88.4,1379.8],[34.8,-78.4,1391.0],[-34.7,-88.1,1381.0],[-36.1,-78.4,1392.6]]'
+inob-topoplot --target meg --source-idx 0      # field map for source 0
+```
 
-* **`duneuropy could not be imported`** — install via `cluster/build_duneuro.sh`,
-  or set `forward.duneuro_path` in your config to the duneuro-py source dir.
-* **Geometry validation fails (`not watertight`)** — run
-  `inob-build-geom --shrinkwrap-only` to force the voxel-shrinkwrap
-  pipeline for every tissue.
-* **`STLLoadError: implausible for mm`** — input was probably authored in
-  metres or centimetres; convert before feeding into the pipeline (or pass
-  `check_units_mm=False` if you're sure).
-* **`MeshQualityError: min mesh quality`** — increase `fem.pitch_mm` or
-  `fem.maxvol`, or relax `fem.validate.min_mesh_quality` in the config.
+Muscle is a FEM tissue by default (`fem.tissues` includes `muscle`,
+σ = 0.35 S/m). The solve returns all three moment components per source, so the
+"along the muscle axis" projection is applied at the visualisation step.
 
-## Licensing
+## Browser GUI
 
-* **Code** (Python, build scripts, configs) — MIT, see [`LICENSE`](LICENSE).
-* **Anatomical mesh data** — every mesh under `data/` and `internal_meshes/`,
-  and all FEM / leadfield / figure artifacts derived from them, comes from the
-  **BodyParts3D** atlas (© The Database Center for Life Science, DBCLS) and is
-  licensed under **CC BY-SA 2.1 Japan**, not MIT. See
-  [`LICENSE-DATA`](LICENSE-DATA). If you redistribute the meshes or our
-  derivatives, you must attribute DBCLS and share alike. Cite Mitsuhashi *et
-  al.*, *Nucleic Acids Research* 2009 (doi:10.1093/nar/gkn613).
+```bash
+# backend (FastAPI) — serves config, meshes, runs, cluster submission
+uvicorn gui.backend.app:app --port 8000
+# frontend (Next.js) — 3-D viewer, click-to-place sources, live run console
+cd gui/web && npm install && npm run dev        # http://localhost:3000
+```
+
+Pick an imaging target, toggle tissues, click sources onto the anatomy (they
+snap to the target), edit conductivities/arrays, run, and read trials-to-detect.
+
+## Cluster (UCL Myriad / Kathleen, SGE)
+
+The DUNEuro solve fans the 8190-channel leadfield over an array job.
+
+```bash
+# one-time: build DUNE + duneuro on a compute node
+ssh myriad
+cd ~/Scratch/inob/code && CLUSTER_PROFILE=myriad bash cluster/build_duneuro.sh
+
+# from your laptop: stage inputs + submit the forward solve
+CLUSTER_PROFILE=myriad bash cluster/stage.sh
+ssh myriad "cd ~/Scratch/inob/code && CLUSTER_PROFILE=myriad bash cluster/submit.sh array"
+ssh myriad "cd ~/Scratch/inob/code && CLUSTER_PROFILE=myriad bash cluster/submit.sh reduce"
+```
+
+Profiles live in `cluster/profiles/*.env`. The GUI's "Run on cluster" button
+drives the same flow.
+
+## Repository layout
+
+```
+src/inob/        the package: geometry, fem, sensors, forward, analysis, viz, cli
+configs/         default.yaml — the single source of truth
+data/            anatomical meshes (BodyParts3D-derived STLs)
+gui/             web/ (Next.js frontend) + backend/ (FastAPI)
+cluster/         SGE job scripts + DUNEuro build for UCL Myriad/Kathleen
+scripts/         standalone tools (muscle field, FEM/atlas viewers)
+tests/           pytest suite (no DUNEuro required)
+```
+
+## License
+
+Code under the MIT License (`LICENSE`). Anatomical data under `LICENSE-DATA`.
+Cite via `CITATION.cff`.
