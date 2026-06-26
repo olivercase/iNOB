@@ -62,13 +62,12 @@ done
 # Pin duneuro + apply Eigen-5 / DUNE-2.10 source patches (see scripts/patches/).
 DUNEURO_COMMIT="8f344b4da9c128ddf3e47af5ec136d05a3aeb162"
 DUNEURO_PATCH="${HERE}/../scripts/patches/duneuro-eigen5-dune210.patch"
-git -C "${SRC}/duneuro" checkout -q "${DUNEURO_COMMIT}"
-if git -C "${SRC}/duneuro" apply --reverse --check "${DUNEURO_PATCH}" 2>/dev/null; then
-    inob__log "duneuro patch already applied — skipping"
-else
-    inob__log "applying duneuro patch"
-    git -C "${SRC}/duneuro" apply "${DUNEURO_PATCH}"
-fi
+# Reset to the pinned commit and discard any prior patch/edits so re-runs are
+# idempotent (a stale half-patched tree makes `git apply` fail both ways).
+git -C "${SRC}/duneuro" reset --hard "${DUNEURO_COMMIT}" >/dev/null
+git -C "${SRC}/duneuro" clean -fdq
+inob__log "applying duneuro patch"
+git -C "${SRC}/duneuro" apply "${DUNEURO_PATCH}"
 
 cat > "${SRC}/release.opts" <<'OPTS'
 CMAKE_FLAGS="
