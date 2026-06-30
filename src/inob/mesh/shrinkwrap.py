@@ -33,7 +33,7 @@ def occupancy_from_mesh(
     Returns ``(occ, transform)`` where ``transform`` is the ``(4, 4)``
     voxel-index → world-mm matrix.
     """
-    if mesh.is_watertight:
+    if mesh.is_watertight and mesh.euler_number == 2:
         try:
             vox = mesh.voxelized(pitch=pitch).fill()
             return (
