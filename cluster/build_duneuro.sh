@@ -8,7 +8,7 @@ set -euo pipefail
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # Under SGE the body may run from a spool copy; fall back to the staged dir.
-[[ -f "${HERE}/lib.sh" ]] || HERE="${INOB_REMOTE_BASE:-${HOME}/Scratch/inob}/code/cluster"
+[[ -f "${HERE}/lib.sh" ]] || HERE="${INOB_REMOTE_BASE:-${HOME}/Scratch/duneuro}/code/cluster"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
 inob__init
@@ -61,7 +61,9 @@ done
 
 # Pin duneuro + apply Eigen-5 / DUNE-2.10 source patches (see scripts/patches/).
 DUNEURO_COMMIT="8f344b4da9c128ddf3e47af5ec136d05a3aeb162"
-DUNEURO_PATCH="${HERE}/../scripts/patches/duneuro-eigen5-dune210.patch"
+# REMOTE_BASE is set by inob__init above; HERE not good here because SGE
+# copies the script to a spool dir and HERE resolves to that spool path.
+DUNEURO_PATCH="${REMOTE_BASE}/code/scripts/patches/duneuro-eigen5-dune210.patch"
 # Reset to the pinned commit and discard any prior patch/edits so re-runs are
 # idempotent (a stale half-patched tree makes `git apply` fail both ways).
 git -C "${SRC}/duneuro" reset --hard "${DUNEURO_COMMIT}" >/dev/null
