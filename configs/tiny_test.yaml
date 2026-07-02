@@ -10,6 +10,7 @@ data:
   vagus_right_glob: "data/vagus/*right*.stl"
   muscle_dir: data/muscle
   vessel_dir: data/vessel
+  spinal_cord_dir: data/spinal_cord
 
 outputs:
   base: outputs

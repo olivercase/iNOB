@@ -26,7 +26,7 @@ def test_load_default() -> None:
     assert cfg.forward.source_tissue == "vagus_left"
     assert cfg.forward.solver.scheme == "sipg"
     assert cfg.fem.tissues == (
-        "vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin",
+        "vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "muscle", "bone", "skin",
     )
 
 
