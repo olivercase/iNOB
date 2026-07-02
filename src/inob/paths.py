@@ -2,7 +2,7 @@
 
 Lookup order for the project root, in priority:
 1. Explicit argument (CLI ``--project-root`` or function param)
-2. ``VAGUS_FM_ROOT`` environment variable
+2. ``INOB_ROOT`` environment variable
 3. Walk up from cwd looking for a marker (``configs/default.yaml`` or ``pyproject.toml``)
 4. Fallback to cwd
 """
@@ -27,7 +27,7 @@ def resolve_project_root(explicit: Path | str | None = None) -> Path:
     """Resolve the project root, honoring CLI/env overrides."""
     if explicit:
         return Path(explicit).expanduser().resolve()
-    env = os.environ.get("VAGUS_FM_ROOT")
+    env = os.environ.get("INOB_ROOT")
     if env:
         return Path(env).expanduser().resolve()
     return find_project_root()
