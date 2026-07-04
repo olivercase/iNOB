@@ -11,9 +11,9 @@ cluster; the only thing that changes is `CLUSTER_PROFILE`.
    anything in this repo:
    ```bash
    # ~/.inob.env
-   VAGUS_FM_LOCAL_DIR=$HOME/code/Forward_Model_Vagus_Nerve
-   VAGUS_FM_REMOTE_HOST=myriad
-   # VAGUS_FM_REMOTE_BASE=$HOME/Scratch/inob   # default
+   INOB_LOCAL_DIR=$HOME/code/Forward_Model_Vagus_Nerve
+   INOB_REMOTE_HOST=myriad
+   # INOB_REMOTE_BASE=$HOME/Scratch/inob   # default
    ```
    Defaults work for any cluster account: `${HOME}/Scratch/inob`.
 

@@ -32,6 +32,7 @@ class DataPaths:
     vagus_right_glob: str
     muscle_dir: Path
     vessel_dir: Path
+    spinal_cord_dir: Path
 
 
 @dataclass(frozen=True)
@@ -334,6 +335,7 @@ def _build_data(d: dict[str, Any], root: Path) -> DataPaths:
         vagus_right_glob=str(resolve_path(d["vagus_right_glob"], root)),
         muscle_dir=resolve_path(d["muscle_dir"], root),
         vessel_dir=resolve_path(d["vessel_dir"], root),
+        spinal_cord_dir=resolve_path(d["spinal_cord_dir"], root),
     )
 
 

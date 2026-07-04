@@ -4,9 +4,9 @@
 #   CLUSTER_PROFILE         e.g. myriad / kathleen — selects profiles/<name>.env
 #
 # User-overridable:
-#   VAGUS_FM_LOCAL_DIR      local repo root (defaults to current working tree)
-#   VAGUS_FM_REMOTE_HOST    SSH alias / hostname (defaults to REMOTE_HOST in profile)
-#   VAGUS_FM_REMOTE_BASE    remote project dir (defaults to REMOTE_BASE in profile)
+#   INOB_LOCAL_DIR      local repo root (defaults to current working tree)
+#   INOB_REMOTE_HOST    SSH alias / hostname (defaults to REMOTE_HOST in profile)
+#   INOB_REMOTE_BASE    remote project dir (defaults to REMOTE_BASE in profile)
 #
 # The legacy hardcoded ``rmgpohk`` / ``Desktop/fif`` paths are gone — set the
 # above env vars in your shell profile or ~/.inob.env. The profile defaults
@@ -42,9 +42,9 @@ inob__load_profile() {
     source "${profile_file}"
 
     # Allow user env overrides.
-    REMOTE_HOST="${VAGUS_FM_REMOTE_HOST:-${REMOTE_HOST}}"
-    REMOTE_BASE="${VAGUS_FM_REMOTE_BASE:-${REMOTE_BASE}}"
-    LOCAL_DIR="${VAGUS_FM_LOCAL_DIR:-$(cd -- "$(inob__here)/.." && pwd)}"
+    REMOTE_HOST="${INOB_REMOTE_HOST:-${REMOTE_HOST}}"
+    REMOTE_BASE="${INOB_REMOTE_BASE:-${REMOTE_BASE}}"
+    LOCAL_DIR="${INOB_LOCAL_DIR:-$(cd -- "$(inob__here)/.." && pwd)}"
     export PROFILE_NAME REMOTE_HOST REMOTE_BASE LOCAL_DIR
     export N_CHUNKS TASKS CHUNKS_PER_TASK CORES_PER_TASK MEM_PER_TASK
     export WALLTIME_ARRAY WALLTIME_BUILD WALLTIME_REDUCE BLAS_THREADS

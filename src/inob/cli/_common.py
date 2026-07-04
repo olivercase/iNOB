@@ -33,7 +33,7 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
         help="Override the project root used to resolve relative paths.",
     )
     p.add_argument(
-        "--log-level", default=os.environ.get("VAGUS_FM_LOG", "INFO"),
+        "--log-level", default=os.environ.get("INOB_LOG", "INFO"),
         help="Logging level (DEBUG/INFO/WARNING/ERROR; default INFO).",
     )
     p.add_argument(

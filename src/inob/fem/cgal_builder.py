@@ -61,7 +61,7 @@ def _build_grid(
 
 
 def _load_tissue_surfaces(cfg: Config):
-    """Return ``(m_skin, m_vagus_left, m_vagus_right, bone_paths, muscle_paths, vessel_paths)``."""
+    """Return ``(m_skin, m_vagus_left, m_vagus_right, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths)``."""
     m_skin = load_stl(cfg.data.torso_skin)
     vl_paths = load_stl_glob(cfg.data.vagus_left_glob)
     vr_paths = load_stl_glob(cfg.data.vagus_right_glob)
@@ -81,9 +81,11 @@ def _load_tissue_surfaces(cfg: Config):
 
     muscle_paths = sorted(Path(cfg.data.muscle_dir).glob("*.stl"))
     vessel_paths = sorted(Path(cfg.data.vessel_dir).glob("*.stl"))
+    spinal_cord_paths = sorted(Path(cfg.data.spinal_cord_dir).glob("*.stl"))
     logger.info("muscle: %d STLs from %s", len(muscle_paths), cfg.data.muscle_dir)
     logger.info("blood_vessel: %d STLs from %s", len(vessel_paths), cfg.data.vessel_dir)
-    return m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths
+    logger.info("spinal_cord: %d STLs from %s", len(spinal_cord_paths), cfg.data.spinal_cord_dir)
+    return m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths
 
 
 def _voxelise_skin(m_skin, X, *, pitch, mn, closing_mm: float) -> np.ndarray:
@@ -131,6 +133,7 @@ def _voxelise_vagus(mesh, X, *, pitch, mn, dilate_voxels: int, skin_occ) -> np.n
 def _assemble_label_volume(
     cfg: Config, *,
     skin_occ, bone_occ, vl_occ, vr_occ, muscle_occ=None, vessel_occ=None,
+    spinal_cord_occ=None,
 ) -> tuple[np.ndarray, list[str]]:
     """Compose a labelled image; tissue order matches ``cfg.fem.tissues``.
 
@@ -143,12 +146,15 @@ def _assemble_label_volume(
         "skin": skin_occ, "bone": bone_occ,
         "muscle": muscle_occ if muscle_occ is not None else zero,
         "blood_vessel": vessel_occ if vessel_occ is not None else zero,
+        "spinal_cord": spinal_cord_occ if spinal_cord_occ is not None else zero,
         "vagus_left": vl_occ, "vagus_right": vr_occ,
     }
     # Paint outermost → innermost so the target (vagus) and the conductive
     # vessel survive over the surrounding muscle/bone at voxel interfaces.
-    paint_order = [t for t in ("skin", "muscle", "bone", "blood_vessel",
-                               "vagus_right", "vagus_left")
+    # Spinal cord sits inside the vertebral canal (inside bone), so it is
+    # painted after bone.
+    paint_order = [t for t in ("skin", "muscle", "bone", "spinal_cord",
+                               "blood_vessel", "vagus_right", "vagus_left")
                    if t in cfg.fem.tissues]
     # The CGAL region IDs we want match ``cfg.fem.tissues`` order (1..K).
     label_to_id = {lab: i + 1 for i, lab in enumerate(cfg.fem.tissues)}
@@ -188,17 +194,18 @@ def build_fem(cfg: Config) -> Path:
     pitch = fcfg.pitch_mm
     pad = max(fcfg.pad_mm, 4 * pitch)
 
-    m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths = _load_tissue_surfaces(cfg)
-    logger.info("  skin    : %d V / %d F", len(m_skin.vertices), len(m_skin.faces))
-    logger.info("  vagus_L : %d V / %d F", len(m_vl.vertices), len(m_vl.faces))
-    logger.info("  vagus_R : %d V / %d F", len(m_vr.vertices), len(m_vr.faces))
-    logger.info("  bones   : %d STLs", len(bone_paths))
-    logger.info("  muscles : %d STLs", len(muscle_paths))
-    logger.info("  vessels : %d STLs", len(vessel_paths))
+    m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths = _load_tissue_surfaces(cfg)
+    logger.info("  skin       : %d V / %d F", len(m_skin.vertices), len(m_skin.faces))
+    logger.info("  vagus_L    : %d V / %d F", len(m_vl.vertices), len(m_vl.faces))
+    logger.info("  vagus_R    : %d V / %d F", len(m_vr.vertices), len(m_vr.faces))
+    logger.info("  bones      : %d STLs", len(bone_paths))
+    logger.info("  muscles    : %d STLs", len(muscle_paths))
+    logger.info("  vessels    : %d STLs", len(vessel_paths))
+    logger.info("  spinal cord: %d STLs", len(spinal_cord_paths))
 
     # Assemble bbox over all tissues
     all_v = [m_skin.vertices, m_vl.vertices, m_vr.vertices]
-    for bp in (*bone_paths, *muscle_paths, *vessel_paths):
+    for bp in (*bone_paths, *muscle_paths, *vessel_paths, *spinal_cord_paths):
         all_v.append(np.asarray(load_stl(bp, check_units_mm=False).vertices))
     all_v = np.vstack(all_v)
     mn, _mx, shape, X, Y, Z = _build_grid(all_v, pitch=pitch, pad=pad)
@@ -215,6 +222,9 @@ def build_fem(cfg: Config) -> Path:
                                        skin_occ=skin_occ, label="blood_vessel",
                                        dilate_voxels=1) \
         if "blood_vessel" in fcfg.tissues and vessel_paths else np.zeros_like(skin_occ)
+    spinal_cord_occ = _voxelise_group_solid(spinal_cord_paths, X, Y, Z, pitch=pitch, mn=mn,
+                                            skin_occ=skin_occ, label="spinal_cord") \
+        if "spinal_cord" in fcfg.tissues and spinal_cord_paths else np.zeros_like(skin_occ)
     vl_occ = _voxelise_vagus(m_vl, X, pitch=pitch, mn=mn,
                               dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ) \
         if "vagus_left" in fcfg.tissues else np.zeros_like(skin_occ)
@@ -224,7 +234,7 @@ def build_fem(cfg: Config) -> Path:
 
     label_vol, declared = _assemble_label_volume(
         cfg, skin_occ=skin_occ, bone_occ=bone_occ, vl_occ=vl_occ, vr_occ=vr_occ,
-        muscle_occ=muscle_occ, vessel_occ=vessel_occ,
+        muscle_occ=muscle_occ, vessel_occ=vessel_occ, spinal_cord_occ=spinal_cord_occ,
     )
 
     logger.info("Running iso2mesh.cgalv2m (radbound=%g, maxvol=%g)",

@@ -10,6 +10,7 @@ data:
   vagus_right_glob: "data/vagus/*right*.stl"
   muscle_dir: data/muscle      # neck muscles around the carotid sheath
   vessel_dir: data/vessel      # carotid-sheath vessels (carotid, jugular)
+  spinal_cord_dir: data/spinal_cord
 
 outputs:
   base: outputs
@@ -49,7 +50,7 @@ fem:
   maxvol: 20.0
   vagus_dilate_voxels: 1
   bone_closing_mm: 30.0
-  tissues: ["vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin"]
+  tissues: ["vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "muscle", "bone", "skin"]
   validate:
     min_mesh_quality: 0.05
     require_contiguous_tissue_ids: true
@@ -67,6 +68,7 @@ forward:
     vagus_left:   0.30
     vagus_right:  0.30
     blood_vessel: 0.70         # blood ≈ 0.7 S/m (carotid/jugular lumen)
+    spinal_cord:  0.23         # grey/white matter mix (Haueisen et al. 2002)
     muscle:       0.35         # skeletal muscle (isotropic mean)
     bone:         0.0042
     skin:         0.43
