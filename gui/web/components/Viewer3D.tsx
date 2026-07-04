@@ -12,12 +12,13 @@ import type { MeshInfo, PointSource } from "@/lib/api";
 // target, so colours are per tissue category and the *selected target* (which
 // the user picks) is what gets emphasised, whatever it is.
 const TISSUE: Record<string, { color: string; opacity: number }> = {
-  skin: { color: "#d9b08c", opacity: 0.1 },
-  bone: { color: "#cdd3da", opacity: 0.32 },
-  muscle: { color: "#b5566a", opacity: 0.42 },
-  blood_vessel: { color: "#4a6fb0", opacity: 0.5 },
-  vagus_left: { color: "#ffcf4d", opacity: 0.85 },
-  vagus_right: { color: "#ffb24d", opacity: 0.85 },
+  skin: { color: "#e8c4a0", opacity: 0.09 },
+  bone: { color: "#e4e9f0", opacity: 0.28 },
+  muscle: { color: "#c1566a", opacity: 0.4 },
+  blood_vessel: { color: "#d0424e", opacity: 0.62 },
+  spinal_cord: { color: "#7ad6b0", opacity: 0.7 },
+  vagus_left: { color: "#ffcf4d", opacity: 0.9 },
+  vagus_right: { color: "#ffb24d", opacity: 0.9 },
 };
 // Anything the backend serves that we don't have a colour for: stable hash hue.
 function tissueStyle(name: string): { color: string; opacity: number } {
@@ -32,32 +33,64 @@ interface LoadedMesh {
   geometry: THREE.BufferGeometry;
 }
 
-function useStlMeshes(meshes: MeshInfo[]): { loaded: LoadedMesh[]; error: string | null } {
-  const [loaded, setLoaded] = useState<LoadedMesh[]>([]);
-  const [error, setError] = useState<string | null>(null);
+// Lazily load only the meshes that are currently visible, caching parsed
+// geometries so toggling a tissue back on is instant. Loads are independent:
+// a single STL that fails to fetch/parse is skipped, never taking the rest of
+// the anatomy down with it (a whole-body payload of ~30 MB across 7 tissues
+// must degrade gracefully). `loading` is true while any visible mesh is still
+// in flight; `failed` names meshes that could not be loaded at all.
+function useStlMeshes(
+  meshes: MeshInfo[],
+  visible: Record<string, boolean>,
+): { loaded: LoadedMesh[]; loading: boolean; failed: string[] } {
+  const cache = useRef<Map<string, LoadedMesh>>(new Map());
+  const failedRef = useRef<Set<string>>(new Set());
+  const [, bump] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  const want = useMemo(
+    () => meshes.filter((m) => visible[m.name] !== false),
+    [meshes, visible],
+  );
+
   useEffect(() => {
     let cancelled = false;
     const loader = new STLLoader();
-    setError(null);
-    Promise.all(
-      meshes.map(async (m) => {
-        const buf = await fetch(m.url).then((r) => r.arrayBuffer());
+    const todo = want.filter(
+      (m) => !cache.current.has(m.name) && !failedRef.current.has(m.name),
+    );
+    if (todo.length === 0) return;
+    setLoading(true);
+    Promise.allSettled(
+      todo.map(async (m) => {
+        const buf = await fetch(m.url).then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.arrayBuffer();
+        });
         const geometry = loader.parse(buf);
         geometry.computeVertexNormals();
-        return { name: m.name, geometry } as LoadedMesh;
+        cache.current.set(m.name, { name: m.name, geometry });
       }),
-    )
-      .then((res) => !cancelled && setLoaded(res))
-      .catch((e) => {
-        if (cancelled) return;
-        setLoaded([]);
-        setError(e?.message ?? "failed to load meshes");
+    ).then((results) => {
+      if (cancelled) return;
+      results.forEach((r, i) => {
+        if (r.status === "rejected") failedRef.current.add(todo[i].name);
       });
+      setLoading(false);
+      bump((n) => n + 1);
+    });
     return () => {
       cancelled = true;
     };
-  }, [meshes]);
-  return { loaded, error };
+  }, [want]);
+
+  const loaded = useMemo(
+    () => want.map((m) => cache.current.get(m.name)).filter(Boolean) as LoadedMesh[],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [want, loading],
+  );
+  const failed = want.map((m) => m.name).filter((n) => failedRef.current.has(n));
+  return { loaded, loading, failed };
 }
 
 // Nearest mesh vertex to a point, across the given geometries. Used to snap a
@@ -144,7 +177,7 @@ export default function Viewer3D({
   onSelect,
   onAddSource,
 }: Props) {
-  const { loaded, error } = useStlMeshes(meshes);
+  const { loaded, loading, failed } = useStlMeshes(meshes, visible);
   const [placing, setPlacing] = useState(false);
   const [snap, setSnap] = useState(true);
   const [recenter, setRecenter] = useState(0);
@@ -299,17 +332,23 @@ export default function Viewer3D({
 
       {/* Bottom-left status: load state, errors, live coordinate readout. */}
       <div className="viewerHud viewerHud--bl">
-        {error ? (
-          <Tag intent="danger" minimal icon="error">
-            mesh load failed
-          </Tag>
-        ) : !loaded.length ? (
+        {loading && !loaded.length ? (
           <Tag minimal icon="cloud-download">
             loading anatomy…
           </Tag>
-        ) : (
+        ) : loaded.length ? (
           <Tag minimal icon="cube">
-            {shown.length}/{loaded.length} tissues
+            {loaded.length} tissue{loaded.length === 1 ? "" : "s"} shown
+            {loading ? " · loading…" : ""}
+          </Tag>
+        ) : (
+          <Tag minimal icon="eye-off">
+            no tissues visible — toggle one above
+          </Tag>
+        )}
+        {failed.length > 0 && (
+          <Tag intent="danger" minimal icon="error">
+            failed: {failed.join(", ")}
           </Tag>
         )}
         {placing && hover && (

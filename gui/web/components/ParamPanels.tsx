@@ -14,7 +14,7 @@ interface PanelProps extends Props {
 }
 
 const ALL_TISSUES = [
-  "vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin",
+  "vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "muscle", "bone", "skin",
 ];
 
 function NumRow({

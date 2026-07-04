@@ -11,6 +11,8 @@ export interface MeshInfo {
   name: string;
   url: string;
   bytes: number;
+  parts?: number;
+  default_visible?: boolean;
 }
 
 export interface PointSource {

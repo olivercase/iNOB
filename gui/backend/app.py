@@ -164,70 +164,143 @@ def reset_config() -> dict[str, Any]:
 
 
 # ── meshes (for the 3-D viewer) ────────────────────────────────────────────────
+#
+# The viewer shows the whole multi-tissue anatomy, one toggle per tissue. Each
+# tissue category may be backed by many source STLs (74 bones, 12 muscles, …);
+# they are merged into a single binary STL and cached on disk so the browser
+# fetches one file per tissue instead of dozens. The cache key includes source
+# mtimes so an edited/added STL invalidates it automatically.
 
-def _resolve_mesh_paths() -> dict[str, Path]:
-    """Map a viewer mesh name → an STL path on disk, from the active config.
+# Cache of merged per-tissue STLs (survives reloads; keyed by content mtimes).
+_MESH_CACHE = Path(tempfile.gettempdir()) / "inob_gui_meshes"
 
-    Skin is a single file; vagus left/right are matched by glob (first hit).
-    Bones are 77 separate STLs — too heavy to stream individually here, so
-    they are intentionally excluded from the default viewer payload.
+# Viewer render order / default visibility. Skin and bone are large and occlude
+# the interior structures the user actually plans around, so they load hidden.
+_TISSUE_ORDER = [
+    "skin", "bone", "muscle", "blood_vessel",
+    "spinal_cord", "vagus_left", "vagus_right",
+]
+_HIDDEN_BY_DEFAULT = {"skin", "bone"}
+
+
+def _abs_path(rel: str) -> Path:
+    p = Path(rel)
+    return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def _safe_stl(p: Path) -> Path | None:
+    """Only serve existing ``.stl`` files inside the project root — a config
+    path like ``data.torso_skin: /etc/passwd`` must not become readable."""
+    try:
+        rp = p.resolve()
+    except OSError:
+        return None
+    if rp.suffix.lower() != ".stl":
+        return None
+    if not rp.is_relative_to(PROJECT_ROOT.resolve()):
+        return None
+    return rp if rp.is_file() else None
+
+
+def _tissue_sources() -> dict[str, list[Path]]:
+    """Map each tissue category → the list of source STL paths from the config.
+
+    Single-file tissues (skin) yield one path; grouped tissues (bone, muscle,
+    vessel, spinal cord) yield every ``*.stl`` in their directory; vagus
+    left/right yield every glob match. Only project-local ``.stl`` files pass.
     """
     raw, _ = _read_raw_safe(_active_config_path())
     data = raw.get("data", {})
-    out: dict[str, Path] = {}
+    out: dict[str, list[Path]] = {}
 
-    def _abs(rel: str) -> Path:
-        p = Path(rel)
-        return p if p.is_absolute() else PROJECT_ROOT / p
-
-    def _safe(p: Path) -> Path | None:
-        """Only serve existing .stl files inside the project root — a config
-        path like ``data.torso_skin: /etc/passwd`` must not become readable."""
-        try:
-            rp = p.resolve()
-        except OSError:
-            return None
-        if rp.suffix.lower() != ".stl":
-            return None
-        if not rp.is_relative_to(PROJECT_ROOT.resolve()):
-            return None
-        return rp if rp.is_file() else None
+    def _add(name: str, paths: list[Path]) -> None:
+        safe = [s for p in paths if (s := _safe_stl(p))]
+        if safe:
+            out[name] = safe
 
     skin = data.get("torso_skin")
     if skin:
-        safe = _safe(_abs(skin))
-        if safe:
-            out["skin"] = safe
+        _add("skin", [_abs_path(skin)])
+
+    for name, key in (("bone", "bone_dir"), ("muscle", "muscle_dir"),
+                      ("blood_vessel", "vessel_dir"),
+                      ("spinal_cord", "spinal_cord_dir")):
+        d = data.get(key)
+        if d:
+            _add(name, sorted(_abs_path(d).glob("*.stl")))
+
     for name, key in (("vagus_left", "vagus_left_glob"),
                       ("vagus_right", "vagus_right_glob")):
         pat = data.get(key)
-        if not pat:
-            continue
-        for match in sorted(glob.glob(str(_abs(pat)))):
-            safe = _safe(Path(match))
-            if safe:
-                out[name] = safe
-                break
+        if pat:
+            _add(name, [Path(m) for m in sorted(glob.glob(str(_abs_path(pat))))])
+
+    # Preserve the documented render order, dropping tissues with no meshes.
+    return {t: out[t] for t in _TISSUE_ORDER if t in out}
+
+
+def _merged_stl(name: str, paths: list[Path]) -> Path | None:
+    """Return a cached single binary STL merging ``paths``; build it if stale.
+
+    The cache filename embeds a hash of the source paths and their mtimes, so
+    any edit/add/remove of a source STL produces a fresh merge automatically.
+    Returns ``None`` (never raises) if the merge fails, so one broken tissue
+    cannot 500 the whole ``/api/meshes`` payload.
+    """
+    import hashlib
+
+    sig = "|".join(f"{p}:{p.stat().st_mtime_ns}" for p in paths)
+    digest = hashlib.sha1(sig.encode()).hexdigest()[:16]
+    _MESH_CACHE.mkdir(parents=True, exist_ok=True)
+    cached = _MESH_CACHE / f"{name}-{digest}.stl"
+    if cached.is_file() and cached.stat().st_size > 0:
+        return cached
+    try:
+        from inob.io.stl import concat_stls
+        mesh = concat_stls(list(paths), check_units_mm=False)
+        mesh.export(cached, file_type="stl")  # binary STL
+        return cached
+    except Exception as e:  # noqa: BLE001 — surfaced as a missing tissue, logged
+        logger.warning("mesh merge failed for %s (%d files): %s", name, len(paths), e)
+        return None
+
+
+def _mesh_index() -> dict[str, tuple[Path, int]]:
+    """Build (and cache-back) the merged STL for every tissue category.
+
+    Returns ``name -> (merged_path, n_source_parts)``.
+    """
+    out: dict[str, tuple[Path, int]] = {}
+    for name, paths in _tissue_sources().items():
+        merged = _merged_stl(name, paths)
+        if merged:
+            out[name] = (merged, len(paths))
     return out
 
 
 @app.get("/api/meshes")
 def list_meshes() -> dict[str, Any]:
-    meshes = _resolve_mesh_paths()
+    index = _mesh_index()
     return {
         "meshes": [
-            {"name": n, "url": f"/api/meshes/{n}", "bytes": p.stat().st_size}
-            for n, p in meshes.items()
+            {
+                "name": name,
+                "url": f"/api/meshes/{name}",
+                "bytes": path.stat().st_size,
+                "parts": parts,
+                "default_visible": name not in _HIDDEN_BY_DEFAULT,
+            }
+            for name, (path, parts) in index.items()
         ]
     }
 
 
 @app.get("/api/meshes/{name}")
 def get_mesh(name: str) -> FileResponse:
-    meshes = _resolve_mesh_paths()
-    if name not in meshes:
+    index = _mesh_index()
+    if name not in index:
         raise HTTPException(status_code=404, detail=f"no mesh named {name!r}")
-    return FileResponse(meshes[name], media_type="model/stl", filename=f"{name}.stl")
+    return FileResponse(index[name][0], media_type="model/stl", filename=f"{name}.stl")
 
 
 # ── cluster submission ──────────────────────────────────────────────────────────

@@ -37,9 +37,17 @@ export default function Page() {
     getConfig().then((r) => setConfig(r.config)).catch(() => setHealthy(false));
     getMeshes().then((m) => {
       setMeshes(m);
-      setVisible(Object.fromEntries(m.map((x) => [x.name, true])));
-      // Default the imaging target to the first non-skin structure available.
-      const t = m.find((x) => x.name !== "skin") ?? m[0];
+      // Respect each tissue's server-side default visibility (skin/bone load
+      // hidden so the interior planning structures are visible immediately).
+      setVisible(
+        Object.fromEntries(m.map((x) => [x.name, x.default_visible !== false])),
+      );
+      // Default the imaging target to the vagus if present, else the first
+      // interior (non-skin, non-bone) structure, else anything.
+      const t =
+        m.find((x) => x.name.startsWith("vagus")) ??
+        m.find((x) => x.name !== "skin" && x.name !== "bone") ??
+        m[0];
       if (t) setTarget(t.name);
     });
   }, []);
