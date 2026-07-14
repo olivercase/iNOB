@@ -53,3 +53,6 @@ configs/gui_working.yaml
 # Raw BodyParts3D atlas + intermediates (regenerable; not needed by the pipeline)
 data/bodyparts3d/
 internal_meshes/
+
+# Research-poster working folder (figures + analysis; not version-controlled)
+poster_vagus_opmeg/
