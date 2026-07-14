@@ -65,11 +65,17 @@ done
 [[ -d duneuro    ]] || git clone https://gitlab.dune-project.org/duneuro/duneuro.git
 [[ -d duneuro-py ]] || git clone https://gitlab.dune-project.org/duneuro/duneuro-py.git
 
-# Pin duneuro + apply Eigen-5 / DUNE-2.10 source patches (see scripts/patches/).
+# Pin duneuro + apply the Eigen-5 / DUNE-2.10 source patch. The patch itself
+# lives in the separate olivercase/duneuro-build repo (the build recipe),
+# not in this repo — fetch it fresh each run from a tagged release so there's
+# one source of truth and the URL can't drift out from under us via a future
+# push to that repo's main branch.
 DUNEURO_COMMIT="8f344b4da9c128ddf3e47af5ec136d05a3aeb162"
-# REMOTE_BASE is set by inob__init above; HERE not good here because SGE
-# copies the script to a spool dir and HERE resolves to that spool path.
-DUNEURO_PATCH="${REMOTE_BASE}/code/scripts/patches/duneuro-eigen5-dune210.patch"
+DUNEURO_BUILD_TAG="v1.0.0"
+DUNEURO_PATCH="${SRC}/duneuro-eigen5-dune210.patch"
+inob__log "fetching duneuro patch from olivercase/duneuro-build@${DUNEURO_BUILD_TAG}"
+curl -fsSL -o "${DUNEURO_PATCH}" \
+    "https://raw.githubusercontent.com/olivercase/duneuro-build/${DUNEURO_BUILD_TAG}/scripts/patches/duneuro-eigen5-dune210.patch"
 # Reset to the pinned commit and discard any prior patch/edits so re-runs are
 # idempotent (a stale half-patched tree makes `git apply` fail both ways).
 git -C "${SRC}/duneuro" reset --hard "${DUNEURO_COMMIT}" >/dev/null
@@ -99,7 +105,7 @@ cmake -DCMAKE_BUILD_TYPE=Release \
       -DPython3_EXECUTABLE="${BASE}/venv/bin/python" \
       ..
 make -j"${CORES_PER_TASK:-4}"
-PYSITE="$(${BASE}/venv/bin/python -c 'import site; print(site.getsitepackages()[0])')"
+PYSITE="$("${BASE}/venv/bin/python" -c 'import site; print(site.getsitepackages()[0])')"
 cp -r src/duneuropy* "${PYSITE}/" 2>/dev/null || \
     find . -name 'duneuropy*.so' -exec cp {} "${PYSITE}/" \;
 
