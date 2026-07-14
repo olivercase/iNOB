@@ -1,7 +1,8 @@
 cff-version: 1.2.0
 title: >
-  Forward_Model_Vagus_Nerve — a dual-modality (OPM-MEG + HD-EEG)
-  torso-scale forward model for the cervical vagus nerve
+  iNOB — imaging neuroscience outside the brain: a whole-body
+  forward-modelling and sensor-planning package for non-invasive recording
+  of peripheral and autonomic nerves
 message: >
   If you use this software, please cite it using these metadata.
 type: software
@@ -10,8 +11,12 @@ authors:
     given-names: Oliver
     email: oliver@fizzymilk.com
     affiliation: University College London
-repository-code: https://github.com/fizzymilk/Forward_Model_Vagus_Nerve
-url: https://github.com/fizzymilk/Forward_Model_Vagus_Nerve
+repository-code: https://github.com/olivercase/iNOB
+url: https://github.com/olivercase/iNOB
+identifiers:
+  - type: doi
+    value: 10.17605/OSF.IO/U4MDS
+    description: Software Project DOI (OSF)
 license: MIT
 keywords:
   - magnetoencephalography
@@ -25,12 +30,13 @@ keywords:
 preferred-citation:
   type: software
   title: >
-    Forward_Model_Vagus_Nerve: dual-modality OPM-MEG + HD-EEG forward
-    modelling for the cervical vagus nerve
+    iNOB: a whole-body forward-modelling and sensor-planning package for
+    non-invasive recording of peripheral and autonomic nerves
   authors:
     - family-names: Case
       given-names: Oliver
   year: 2026
+  doi: 10.17605/OSF.IO/U4MDS
 references:
   - type: data
     title: >

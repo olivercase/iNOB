@@ -43,22 +43,22 @@ make test                            # 140 tests, no DUNEuro required
 The DUNEuro forward solve needs the `duneuropy` extension. Every other stage
 runs without it, so you only need this to run `inob-forward` / `inob-eeg`.
 
-**Locally (macOS / Apple Silicon):** `scripts/build_duneuro_local.sh` builds
-DUNE 2.10 + duneuro + duneuro-py against Homebrew + `python@3.11` into a self-
-contained venv (default `/Volumes/UCL/duneuro_build/venv`). Because the solve
-runs from that venv, install this package into it too, then call the CLI with
-that interpreter:
+**Locally (macOS / Apple Silicon):** the build recipe lives in a separate repo,
+[`olivercase/duneuro-build`](https://github.com/olivercase/duneuro-build) — this
+repo only *runs* DUNEuro, it doesn't carry the build scripts/patches itself.
+That repo's script builds DUNE 2.10 + duneuro + duneuro-py against Homebrew +
+`python@3.11` into a self-contained venv (default
+`/Volumes/UCL/duneuro_build/venv`). Because the solve runs from that venv,
+install this package into it too, then call the CLI with that interpreter:
 
 ```bash
 brew install eigen gmp metis superlu cmake python@3.11   # one-time prerequisites
-bash scripts/build_duneuro_local.sh                      # builds duneuropy (~30 min)
+git clone https://github.com/olivercase/duneuro-build.git
+bash duneuro-build/scripts/build_duneuro_local.sh         # builds duneuropy (~30 min)
 BASE=/Volumes/UCL/duneuro_build
-"$BASE/venv/bin/pip" install --no-deps -e .               # put inob in the same venv
+"$BASE/venv/bin/pip" install --no-deps -e .               # put inob in the same venv (run from iNOB checkout)
 "$BASE/venv/bin/inob-forward"                             # real DUNEuro solve
 ```
-
-The build recipe (scripts, Eigen-5/DUNE-2.10 patch, reference logs) also lives
-standalone at [`olivercase/duneuro-build`](https://github.com/olivercase/duneuro-build).
 
 **On a cluster:** `cluster/build_duneuro.sh` (see [Cluster](#cluster-ucl-myriad--kathleen-sge)).
 
@@ -162,4 +162,5 @@ tests/           pytest suite (no DUNEuro required)
 ## License
 
 Code under the MIT License (`LICENSE`). Anatomical data under `LICENSE-DATA`.
-Cite via `CITATION.cff`.
+Cite via `CITATION.cff` — software DOI:
+[10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS).
