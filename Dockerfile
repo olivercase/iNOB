@@ -1,9 +1,11 @@
 # Reproducible build of the iNOB pipeline INCLUDING DUNEuro.
 #
 # DUNEuro has no PyPI wheel; it is compiled from source (DUNE 2.10 +
-# duneuro + duneuro-py) with the Eigen-5 / DUNE-2.10 patches captured in
-# scripts/patches/. This image bakes the whole toolchain so reviewers can
-# regenerate every leadfield without a local build.
+# duneuro + duneuro-py) with the Eigen-5 / DUNE-2.10 patches maintained in
+# the separate olivercase/duneuro-build repo (fetched below by tag, the same
+# single source of truth cluster/build_duneuro.sh uses). This image bakes
+# the whole toolchain so reviewers can regenerate every leadfield without a
+# local build.
 #
 #   docker build -t inob .
 #   docker run --rm -v "$PWD/outputs:/work/outputs" inob \
@@ -18,7 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # DUNE/duneuro C++ build dependencies (Eigen 3.4 on bookworm supports the
 # template jacobiSvd form our patch uses).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake git pkg-config ca-certificates \
+        build-essential cmake git curl pkg-config ca-certificates \
         libeigen3-dev libgmp-dev libgmpxx4ldbl \
         libmetis-dev libsuperlu-dev libsuitesparse-dev \
         libtbb-dev \
@@ -38,13 +40,18 @@ RUN set -eux; \
         done; \
     done
 
-# Pinned duneuro + the source patches (separate layer → fast patch iteration).
+# Pinned duneuro + the source patch (separate layer → fast patch iteration).
+# The patch itself lives in olivercase/duneuro-build (the build recipe), not
+# in this repo — fetched fresh from a tagged release, same as
+# cluster/build_duneuro.sh, so there's one source of truth.
 ARG DUNEURO_COMMIT=8f344b4da9c128ddf3e47af5ec136d05a3aeb162
-COPY scripts/patches/duneuro-eigen5-dune210.patch /tmp/duneuro.patch
+ARG DUNEURO_BUILD_TAG=v1.0.1
 RUN set -eux; \
     git clone -q https://gitlab.dune-project.org/duneuro/duneuro.git; \
     git clone -q https://gitlab.dune-project.org/duneuro/duneuro-py.git; \
     git -C duneuro checkout -q "${DUNEURO_COMMIT}"; \
+    curl -fsSL -o /tmp/duneuro.patch \
+        "https://raw.githubusercontent.com/olivercase/duneuro-build/${DUNEURO_BUILD_TAG}/scripts/patches/duneuro-eigen5-dune210.patch"; \
     git -C duneuro apply /tmp/duneuro.patch
 
 # ── python venv + runtime deps (pinned in requirements-docker.txt) ─────────

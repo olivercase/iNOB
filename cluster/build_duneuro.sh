@@ -71,7 +71,7 @@ done
 # one source of truth and the URL can't drift out from under us via a future
 # push to that repo's main branch.
 DUNEURO_COMMIT="8f344b4da9c128ddf3e47af5ec136d05a3aeb162"
-DUNEURO_BUILD_TAG="v1.0.0"
+DUNEURO_BUILD_TAG="v1.0.1"
 DUNEURO_PATCH="${SRC}/duneuro-eigen5-dune210.patch"
 inob__log "fetching duneuro patch from olivercase/duneuro-build@${DUNEURO_BUILD_TAG}"
 curl -fsSL -o "${DUNEURO_PATCH}" \
