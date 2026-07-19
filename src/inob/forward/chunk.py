@@ -27,6 +27,7 @@ from inob.forward.duneuro_driver import (
     attach_coils,
     build_driver,
     build_orthogonal_dipoles,
+    compute_meg_leadfield,
     import_duneuro,
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
@@ -80,8 +81,9 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
 
     logger.info("applying transfer to dipoles…")
     t_a = time.time()
-    fields_raw, _ = driver.applyMEGTransfer(T, dipoles_du, driver_cfg)
-    L = np.column_stack([np.asarray(f) for f in fields_raw])
+    # SI leadfield (T per A·m): secondary (transfer) + primary (Biot–Savart),
+    # unit-corrected from DUNEuro mm-mode — same as the single-machine path.
+    L = compute_meg_leadfield(driver, T, dipoles_du, driver_cfg)
     logger.info("  L %s (%.0fs)", L.shape, time.time() - t_a)
 
     out_L = chunks_dir / f"L_chunk_{chunk_id:03d}.npy"

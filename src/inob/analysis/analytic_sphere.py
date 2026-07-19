@@ -14,12 +14,70 @@ The MEG forward in a *homogeneous* sphere is independent of the sphere's
 conductivity (Geselowitz / Sarvas) — only radial source positions inside
 the sphere and the field-point geometry matter. The EEG forward in a
 homogeneous sphere is the Berg-Scherg / Wolters analytic series.
+
+Forward-model ladder
+--------------------
+Two of the three MEG rungs used by :mod:`inob.analysis.sarvas_compare` live
+here, in order of increasing volume-conductor realism:
+
+  1. :func:`infinite_medium_meg_field` — free-space Biot–Savart. No boundary
+     at all; primary current only.
+  2. :func:`sarvas_meg_field` — homogeneous sphere. Adds the secondary
+     (volume-current) field from a spherical boundary.
+  3. FEM (DUNEuro, :mod:`inob.forward`) — realistic multi-tissue geometry.
+
+Differencing consecutive rungs isolates one physical effect each: 1→2 is the
+volume-current contribution, 2→3 is the effect of real geometry.
 """
 from __future__ import annotations
 
 import numpy as np
 
 MU_0 = 4.0 * np.pi * 1e-7   # vacuum permeability, T·m/A
+
+
+def infinite_medium_meg_field(
+    dipole_pos_m: np.ndarray,
+    dipole_moment_Am: np.ndarray,
+    sensor_pos_m: np.ndarray,
+) -> np.ndarray:
+    """Magnetic field of a current dipole in an unbounded homogeneous medium.
+
+    The free-space Biot–Savart law for a point current dipole::
+
+        B(r) = (μ₀ / 4π) · Q × (r − r₀) / |r − r₀|³
+
+    In an *infinite* homogeneous conductor the volume currents contribute
+    nothing to the magnetic field, so this is simultaneously the vacuum
+    result and the infinite-medium result: the forward field with no
+    volume-conductor boundary anywhere. Differencing it against
+    :func:`sarvas_meg_field` isolates the secondary (volume-current) field
+    introduced by the spherical boundary.
+
+    Unlike the sphere solutions this is translation invariant — only the
+    source-to-sensor separation enters, so no centre need be chosen.
+
+    Inputs/outputs are in **SI units** (m, A·m, T).
+
+    Parameters
+    ----------
+    dipole_pos_m     : (3,) source position
+    dipole_moment_Am : (3,) dipole moment vector
+    sensor_pos_m     : (N, 3) sensor positions
+
+    Returns
+    -------
+    (N, 3) magnetic-field vectors at each sensor in Tesla.
+    """
+    r0 = np.asarray(dipole_pos_m, dtype=np.float64)
+    Q = np.asarray(dipole_moment_Am, dtype=np.float64)
+    r = np.asarray(sensor_pos_m, dtype=np.float64)
+    if r.ndim == 1:
+        r = r[None, :]
+
+    a = r - r0[None, :]
+    a_norm = np.maximum(np.linalg.norm(a, axis=1), 1e-30)
+    return (MU_0 / (4.0 * np.pi)) * np.cross(Q[None, :], a) / (a_norm ** 3)[:, None]
 
 
 def sarvas_meg_field(

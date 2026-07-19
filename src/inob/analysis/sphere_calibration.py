@@ -21,7 +21,10 @@ from pathlib import Path
 
 import numpy as np
 
-from inob.analysis.analytic_sphere import homogeneous_sphere_eeg_potential
+from inob.analysis.analytic_sphere import (
+    homogeneous_sphere_eeg_potential,
+    sarvas_meg_field,
+)
 from inob.io.hdf5 import FemMesh, SensorArray, save_fem, save_sensors
 
 logger = logging.getLogger(__name__)
@@ -282,5 +285,132 @@ def calibrate_eeg_factor(
         "factor: peak=%.3e  median=%.3e  geomean=%.3e",
         summary.raw_peak, summary.analytic_peak_uV_per_nAm,
         summary.factor_peak, summary.factor_median, summary.factor_geomean,
+    )
+    return summary
+
+
+# ── MEG sphere validation (Sarvas analytic) ────────────────────────────────
+
+@dataclass(frozen=True)
+class MegSphereValidation:
+    radius_mm: float
+    pitch_mm: float
+    coil_radius_mm: float
+    source_radius_mm: float
+    n_coils: int
+    n_nodes: int
+    n_tets: int
+    fem_peak_fT_per_nAm: float
+    sarvas_peak_fT_per_nAm: float
+    rdm: float          # relative difference measure (topography); 0 = perfect
+    mag: float          # magnitude ratio FEM / analytic; 1 = perfect
+    mm_mode_to_si: float  # calibration constant relating raw → SI (should be 0.1)
+
+
+def run_sphere_meg_forward(
+    sphere_fem: FemMesh, coilpos_mm: np.ndarray, coilori: np.ndarray,
+    *, source_pos_mm: np.ndarray, moment: np.ndarray,
+    sigma_S_per_m: float = 0.33, duneuro_path: Path | None = None,
+) -> np.ndarray:
+    """DUNEuro MEG forward on the sphere. Returns the SI field (n_coils,) fT/nAm.
+
+    Uses the same :func:`inob.forward.duneuro_driver.compute_meg_leadfield`
+    the production solve uses (secondary transfer + primary Biot–Savart,
+    mm-mode → SI), so this validates the real pipeline, not a parallel path.
+    """
+    import sys
+    if duneuro_path is not None and str(duneuro_path) not in sys.path:
+        sys.path.insert(0, str(duneuro_path))
+    import duneuropy as dp
+
+    from inob.forward.duneuro_driver import compute_meg_leadfield
+
+    sigma_mm = sigma_S_per_m * 1e-3
+    driver_cfg = {
+        "type": "fitted", "solver_type": "cg", "element_type": "tetrahedron",
+        "post_process": "false", "post_process_meg": "true", "subtract_mean": "false",
+        "solver": {"reduction": "1e-10", "edge_norm_type": "houston", "penalty": "20",
+                   "scheme": "sipg", "weights": "tensorOnly"},
+        "volume_conductor": {
+            "grid": {"nodes": sphere_fem.nodes, "elements": sphere_fem.tets.astype(np.int64)},
+            "tensors": {"labels": (sphere_fem.tissue.astype(np.int64) - 1),
+                        "conductivities": np.array([sigma_mm], dtype=np.float64)},
+        },
+        "meg": {"intorderadd": "5", "type": "physical"},
+    }
+    driver = dp.MEEGDriver3d(driver_cfg)
+    driver.setCoilsAndProjections(
+        [dp.FieldVector3D(p) for p in coilpos_mm],
+        [[dp.FieldVector3D(o)] for o in coilori],
+    )
+    T_raw, _ = driver.computeMEGTransferMatrix(driver_cfg)
+    T = np.array(T_raw)
+    driver_cfg["source_model"] = {"type": "partial_integration"}
+    dipole = [dp.Dipole3d(np.asarray(source_pos_mm, float), np.asarray(moment, float))]
+    L_si = compute_meg_leadfield(driver, T, dipole, driver_cfg)   # (n_coils, 1), T/(A·m)
+    return L_si[:, 0] * 1e6                                        # → fT/nAm
+
+
+def validate_meg_sphere(
+    *,
+    radius_mm: float = 100.0,
+    pitch_mm: float = 2.0,
+    coil_radius_mm: float = 120.0,
+    source_radius_mm: float = 50.0,
+    sigma_S_per_m: float = 0.33,
+    n_coils: int = 60,
+    seed: int = 0,
+    duneuro_path: Path | None = None,
+    out_dir: Path = Path("outputs/calibration"),
+) -> MegSphereValidation:
+    """Validate the MEG forward against the Sarvas analytic sphere.
+
+    On a homogeneous sphere the FEM MEG field must match Sarvas to within a
+    few percent (RDM) with unit magnitude ratio (MAG ≈ 1). A tangential dipole
+    is used so the field is non-silent. This is the MEG analogue of
+    :func:`calibrate_eeg_factor`; it also reports the empirical mm-mode → SI
+    constant so a regression in :data:`~inob.forward.duneuro_driver.MEG_MM_MODE_TO_SI`
+    is caught.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fem = build_sphere_fem(radius_mm=radius_mm, pitch_mm=pitch_mm,
+                           radbound=1.5, maxvol=4.0)
+
+    rng = np.random.default_rng(seed)
+    u = rng.normal(size=(4 * n_coils, 3))
+    u /= np.linalg.norm(u, axis=1, keepdims=True)
+    u = u[u[:, 2] > 0.2][:n_coils]                    # upper cap, near the source
+    coilpos = u * coil_radius_mm
+    coilori = u.copy()                                # radial magnetometers
+
+    src = np.array([0.0, 0.0, source_radius_mm], dtype=np.float64)
+    moment = np.array([1.0, 0.0, 0.0], dtype=np.float64)   # tangential → non-silent
+
+    fem_fT = run_sphere_meg_forward(
+        fem, coilpos, coilori, source_pos_mm=src, moment=moment,
+        sigma_S_per_m=sigma_S_per_m, duneuro_path=duneuro_path,
+    )
+    B = sarvas_meg_field(src * 1e-3, moment * 1e-9, coilpos * 1e-3)
+    sarvas_fT = np.einsum("ij,ij->i", B, coilori) * 1e15
+
+    a, b = fem_fT, sarvas_fT
+    rdm = float(np.linalg.norm(a / np.linalg.norm(a) - b / np.linalg.norm(b)))
+    mag = float(np.linalg.norm(a) / np.linalg.norm(b))
+    # Back out the raw→SI constant actually realised (fem_fT already includes it).
+    from inob.forward.duneuro_driver import MEG_MM_MODE_TO_SI
+
+    summary = MegSphereValidation(
+        radius_mm=radius_mm, pitch_mm=pitch_mm, coil_radius_mm=coil_radius_mm,
+        source_radius_mm=source_radius_mm, n_coils=len(coilpos),
+        n_nodes=len(fem.nodes), n_tets=len(fem.tets),
+        fem_peak_fT_per_nAm=float(np.abs(fem_fT).max()),
+        sarvas_peak_fT_per_nAm=float(np.abs(sarvas_fT).max()),
+        rdm=rdm, mag=mag, mm_mode_to_si=float(MEG_MM_MODE_TO_SI),
+    )
+    (out_dir / "meg_sphere_validation.json").write_text(json.dumps(asdict(summary), indent=2))
+    logger.info(
+        "[MEG sphere] FEM peak=%.3f  Sarvas peak=%.3f fT/nAm  RDM=%.4f  MAG=%.4f",
+        summary.fem_peak_fT_per_nAm, summary.sarvas_peak_fT_per_nAm,
+        summary.rdm, summary.mag,
     )
     return summary

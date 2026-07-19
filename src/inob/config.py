@@ -137,6 +137,11 @@ class ForwardCfg:
     # solve uses these instead of geometry-derived ``vagus_sources`` sampling
     # — this is how the GUI's clicked source points reach the solver.
     point_sources: tuple[tuple[float, float, float], ...] = ()
+    # Local parallelism for the forward solve. The coil array is split into
+    # this many independent chunks, each solved in its own process (mirroring
+    # the cluster array-job path) and stitched back together. 0 = use all
+    # available CPU cores; 1 = serial (single process). Default 0.
+    local_workers: int = 0
 
 
 @dataclass(frozen=True)
@@ -177,6 +182,31 @@ class SensitivityCfg:
 
 
 @dataclass(frozen=True)
+class AnalyticCfg:
+    """Analytic forward-model ladder (Biot–Savart → sphere → FEM).
+
+    Target-agnostic: these describe the concentric-circle approximation of
+    whatever elongated structure ``forward.source_tissue`` selects, so they
+    must be set per target rather than assumed. The defaults happen to match
+    the cervical-vagus literature (Bu et al. 2024) but carry no special
+    status — change them in YAML when the target changes.
+    """
+
+    # Nominal distances from the structure's central axis.
+    source_axis_mm: float = 40.0
+    sensor_axis_mm: float = 58.5
+    # Half-width of the band around those distances within which the
+    # single-sphere solution is treated as a faithful baseline.
+    band_tolerance_mm: float = 30.0
+    # A source/coil pair counts as "sphere-silent" when the sphere solution
+    # falls below this fraction of the Biot–Savart value.
+    silent_rel_threshold: float = 0.01
+    # Bootstrap settings for the CI on the FEM/sphere peak ratio.
+    bootstrap_n: int = 2000
+    bootstrap_seed: int = 0
+
+
+@dataclass(frozen=True)
 class ReproCfg:
     seed: int = 0
 
@@ -194,6 +224,7 @@ class Config:
     forward: ForwardCfg
     cluster: ClusterCfg
     sensitivity: SensitivityCfg
+    analytic: AnalyticCfg
     reproducibility: ReproCfg
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
@@ -236,8 +267,18 @@ class ConfigError(ValueError):
     """Raised when config construction fails (missing/extra keys, bad types)."""
 
 
-def _check_keys(name: str, expected: set[str], got: set[str]) -> None:
-    missing = expected - got
+def _check_keys(
+    name: str, expected: set[str], got: set[str],
+    *, optional: set[str] | None = None,
+) -> None:
+    """Validate a config level's keys.
+
+    ``optional`` names sections that are recognised but may be omitted —
+    used for blocks whose dataclass supplies a complete set of defaults, so
+    that adding one does not invalidate every existing YAML.
+    """
+    optional = optional or set()
+    missing = expected - got - optional
     extra = got - expected
     msgs = []
     if missing:
@@ -246,6 +287,70 @@ def _check_keys(name: str, expected: set[str], got: set[str]) -> None:
         msgs.append(f"unknown keys: {sorted(extra)}")
     if msgs:
         raise ConfigError(f"[{name}] " + "; ".join(msgs))
+
+
+def _coerce_scalar(name: str, key: str, ann: Any, value: Any) -> Any:
+    """Validate/coerce a scalar config value against its field annotation.
+
+    Only plain ``int``/``float``/``bool``/``str`` fields are checked — anything
+    with a compound annotation (unions, tuples, dicts, ``Path``) is passed
+    through untouched, preserving the loader's existing behaviour for those.
+
+    The point is to catch a mistyped ``--set`` or YAML value (e.g.
+    ``analytic.bootstrap_n=notanumber``) at load time with a message that
+    names the field, rather than letting a string flow into numeric code and
+    fail three stages later.
+    """
+    # With `from __future__ import annotations`, field types are strings.
+    ann_s = ann if isinstance(ann, str) else getattr(ann, "__name__", str(ann))
+    if ann_s not in {"int", "float", "bool", "str"}:
+        return value
+
+    def bad(expected: str) -> ConfigError:
+        return ConfigError(
+            f"[{name}] {key}: expected {expected}, got {value!r} "
+            f"({type(value).__name__})"
+        )
+
+    if ann_s == "bool":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+            return value.strip().lower() == "true"
+        raise bad("a boolean (true/false)")
+
+    if ann_s == "int":
+        if isinstance(value, bool):
+            raise bad("an integer")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                raise bad("an integer") from None
+        raise bad("an integer")
+
+    if ann_s == "float":
+        if isinstance(value, bool):
+            raise bad("a number")
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.strip())
+            except ValueError:
+                raise bad("a number") from None
+        raise bad("a number")
+
+    # str: accept a string; coerce other scalars, but reject collections.
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, dict, tuple)):
+        raise bad("a string")
+    return str(value)
 
 
 def _build_dataclass(
@@ -273,7 +378,10 @@ def _build_dataclass(
     missing = required - got
     if missing:
         raise ConfigError(f"[{name}] missing keys: {sorted(missing)}")
-    return cls(**{k: data[k] for k in data})
+    coerced = {
+        k: _coerce_scalar(name, k, all_fields[k].type, v) for k, v in data.items()
+    }
+    return cls(**coerced)
 
 
 def _build_shrinkwrap(d: dict[str, Any]) -> dict[str, ShrinkwrapParams]:
@@ -375,9 +483,12 @@ def load_config(
     expected_top = {
         "project_root", "data", "outputs", "geometry", "fem",
         "sensors", "electrodes", "noise", "forward", "cluster",
-        "sensitivity", "reproducibility",
+        "sensitivity", "analytic", "reproducibility",
     }
-    _check_keys("(top level)", expected_top, set(raw.keys()))
+    # Sections whose dataclass carries a complete set of defaults may be
+    # omitted entirely, so that adding one does not invalidate existing YAMLs.
+    _check_keys("(top level)", expected_top, set(raw.keys()),
+                optional={"analytic"})
 
     sens_raw = dict(raw.get("sensitivity", {}))
     if "perturbations" in sens_raw:
@@ -401,6 +512,9 @@ def load_config(
         cluster=_build_dataclass(ClusterCfg, raw.get("cluster", {}), "cluster"),
         sensitivity=_build_dataclass(
             SensitivityCfg, sens_raw, "sensitivity",
+        ),
+        analytic=_build_dataclass(
+            AnalyticCfg, raw.get("analytic", {}), "analytic"
         ),
         reproducibility=_build_dataclass(
             ReproCfg, raw.get("reproducibility", {}), "reproducibility"

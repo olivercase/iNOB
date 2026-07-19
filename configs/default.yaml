@@ -76,6 +76,9 @@ forward:
   source_spacing_mm: 5.0
   source_tissue: vagus_left
   duneuro_path: null           # optional override; default = use installed duneuropy
+  local_workers: 0             # forward solve parallelism: 0 = all CPU cores
+                               # (coil array split into per-core chunks, then
+                               # stitched); 1 = serial single process.
   solver:
     type: cg
     reduction: 1.0e-10
@@ -128,6 +131,28 @@ sensitivity:
   # one tissue at a time to forward.conductivities_sm.
   perturbations: [0.8, 1.0, 1.25]
   tissues: ["bone", "skin"]       # the dominant uncertainty drivers
+
+analytic:
+  # Analytic forward-model ladder: Biot-Savart (no volume conductor) ->
+  # single sphere (Sarvas) -> FEM. Differencing consecutive rungs isolates
+  # the volume-current contribution and then the real-geometry contribution.
+  #
+  # These describe the concentric-circle approximation of whatever elongated
+  # structure forward.source_tissue selects — set them per target. The values
+  # below are the cervical-vagus figures from Bu et al. 2024 (Comm Biol
+  # 7:893): source 40 mm from the cervical axis, sensors at 52 mm skin +
+  # 6.5 mm QuSpin standoff.
+  source_axis_mm: 40.0
+  sensor_axis_mm: 58.5
+  # Only source/coil pairs within this half-width of the nominal distances
+  # are treated as a regime where the single-sphere solution is faithful.
+  band_tolerance_mm: 30.0
+  # Pairs where the sphere solution drops below this fraction of the
+  # Biot-Savart value are counted as "sphere-silent" (radial sources are
+  # magnetically silent in a sphere but not in free space).
+  silent_rel_threshold: 0.01
+  bootstrap_n: 2000
+  bootstrap_seed: 0
 
 reproducibility:
   seed: 0

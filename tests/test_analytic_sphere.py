@@ -11,9 +11,77 @@ import numpy as np
 import pytest
 
 from inob.analysis.analytic_sphere import (
+    MU_0,
     homogeneous_sphere_eeg_potential,
+    infinite_medium_meg_field,
     sarvas_meg_field,
 )
+
+
+def test_biot_savart_closed_form_value() -> None:
+    """B = μ₀/4π · Q × r̂ / r² for a dipole in an unbounded medium."""
+    r0 = np.zeros(3)
+    Q = np.array([1e-9, 0.0, 0.0])             # 1 nA·m along +x
+    sensors = np.array([[0.0, 0.05, 0.0]])     # 5 cm along +y
+    B = infinite_medium_meg_field(r0, Q, sensors)
+    # Q × r̂ = x̂ × ŷ = ẑ, so B is +z with magnitude μ₀ Q / (4π r²)
+    expected = MU_0 * 1e-9 / (4.0 * np.pi * 0.05 ** 2)
+    np.testing.assert_allclose(B[0], [0.0, 0.0, expected], rtol=1e-12, atol=1e-20)
+
+
+def test_biot_savart_inverse_square_falloff() -> None:
+    r0 = np.zeros(3)
+    Q = np.array([1e-9, 0.0, 0.0])
+    near = infinite_medium_meg_field(r0, Q, np.array([[0.0, 0.05, 0.0]]))
+    far = infinite_medium_meg_field(r0, Q, np.array([[0.0, 0.10, 0.0]]))
+    ratio = np.linalg.norm(near) / np.linalg.norm(far)
+    assert np.isclose(ratio, 4.0, rtol=1e-12)
+
+
+def test_biot_savart_silent_along_dipole_axis() -> None:
+    """Q × r̂ vanishes when the sensor lies along the dipole axis."""
+    r0 = np.zeros(3)
+    Q = np.array([0.0, 0.0, 1e-9])
+    sensors = np.array([[0.0, 0.0, 0.08], [0.0, 0.0, -0.08]])
+    B = infinite_medium_meg_field(r0, Q, sensors)
+    np.testing.assert_allclose(B, 0.0, atol=1e-20)
+
+
+def test_biot_savart_translation_invariant() -> None:
+    """Unlike the sphere solutions, rung 1 depends only on the separation."""
+    Q = np.array([1e-9, 2e-10, 0.0])
+    r0 = np.array([0.01, -0.02, 0.03])
+    sensors = np.array([[0.06, 0.01, 0.02], [-0.04, 0.05, 0.0]])
+    shift = np.array([0.13, -0.07, 0.21])
+    B_a = infinite_medium_meg_field(r0, Q, sensors)
+    B_b = infinite_medium_meg_field(r0 + shift, Q, sensors + shift)
+    np.testing.assert_allclose(B_a, B_b, rtol=1e-12, atol=1e-20)
+
+
+def test_biot_savart_perpendicular_to_moment_and_separation() -> None:
+    Q = np.array([1e-9, 3e-10, -2e-10])
+    r0 = np.array([0.0, 0.0, 0.01])
+    sensors = np.array([[0.05, 0.02, 0.03], [-0.03, 0.04, -0.01]])
+    B = infinite_medium_meg_field(r0, Q, sensors)
+    sep = sensors - r0[None, :]
+    assert np.allclose(np.einsum("ij,j->i", B, Q), 0.0, atol=1e-24)
+    assert np.allclose(np.einsum("ij,ij->i", B, sep), 0.0, atol=1e-24)
+
+
+def test_biot_savart_radial_dipole_is_not_silent() -> None:
+    """The key rung 1 vs rung 2 contrast: no sphere, so no silent sources.
+
+    A dipole radial to the sphere centre gives exactly zero under Sarvas but
+    a finite field under Biot-Savart, because the cancellation is a property
+    of the spherical boundary rather than of the primary current.
+    """
+    r0 = np.array([0.0, 0.0, 0.05])
+    Q_radial = r0 / np.linalg.norm(r0) * 1e-9
+    sensors = np.array([[0.10, 0.0, 0.0], [0.08, 0.04, 0.05]])
+    B_sphere = sarvas_meg_field(r0, Q_radial, sensors)
+    B_free = infinite_medium_meg_field(r0, Q_radial, sensors)
+    np.testing.assert_allclose(B_sphere, 0.0, atol=1e-15)
+    assert (np.linalg.norm(B_free, axis=1) > 1e-16).all()
 
 
 def test_sarvas_radial_dipole_zero_field() -> None:

@@ -70,17 +70,43 @@ def test_main_invalid_stage_returns_2(tmp_path) -> None:
     assert rc == 2
 
 
+def test_parse_stages_empty_string_is_rejected() -> None:
+    """`--stages ""` (e.g. an unset shell var) must NOT silently run everything."""
+    import pytest
+
+    from inob.cli.pipeline import _parse_stages
+    with pytest.raises(ValueError, match="no stages selected"):
+        _parse_stages("")
+    with pytest.raises(ValueError, match="no stages selected"):
+        _parse_stages(" , ,")
+
+
+def test_parse_stages_none_and_all_run_everything() -> None:
+    from inob.cli.pipeline import ALL_STAGES, _parse_stages
+    assert _parse_stages(None) == list(ALL_STAGES)
+    assert _parse_stages("all") == list(ALL_STAGES)
+
+
+def test_main_empty_stages_returns_2_not_full_run(tmp_path) -> None:
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--stages", "",
+    ])
+    assert rc == 2
+
+
 def test_stage_helpers_delegate_to_library_functions(tmp_path, monkeypatch) -> None:
-    import inob.geometry.builder as geom_mod
     import inob.fem.cgal_builder as fem_mod
+    import inob.forward.local as local_mod
+    import inob.geometry.builder as geom_mod
     import inob.sensors.triaxial as sensors_mod
-    import inob.forward.solve as solve_mod
 
     calls = {}
     monkeypatch.setattr(geom_mod, "build_geometry", lambda cfg: calls.setdefault("geom", cfg))
     monkeypatch.setattr(fem_mod, "build_fem", lambda cfg: calls.setdefault("fem", cfg))
     monkeypatch.setattr(sensors_mod, "generate_sensor_array", lambda cfg: calls.setdefault("sensors", cfg))
-    monkeypatch.setattr(solve_mod, "run_forward", lambda cfg: calls.setdefault("forward", cfg))
+    # Forward now defaults to the local multi-core orchestrator.
+    monkeypatch.setattr(local_mod, "run_forward_local", lambda cfg: calls.setdefault("forward", cfg))
 
     cfg = object()
     cli_mod._stage_geom(cfg)
@@ -88,3 +114,51 @@ def test_stage_helpers_delegate_to_library_functions(tmp_path, monkeypatch) -> N
     cli_mod._stage_sensors(cfg)
     cli_mod._stage_forward(cfg)
     assert calls == {"geom": cfg, "fem": cfg, "sensors": cfg, "forward": cfg}
+
+
+# --- prerequisite checking -------------------------------------------------
+
+class _Recorder:
+    """Stand-in for the module logger; keeps formatted messages."""
+
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def _record(self, msg, *args):
+        self.messages.append(msg % args if args else msg)
+
+    info = error = warning = debug = _record
+
+
+def _cfg(tmp_path):
+    from inob.config import load_config
+    return load_config(TINY_CFG, project_root=tmp_path)
+
+
+def test_missing_prerequisites_forward_reports_fem_and_sensors(tmp_path) -> None:
+    unmet = cli_mod.missing_prerequisites(_cfg(tmp_path), ["forward"])
+    assert unmet == [("forward", "fem"), ("forward", "sensors")]
+
+
+def test_missing_prerequisites_satisfied_within_same_run(tmp_path) -> None:
+    stages = ["geom", "fem", "sensors", "forward"]
+    assert cli_mod.missing_prerequisites(_cfg(tmp_path), stages) == []
+
+
+def test_main_returns_2_when_prerequisites_unmet(tmp_path) -> None:
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--stages", "forward",
+    ])
+    assert rc == 2
+
+
+def test_main_suggests_transitively_complete_stage_list(tmp_path, monkeypatch) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(cli_mod, "logger", rec)
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--stages", "forward",
+    ])
+    assert rc == 2
+    assert "build it first: inob run --stages geom,fem,sensors" in rec.messages

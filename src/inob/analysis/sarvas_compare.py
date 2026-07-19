@@ -1,4 +1,25 @@
-"""Sarvas (analytic Biot–Savart) vs FEM comparison for the cervical vagus.
+"""Forward-model ladder — Biot–Savart vs Sarvas vs FEM — for the cervical vagus.
+
+Three MEG forward models of increasing volume-conductor realism are evaluated
+at the same sources and coils, so that consecutive differences isolate one
+physical effect each:
+
+  1. **Biot–Savart** (:func:`inob.analysis.analytic_sphere.infinite_medium_meg_field`)
+     — free-space / infinite homogeneous medium. Primary current only, no
+     boundary anywhere.
+  2. **Sarvas** (:func:`inob.analysis.analytic_sphere.sarvas_meg_field`)
+     — homogeneous sphere. Adds the secondary field from volume currents.
+  3. **FEM** (DUNEuro) — realistic multi-tissue geometry and conductivities.
+
+So rung 1 → 2 quantifies the volume-current contribution with geometry held
+trivial, and rung 2 → 3 quantifies the effect of the real body. Note that
+Sarvas and Biot–Savart are *not* the same model: rung 1 is the Biot–Savart
+law proper, while Sarvas is a bounded-conductor solution built on top of it.
+
+Caveat: radial dipoles are magnetically silent in a sphere, so rung 2 returns
+(near-)zero for sources radial to their local sphere centre while rungs 1 and
+3 do not. Those zeros are a property of the spherical model, not a bug; the
+summary reports how many source/coil pairs are affected.
 
 Method (after Bu et al. 2024, Comm Biol; and the concentric-circle
 parameters in their Sarvas calibration figure):
@@ -62,7 +83,10 @@ from pathlib import Path
 
 import numpy as np
 
-from inob.analysis.analytic_sphere import sarvas_meg_field
+from inob.analysis.analytic_sphere import (
+    infinite_medium_meg_field,
+    sarvas_meg_field,
+)
 from inob.config import Config
 from inob.io.hdf5 import load_fem, load_sensors
 from inob.io.npz import load_leadfield
@@ -73,19 +97,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SarvasGeometry:
-    """Per-source concentric-circle approximation of the cervical region.
+    """Per-source concentric-circle approximation of an elongated structure.
 
-    Each source uses its OWN sphere centre — at the same Z as the source,
-    on the cervical axis (estimated from the bone/source XY-centroid). A
-    single fixed centre across the whole cervical column produces wrong
-    distances for sources well above/below the chosen reference Z.
+    Each source uses its OWN sphere centre — at the same Z as the source, on
+    the structure's central axis (estimated from the bone/source XY-centroid).
+    A single fixed centre across the whole column produces wrong distances for
+    sources well above/below the chosen reference Z.
+
+    All scalar parameters below come from the ``analytic:`` block of the YAML
+    config (:class:`inob.config.AnalyticCfg`); the defaults here exist only so
+    that hand-built instances in tests stay terse.
     """
 
     sphere_centres_mm: np.ndarray   # (S, 3) — one centre per source position
-    axis_xy_mm: np.ndarray          # (2,) — the cervical-axis (X, Y) centre used
-    source_axis_mm: float = 40.0   # nominal source distance from the cervical axis
-    sensor_axis_mm: float = 58.5   # nominal sensor distance from the cervical axis
-                                   # (52 mm skin + 6.5 mm QuSpin standoff)
+    axis_xy_mm: np.ndarray          # (2,) — the structure's axis (X, Y) centre
+    source_axis_mm: float = 40.0    # nominal source distance from the axis
+    sensor_axis_mm: float = 58.5    # nominal sensor distance from the axis
+    band_tolerance_mm: float = 30.0  # half-width of the faithful-sphere band
+    silent_rel_threshold: float = 0.01   # sphere-silent cutoff vs Biot–Savart
+    bootstrap_n: int = 2000
+    bootstrap_seed: int = 0
 
 
 def hamalainen_dipole_moment_nAm(
@@ -181,6 +212,31 @@ def sarvas_predict_at_coils(
     return np.einsum("ij,ij->i", B, coil_orient)
 
 
+def biot_savart_predict_at_coils(
+    source_pos_mm: np.ndarray,
+    moment_direction: np.ndarray,
+    Q_nAm: float,
+    coil_pos_mm: np.ndarray,
+    coil_orient: np.ndarray,
+) -> np.ndarray:
+    """Free-space Biot–Savart field at every coil for one source position.
+
+    Rung 1 of the ladder: no volume conductor. Takes no sphere centre — the
+    infinite-medium field depends only on the source-to-coil separation, so
+    it is invariant to the choice of origin.
+
+    Returns ``(C,)`` scalar field projected on each coil's orientation, in
+    Tesla. Distances are converted to metres internally.
+    """
+    r0_m = np.asarray(source_pos_mm, dtype=np.float64) * 1e-3
+    Q_dir = np.asarray(moment_direction, dtype=np.float64)
+    Q_dir = Q_dir / max(float(np.linalg.norm(Q_dir)), 1e-12)
+    Q_vec_Am = Q_dir * (Q_nAm * 1e-9)
+    sensors_m = np.asarray(coil_pos_mm, dtype=np.float64) * 1e-3
+    B = infinite_medium_meg_field(r0_m, Q_vec_Am, sensors_m)   # (C, 3) Tesla
+    return np.einsum("ij,ij->i", B, coil_orient)
+
+
 def vagus_tangents(source_pos_mm: np.ndarray) -> np.ndarray:
     """Unit tangent at each polyline point (central differences)."""
     diff = np.diff(source_pos_mm, axis=0)
@@ -204,6 +260,8 @@ class SarvasVsFemResult:
     coil_orient: np.ndarray              # (C_radial, 3)
     distance_to_axis_mm: np.ndarray      # (C_radial, S) — coil-axis transverse distance
                                          # in the per-source local sphere frame
+    biot_T: np.ndarray | None = None     # (C_radial, S) — rung 1, free-space
+                                         # Biot–Savart, same projection
 
 
 def _radial_coil_mask(channel_names: list[str]) -> np.ndarray:
@@ -253,6 +311,19 @@ def compare_sarvas_vs_fem(
     L = L[radial]                             # (C_radial, 3*S)
     C, three_S = L.shape
     S = three_S // 3
+    # The leadfield's source count must match the polyline `vagus_sources`
+    # regenerates here; otherwise every downstream array is silently misaligned
+    # (einsum broadcasts a size-1 source axis rather than raising, so a
+    # single-source leadfield would otherwise sail through and produce
+    # meaningless per-source statistics).
+    if S != src_pos.shape[0]:
+        raise ValueError(
+            f"Leadfield has {S} source(s) but the vagus polyline regenerated "
+            f"{src_pos.shape[0]} at spacing {cfg.forward.source_spacing_mm} mm. "
+            f"The leadfield in {cfg.outputs.forward_npz} was computed for a "
+            f"different source set — re-run `inob-forward`, or point the config "
+            f"at the matching leadfield."
+        )
     L3 = L.reshape(C, S, 3)
     fem_T = np.einsum("csm,sm->cs", L3, tangents)
     Q_per_fibre = float(Q_nAm) * (fibre_count or 1)
@@ -261,14 +332,29 @@ def compare_sarvas_vs_fem(
     # Sarvas geometry — moving sphere, one centre per source on the cervical axis.
     axis_xy = estimate_cervical_axis_xy(fem, src_pos)
     centres = build_sphere_centres(src_pos, axis_xy)
-    geom = SarvasGeometry(sphere_centres_mm=centres, axis_xy_mm=axis_xy)
+    a = cfg.analytic
+    geom = SarvasGeometry(
+        sphere_centres_mm=centres,
+        axis_xy_mm=axis_xy,
+        source_axis_mm=a.source_axis_mm,
+        sensor_axis_mm=a.sensor_axis_mm,
+        band_tolerance_mm=a.band_tolerance_mm,
+        silent_rel_threshold=a.silent_rel_threshold,
+        bootstrap_n=a.bootstrap_n,
+        bootstrap_seed=a.bootstrap_seed,
+    )
 
     sarvas_T = np.zeros((C, S), dtype=np.float64)
+    biot_T = np.zeros((C, S), dtype=np.float64)
     distances = np.zeros((C, S), dtype=np.float64)
     for s_idx in range(S):
         sarvas_T[:, s_idx] = sarvas_predict_at_coils(
             src_pos[s_idx], tangents[s_idx], Q_per_fibre,
             coilpos, coilori, sphere_centre_mm=centres[s_idx],
+        )
+        # Rung 1 — no sphere centre needed (translation invariant).
+        biot_T[:, s_idx] = biot_savart_predict_at_coils(
+            src_pos[s_idx], tangents[s_idx], Q_per_fibre, coilpos, coilori,
         )
         # Transverse axis distance for this source's local sphere frame.
         # Use full 3-D distance from the moving centre — the axis is vertical,
@@ -299,27 +385,36 @@ def compare_sarvas_vs_fem(
     )
     scale_fT = 1e15 / max(Q_per_fibre, 1e-30)
     # Literature-band restriction: only (source, coil) pairs whose geometry
-    # is within 30 mm of the literature 40 mm / 58.5 mm concentric-circle
-    # values. Outside this band the single-sphere Sarvas is not a faithful
-    # baseline (the homogeneous-sphere assumption breaks down further out).
-    src_keep = np.abs(src_axis_distances - geom.source_axis_mm) <= 30.0
-    coil_keep_per_src = np.abs(distances - geom.sensor_axis_mm) <= 30.0
+    # is within `analytic.band_tolerance_mm` of the configured source/sensor
+    # axis distances. Outside this band the single-sphere Sarvas is not a
+    # faithful baseline (the homogeneous-sphere assumption breaks down).
+    src_keep = np.abs(src_axis_distances - geom.source_axis_mm) <= geom.band_tolerance_mm
+    coil_keep_per_src = np.abs(distances - geom.sensor_axis_mm) <= geom.band_tolerance_mm
     band = coil_keep_per_src & src_keep[None, :]
     n_band = int(band.sum())
     if n_band:
+        biot_band_peak = np.max(np.abs(biot_T[band])) * scale_fT
         sarvas_band_peak = np.max(np.abs(sarvas_T[band])) * scale_fT
         fem_band_peak = np.max(np.abs(fem_T[band])) * scale_fT
         logger.info(
             "Q = %g nA·m  ·  literature-band (n=%d pairs):  "
+            "Biot–Savart peak %.2f fT/nAm  ·  "
             "Sarvas peak %.2f fT/nAm (%.2f pT @ Q=70)  ·  "
-            "FEM peak %.2f fT/nAm (%.2f pT @ Q=70)  ·  "
-            "FEM/Sarvas = %.2fx",
+            "FEM peak %.2f fT/nAm (%.2f pT @ Q=70)",
             Q_per_fibre, n_band,
+            biot_band_peak,
             sarvas_band_peak,
             sarvas_band_peak * 70.0 / 1000.0,
             fem_band_peak,
             fem_band_peak * 70.0 / 1000.0,
+        )
+        logger.info(
+            "  ladder ratios (band):  Sarvas/Biot = %.2fx (volume-current "
+            "contribution)  ·  FEM/Sarvas = %.2fx (real-geometry "
+            "contribution)  ·  FEM/Biot = %.2fx (total)",
+            sarvas_band_peak / max(biot_band_peak, 1e-30),
             fem_band_peak / max(sarvas_band_peak, 1e-30),
+            fem_band_peak / max(biot_band_peak, 1e-30),
         )
     else:
         logger.warning(
@@ -328,8 +423,9 @@ def compare_sarvas_vs_fem(
             "Reporting full-array peaks instead."
         )
     logger.info(
-        "Full-array peaks  ·  "
+        "Full-array peaks  ·  Biot–Savart %.2f fT/nAm  ·  "
         "Sarvas %.2f fT/nAm  ·  FEM %.2f fT/nAm  ·  FEM/Sarvas = %.2fx",
+        np.max(np.abs(biot_T)) * scale_fT,
         np.max(np.abs(sarvas_T)) * scale_fT,
         np.max(np.abs(fem_T)) * scale_fT,
         np.max(np.abs(fem_T)) / max(np.max(np.abs(sarvas_T)), 1e-30),
@@ -343,6 +439,7 @@ def compare_sarvas_vs_fem(
         coil_pos_mm=coilpos,
         coil_orient=coilori,
         distance_to_axis_mm=distances,
+        biot_T=biot_T,
     )
 
 
@@ -362,9 +459,9 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
         result.source_pos_mm[:, :2] - geom.axis_xy_mm[None, :], axis=1,
     )
 
-    # Literature-band: coils at 58.5 ± 30 mm, sources at 40 ± 30 mm.
-    src_keep = np.abs(src_axis_d - geom.source_axis_mm) <= 30.0
-    coil_keep_per_src = np.abs(result.distance_to_axis_mm - geom.sensor_axis_mm) <= 30.0
+    # Faithful-sphere band, all three numbers from the `analytic:` config block.
+    src_keep = np.abs(src_axis_d - geom.source_axis_mm) <= geom.band_tolerance_mm
+    coil_keep_per_src = np.abs(result.distance_to_axis_mm - geom.sensor_axis_mm) <= geom.band_tolerance_mm
     band_mask = coil_keep_per_src & src_keep[None, :]
 
     def _peak(arr: np.ndarray, mask: np.ndarray | None = None) -> float:
@@ -385,15 +482,42 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
         ratio_lo, ratio_med, ratio_hi = _bootstrap_ratio_ci(
             sarvas_band=result.sarvas_T[band_mask],
             fem_band=result.fem_T[band_mask],
-            n_boot=2000,
-            seed=0,
+            n_boot=geom.bootstrap_n,
+            seed=geom.bootstrap_seed,
         )
     else:
         ratio_lo = ratio_med = ratio_hi = float("nan")
 
+    # Rung 1 (Biot–Savart) statistics. Optional so that result objects built
+    # before the ladder existed still serialise.
+    biot: dict[str, float | int] = {}
+    if result.biot_T is not None:
+        biot_peak_band = _peak(result.biot_T, band_mask) * scale_fT_per_nAm
+        sarvas_peak_band = _peak(result.sarvas_T, band_mask) * scale_fT_per_nAm
+        fem_peak_band = _peak(result.fem_T, band_mask) * scale_fT_per_nAm
+        # Sources that the sphere makes (near-)silent but Biot–Savart does not:
+        # a known artefact of the spherical model, reported so the divergence
+        # is not mistaken for a bug. Threshold is 1% of the Biot–Savart value.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            silent = np.abs(result.sarvas_T) < geom.silent_rel_threshold * np.abs(result.biot_T)
+        biot = {
+            "biot_peak_fT_per_nAm_full": _peak(result.biot_T) * scale_fT_per_nAm,
+            "biot_rms_fT_per_nAm_full":  _rms(result.biot_T)  * scale_fT_per_nAm,
+            "biot_peak_fT_per_nAm_band": biot_peak_band,
+            "ratio_sarvas_to_biot_peak_band": (
+                sarvas_peak_band / max(biot_peak_band, 1e-30)
+            ),
+            "ratio_fem_to_biot_peak_band": (
+                fem_peak_band / max(biot_peak_band, 1e-30)
+            ),
+            "n_sphere_silent_pairs": int(silent.sum()),
+            "n_sphere_silent_pairs_in_band": int((silent & band_mask).sum()),
+        }
+
     summary = {
         "Q_nAm": result.Q_nAm,
         "axis_xy_mm": geom.axis_xy_mm.tolist(),
+        "ladder": "1=Biot-Savart (no boundary), 2=Sarvas (sphere), 3=FEM (multi-tissue)",
         "geometry": "moving-sphere; one centre per source at [axis_x, axis_y, source_z]",
         "n_sources": int(result.source_pos_mm.shape[0]),
         "n_radial_coils": int(result.coil_pos_mm.shape[0]),
@@ -419,7 +543,8 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
         # 95% bootstrap CI on the peak ratio.
         "ratio_fem_to_sarvas_peak_band_ci95": [ratio_lo, ratio_hi],
         "ratio_fem_to_sarvas_peak_band_bootstrap_median": ratio_med,
-        "ratio_fem_to_sarvas_peak_band_bootstrap_n": 2000,
+        "ratio_fem_to_sarvas_peak_band_bootstrap_n": geom.bootstrap_n,
+        **biot,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2))
@@ -459,3 +584,132 @@ def _bootstrap_ratio_ci(
     hi = float(np.percentile(ratios, 100 * (1.0 - alpha)))
     med = float(np.median(ratios))
     return lo, med, hi
+
+
+# ── rung-selective runner (for individual ladder rungs) ─────────────────────
+#
+# `compare_sarvas_vs_fem` computes all three rungs together and requires the FEM
+# leadfield. The GUI wants to run rungs independently — in particular the two
+# analytic rungs (Biot–Savart, Sarvas) need only geometry, no DUNEuro solve, so
+# they can produce an answer in seconds. This reuses the same standalone rung
+# functions; it never loads the leadfield unless the FEM rung is requested.
+
+LADDER_RUNGS: tuple[str, ...] = ("biot", "sarvas", "fem")
+
+_RUNG_LABEL = {
+    "biot": "Biot–Savart (free space, no boundary)",
+    "sarvas": "Sarvas (single homogeneous sphere)",
+    "fem": "FEM (full multi-tissue, DUNEuro)",
+}
+
+
+def _resolve_source_index(n_sources: int, source_idx: int) -> int:
+    """`-1` means the middle source; otherwise clamp into range."""
+    if source_idx < 0:
+        return n_sources // 2
+    return min(source_idx, n_sources - 1)
+
+
+def run_ladder(
+    cfg: Config,
+    *,
+    rungs: list[str] | tuple[str, ...] = LADDER_RUNGS,
+    Q_nAm: float = 1.0,
+    source_idx: int = -1,
+) -> dict:
+    """Compute selected rungs of the Biot–Savart → Sarvas → FEM ladder.
+
+    Each rung predicts the OPM radial-coil field for one source. The analytic
+    rungs (``biot``, ``sarvas``) need only the FEM mesh and sensor array; the
+    ``fem`` rung additionally needs the forward leadfield, so it raises
+    ``FileNotFoundError`` if the DUNEuro solve has not been run.
+
+    Returns a JSON-friendly dict: per-rung peak/RMS field in fT per nA·m, the
+    Sarvas/Biot and FEM/Biot ratios where both are present, and which rungs ran.
+    """
+    wanted = [r for r in LADDER_RUNGS if r in set(rungs)]
+    if not wanted:
+        raise ValueError(
+            f"no valid rungs in {rungs!r}; choose from {', '.join(LADDER_RUNGS)}"
+        )
+
+    fem = load_fem(cfg.outputs.fem_mat)
+    sensors = load_sensors(cfg.outputs.sensors_mat)
+
+    src_pos = vagus_sources(
+        fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
+    )
+    tangents = vagus_tangents(src_pos)
+    s_idx = _resolve_source_index(src_pos.shape[0], source_idx)
+
+    radial = _radial_coil_mask(list(sensors.labels))
+    coilpos = sensors.coilpos[radial]
+    coilori = sensors.coilori[radial]
+
+    to_fT = 1.0e15  # Tesla → femtotesla; Q_nAm=1 makes this fT per nA·m
+
+    def stats(field_T: np.ndarray) -> dict:
+        f = np.abs(np.asarray(field_T, dtype=np.float64))
+        return {
+            "peak_fT_per_nAm": float(f.max()) * to_fT / max(Q_nAm, 1e-30),
+            "rms_fT_per_nAm":
+                float(np.sqrt(np.mean(f ** 2))) * to_fT / max(Q_nAm, 1e-30),
+        }
+
+    results: dict[str, dict] = {}
+
+    if "biot" in wanted:
+        biot = biot_savart_predict_at_coils(
+            src_pos[s_idx], tangents[s_idx], Q_nAm, coilpos, coilori,
+        )
+        results["biot"] = {"label": _RUNG_LABEL["biot"], **stats(biot)}
+
+    if "sarvas" in wanted:
+        axis_xy = estimate_cervical_axis_xy(fem, src_pos)
+        centres = build_sphere_centres(src_pos, axis_xy)
+        sarvas = sarvas_predict_at_coils(
+            src_pos[s_idx], tangents[s_idx], Q_nAm, coilpos, coilori,
+            sphere_centre_mm=centres[s_idx],
+        )
+        results["sarvas"] = {"label": _RUNG_LABEL["sarvas"], **stats(sarvas)}
+
+    if "fem" in wanted:
+        lf = load_leadfield(cfg.outputs.forward_npz)   # raises if not solved yet
+        L = lf.L[radial]
+        C, three_S = L.shape
+        S = three_S // 3
+        if S <= s_idx:
+            raise ValueError(
+                f"Leadfield has {S} source(s) but source index {s_idx} was "
+                f"requested. Re-run the forward solve for this source set."
+            )
+        L3 = L.reshape(C, S, 3)
+        fem_T = np.einsum("cm,m->c", L3[:, s_idx, :], tangents[s_idx]) * (Q_nAm * 1e-9)
+        results["fem"] = {"label": _RUNG_LABEL["fem"], **stats(fem_T)}
+
+    ratios: dict[str, float] = {}
+    if "biot" in results and "sarvas" in results:
+        ratios["sarvas_to_biot"] = (
+            results["sarvas"]["peak_fT_per_nAm"]
+            / max(results["biot"]["peak_fT_per_nAm"], 1e-30)
+        )
+    if "biot" in results and "fem" in results:
+        ratios["fem_to_biot"] = (
+            results["fem"]["peak_fT_per_nAm"]
+            / max(results["biot"]["peak_fT_per_nAm"], 1e-30)
+        )
+    if "sarvas" in results and "fem" in results:
+        ratios["fem_to_sarvas"] = (
+            results["fem"]["peak_fT_per_nAm"]
+            / max(results["sarvas"]["peak_fT_per_nAm"], 1e-30)
+        )
+
+    return {
+        "Q_nAm": Q_nAm,
+        "source_index": s_idx,
+        "n_sources": int(src_pos.shape[0]),
+        "source_pos_mm": [round(float(x), 2) for x in src_pos[s_idx]],
+        "n_radial_coils": int(coilpos.shape[0]),
+        "rungs": results,
+        "ratios": ratios,
+    }

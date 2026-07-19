@@ -43,6 +43,10 @@ class _FakeDriver:
         fields = [self.rng.normal(scale=1e-8, size=self.n_coils) for _ in dipoles]
         return fields, None
 
+    def computeMEGPrimaryField(self, dipoles, driver_cfg):
+        # primary Biot–Savart term (real solve adds this to the transfer field)
+        return [self.rng.normal(scale=1e-8, size=self.n_coils) for _ in dipoles]
+
 
 def _fem_two_source_slabs() -> FemMesh:
     nodes = np.array([

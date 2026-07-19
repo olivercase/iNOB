@@ -18,6 +18,7 @@ from inob.forward.duneuro_driver import (
     attach_coils,
     build_driver,
     build_orthogonal_dipoles,
+    compute_meg_leadfield,
     import_duneuro,
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
@@ -64,8 +65,10 @@ def run_forward(cfg: Config) -> Path:
 
     logger.info("Applying transfer to %d dipoles (3 per source)…", len(dipoles_du))
     t0 = time.time()
-    fields_raw, _ = driver.applyMEGTransfer(T, dipoles_du, driver_cfg)
-    L = np.column_stack([np.asarray(f) for f in fields_raw])
+    # Full MEG field in SI (T per A·m): secondary (transfer) + primary
+    # (Biot–Savart), unit-corrected from DUNEuro mm-mode. See
+    # duneuro_driver.compute_meg_leadfield.
+    L = compute_meg_leadfield(driver, T, dipoles_du, driver_cfg)
     logger.info("  L: %s (%.0f s)", L.shape, time.time() - t0)
 
     L_fT_per_nAm = L * 1e6

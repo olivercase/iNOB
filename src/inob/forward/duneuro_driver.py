@@ -138,3 +138,42 @@ def build_orthogonal_dipoles(
         for k in range(3):
             dipoles.append(dp.Dipole3d(p, eye3[k]))
     return dipoles
+
+
+# DUNEuro is run in mm-mode (mesh coordinates in mm, conductivities in S/mm).
+# Its MEG core computes the raw Biot–Savart kernel from mesh coordinates and
+# applies the SI prefactor μ0/4π = 1e-7 T·m/A outside the integral, so the
+# magnetic field it returns is a fixed factor larger than SI Tesla per (A·m).
+# Because the field scales as length^-2 (the (r)/|r|^3 kernel integrated over a
+# fixed dipole moment), the mm/m convention introduces a single geometry- and
+# conductivity-independent constant. Measured against the Sarvas analytic sphere
+# it is exactly 10.0 to machine precision (see
+# inob.analysis.sphere_calibration.calibrate_meg_factor), so the raw field is
+# converted to SI by multiplying by 0.1.
+MEG_MM_MODE_TO_SI: float = 0.1
+
+
+def compute_meg_leadfield(
+    driver: Any,
+    transfer_matrix: np.ndarray,
+    dipoles_du: list[Any],
+    driver_cfg: dict[str, Any],
+) -> np.ndarray:
+    """Full MEG leadfield in SI units (Tesla per A·m), (n_coils, n_dipoles).
+
+    The DUNEuro MEG transfer matrix yields ONLY the secondary (volume-current)
+    field. The primary Biot–Savart field of the source itself must be added
+    separately via ``computeMEGPrimaryField`` — it is not part of the transfer
+    result and ``post_process_meg`` does not add it. Omitting it makes the
+    leadfield collapse to ~zero for sources radial to a spherical conductor
+    (where the entire signal is primary) and wrong everywhere else.
+
+    Both contributions are returned in DUNEuro mm-mode units; their sum is
+    rescaled to SI by :data:`MEG_MM_MODE_TO_SI`. ``driver_cfg`` must already
+    carry the ``source_model`` entry.
+    """
+    secondary_raw, _ = driver.applyMEGTransfer(transfer_matrix, dipoles_du, driver_cfg)
+    primary_raw = driver.computeMEGPrimaryField(dipoles_du, driver_cfg)
+    secondary = np.column_stack([np.asarray(f) for f in secondary_raw])
+    primary = np.column_stack([np.asarray(f) for f in primary_raw])
+    return (secondary + primary) * MEG_MM_MODE_TO_SI

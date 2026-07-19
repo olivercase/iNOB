@@ -54,8 +54,10 @@ def _stage_sensors(cfg: Config) -> object:
 
 
 def _stage_forward(cfg: Config) -> object:
-    from inob.forward.solve import run_forward
-    return run_forward(cfg)
+    # Default forward path: local, split across all cores (forward.local_workers,
+    # 0 = all). Falls back to the serial solve for a single worker.
+    from inob.forward.local import run_forward_local
+    return run_forward_local(cfg)
 
 
 def _stage_viz(cfg: Config) -> object:
@@ -132,8 +134,43 @@ def run_pipeline(
     return statuses
 
 
+# What each stage needs on disk before it can start. Checked at the CLI layer
+# so `--stages forward` reports a missing mesh up front instead of failing
+# several minutes deep inside the solver.
+STAGE_REQUIRES: dict[str, tuple[str, ...]] = {
+    "geom": (),
+    "fem": ("geom",),
+    "sensors": ("geom",),
+    "forward": ("fem", "sensors"),
+    "viz": ("geom", "fem"),
+}
+
+
+def missing_prerequisites(
+    cfg: Config, stages: list[str],
+) -> list[tuple[str, str]]:
+    """Return ``(stage, unmet_prerequisite)`` pairs for this stage selection.
+
+    A prerequisite is satisfied if it is also being run now, or if its outputs
+    already exist on disk.
+    """
+    requested = set(stages)
+    unmet: list[tuple[str, str]] = []
+    for name in stages:
+        for prereq in STAGE_REQUIRES.get(name, ()):
+            if prereq in requested:
+                continue
+            if not _all_outputs_exist(cfg, STAGES[prereq]):
+                unmet.append((name, prereq))
+    return unmet
+
+
 def _parse_stages(arg: str | None) -> list[str]:
-    if not arg or arg.lower() == "all":
+    # `None` means "flag omitted" → run everything. But an *explicit* empty or
+    # whitespace value (e.g. `--stages ""` from an unset shell variable) is a
+    # mistake: silently running the entire pipeline, including a slow forward
+    # solve, is the wrong thing to do on what is almost certainly a typo.
+    if arg is None or arg.lower() == "all":
         return list(ALL_STAGES)
     out: list[str] = []
     for s in arg.split(","):
@@ -143,11 +180,28 @@ def _parse_stages(arg: str | None) -> list[str]:
         if s not in STAGES:
             raise ValueError(f"unknown stage {s!r}; valid: {', '.join(STAGES)}")
         out.append(s)
+    if not out:
+        raise ValueError(
+            f"no stages selected from {arg!r}; pass a comma-separated subset "
+            f"of {', '.join(STAGES)}, or 'all'"
+        )
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=run_pipeline.__doc__)
+    p = argparse.ArgumentParser(
+        description="Build anatomy, mesh, sensors and leadfield, in order. "
+                    "Stages whose outputs already exist are skipped.",
+        epilog=(
+            "examples:\n"
+            "  inob run                          everything that's missing\n"
+            "  inob run --stages geom,fem        anatomy and mesh only\n"
+            "  inob run --force --stages fem     rebuild the mesh\n"
+            "  inob run --set fem.pitch_mm=2.0   finer mesh\n"
+            "\nCheck progress at any time with `inob status`."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument(
         "--stages", default="all",
@@ -172,6 +226,30 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.skip_viz and "viz" in stages:
         stages.remove("viz")
+
+    unmet = missing_prerequisites(cfg, stages)
+    if unmet:
+        for stage, prereq in unmet:
+            logger.error("stage %r needs %r, which has not been built",
+                         stage, prereq)
+        # Expand transitively: 'fem' is no use as a suggestion if 'geom' is
+        # missing too. Report them in pipeline order.
+        needed: set[str] = set()
+        pending = [prereq for _, prereq in unmet]
+        while pending:
+            name = pending.pop()
+            if name in needed:
+                continue
+            needed.add(name)
+            pending.extend(
+                req for req in STAGE_REQUIRES.get(name, ())
+                if not _all_outputs_exist(cfg, STAGES[req])
+            )
+        ordered = [s for s in ALL_STAGES if s in needed]
+        logger.error("build it first: inob run --stages %s",
+                     ",".join(ordered))
+        logger.error("or let the pipeline sort it out: inob run")
+        return 2
 
     logger.info("running stages: %s", stages)
     statuses = run_pipeline(cfg, stages=stages, force=args.force)

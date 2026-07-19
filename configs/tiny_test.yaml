@@ -67,6 +67,7 @@ forward:
   source_spacing_mm: 10.0
   source_tissue: vagus_left
   duneuro_path: null
+  local_workers: 1             # serial: tests must not spawn process pools
   solver:
     type: cg
     reduction: 1.0e-8
@@ -107,6 +108,15 @@ cluster:
 sensitivity:
   perturbations: [1.0]
   tissues: ["skin"]
+
+analytic:
+  # Tiny geometry — wide band so the smoke test keeps some pairs in-band.
+  source_axis_mm: 40.0
+  sensor_axis_mm: 58.5
+  band_tolerance_mm: 1000.0
+  silent_rel_threshold: 0.01
+  bootstrap_n: 50
+  bootstrap_seed: 0
 
 reproducibility:
   seed: 0

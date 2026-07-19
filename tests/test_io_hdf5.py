@@ -110,17 +110,24 @@ def test_fem_validate_rejects_noncontiguous_tissues() -> None:
 
 
 def test_fem_load_legacy_artifact() -> None:
-    """The existing fem_vagus.mat (in outputs/fem/) must load + validate."""
+    """A locally-built fem_vagus.mat (in outputs/fem/) must load + validate.
+
+    Asserts structural invariants only — NOT a hardcoded tissue list. The set
+    of tissues is config-driven (adding spinal_cord, or any structure, changes
+    it), so pinning an exact tuple here would make an ordinary config change
+    fail an unrelated I/O test.
+    """
     artifact = REPO_ROOT / "outputs" / "fem" / "fem_vagus.mat"
     if not artifact.exists():
-        pytest.skip("legacy FEM artifact not present")
+        pytest.skip("FEM artifact not present")
     mesh = load_fem(artifact)
     validate_fem(mesh)
-    assert mesh.tissue_labels == (
-        "vagus_left", "vagus_right", "blood_vessel", "muscle", "bone", "skin",
-    )
     assert mesh.nodes.shape[1] == 3
     assert mesh.tets.shape[1] == 4
+    assert len(mesh.tissue_labels) >= 1
+    assert all(isinstance(t, str) and t for t in mesh.tissue_labels)
+    # Every tissue id used by a tet must have a corresponding label.
+    assert int(mesh.tissue.max()) <= len(mesh.tissue_labels)
 
 
 def test_fem_load_legacy_geometry() -> None:

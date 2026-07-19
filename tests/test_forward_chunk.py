@@ -40,6 +40,10 @@ class _FakeDriver:
         fields = [np.full(self.n_coils, float(i)) for i in range(len(dipoles))]
         return fields, None
 
+    def computeMEGPrimaryField(self, dipoles, driver_cfg):
+        # zero primary keeps the chunk fixture's L values deterministic
+        return [np.zeros(self.n_coils) for _ in dipoles]
+
 
 def _fem_two_source_slabs() -> FemMesh:
     nodes = np.array([
