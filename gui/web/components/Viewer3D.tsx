@@ -119,22 +119,30 @@ function snapToGeometries(point: THREE.Vector3, geoms: THREE.BufferGeometry[]): 
 function CameraRig({
   meshes,
   recenter,
+  loading,
   controls,
   onFit,
 }: {
   meshes: LoadedMesh[];
   recenter: number;
+  loading: boolean;
   controls: React.RefObject<{ target: THREE.Vector3; update: () => void } | null>;
   onFit: (size: number) => void;
 }) {
   const { camera } = useThree();
-  const fitted = useRef(false);
+  // We lock the view once the anatomy is fully loaded so toggling a tissue
+  // doesn't move it. Until then we keep refitting as meshes stream in — fitting
+  // to the first mesh that happens to arrive would frame the wrong thing.
+  const locked = useRef(false);
+  const lastRecenter = useRef(recenter);
   useEffect(() => {
     if (!meshes.length) {
-      fitted.current = false;
+      locked.current = false;
       return;
     }
-    if (fitted.current && recenter === 0) return;
+    const recenterRequested = recenter !== lastRecenter.current;
+    if (locked.current && !recenterRequested) return;
+
     const box = new THREE.Box3();
     for (const m of meshes) {
       m.geometry.computeBoundingBox();
@@ -152,9 +160,11 @@ function CameraRig({
       controls.current.target.copy(center);
       controls.current.update();
     }
-    fitted.current = true;
     onFit(size);
-  }, [meshes, recenter, camera, controls, onFit]);
+    lastRecenter.current = recenter;
+    // Only consider the view settled once nothing else is still loading.
+    if (!loading) locked.current = true;
+  }, [meshes, recenter, loading, camera, controls, onFit]);
   return null;
 }
 
@@ -236,7 +246,7 @@ export default function Viewer3D({
         <directionalLight position={[1, 1.2, 0.8]} intensity={1.1} />
         <directionalLight position={[-1, -0.4, -1]} intensity={0.35} />
 
-        <CameraRig meshes={loaded} recenter={recenter} controls={controls} onFit={setModelSize} />
+        <CameraRig meshes={loaded} recenter={recenter} loading={loading} controls={controls} onFit={setModelSize} />
 
         <group onClick={handleClick} onPointerMove={handleMove} onPointerMissed={() => placing && setMissed(true)}>
           {shown.map((m) => {
@@ -265,7 +275,7 @@ export default function Viewer3D({
         {placing && hover && (
           <mesh position={hover} renderOrder={10}>
             <sphereGeometry args={[markerR, 20, 20]} />
-            <meshBasicMaterial color="#5ad1c4" transparent opacity={0.45} depthTest={false} />
+            <meshBasicMaterial color="#df472a" transparent opacity={0.45} depthTest={false} />
           </mesh>
         )}
 
@@ -282,8 +292,8 @@ export default function Viewer3D({
               >
                 <sphereGeometry args={[markerR * (sel ? 1.45 : 1), 24, 24]} />
                 <meshStandardMaterial
-                  color={sel ? "#7ef9ec" : "#5ad1c4"}
-                  emissive={sel ? "#2bb6a6" : "#1f7d72"}
+                  color={sel ? "#ff7a5c" : "#df472a"}
+                  emissive={sel ? "#c0361a" : "#7d2410"}
                   emissiveIntensity={sel ? 1.1 : 0.6}
                   depthTest={false}
                 />
@@ -305,8 +315,10 @@ export default function Viewer3D({
         </GizmoHelper>
       </Canvas>
 
-      {/* Top-left controls */}
-      <div className="viewerHud viewerHud--tl">
+      {/* Top-left controls. The HUD sits over the dark well, so its Blueprint
+          controls use the dark theme (light text) even though the app chassis
+          around it is light. */}
+      <div className="viewerHud viewerHud--tl bp6-dark">
         <Button
           icon={placing ? "selection" : "new-object"}
           intent={placing ? "primary" : "none"}
@@ -331,7 +343,7 @@ export default function Viewer3D({
       </div>
 
       {/* Bottom-left status: load state, errors, live coordinate readout. */}
-      <div className="viewerHud viewerHud--bl">
+      <div className="viewerHud viewerHud--bl bp6-dark">
         {loading && !loaded.length ? (
           <Tag minimal icon="cloud-download">
             loading anatomy…

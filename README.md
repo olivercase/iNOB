@@ -64,29 +64,69 @@ BASE=/Volumes/UCL/duneuro_build
 
 ## Run the full pipeline
 
+**The whole workflow is two steps: edit one file, run one command.**
+
+```bash
+#  1. Edit the config — this one file controls the entire run:
+#        anatomy, mesh resolution, sensors, conductivities, solver, noise.
+$EDITOR configs/default.yaml
+
+#  2. Run everything, start to finish, in one command:
+inob run
+```
+
+That's it. `inob run` takes the STL meshes in `data/` all the way to a
+calibrated leadfield in `outputs/forward/`, running each stage in order
+(anatomy → FEM → sensors → forward solve → figures) and skipping any whose
+output already exists. Nothing else needs editing — every knob lives in the
+config file.
+
+Two conveniences that don't change the model, only how you invoke it:
+
+- **Try a change without editing the file:** `inob run --set fem.pitch_mm=2.0`
+  overrides any config field for one run (repeatable). Good for sweeps.
+- **Keep separate setups side by side:** `inob run --config configs/mine.yaml`
+  points at a different file. Copy `default.yaml`, edit the copy, keep both.
+
+```bash
+inob status            # (optional) shows what's built and what's stale
+inob run               # the one command — builds everything that's missing
+inob run --force       # rebuild from scratch, ignoring cached outputs
+```
+
+Everything past this point is detail: individual stages, analysis commands,
+and how to inspect results.
+
+---
+
 `configs/default.yaml` is the single source of truth for paths, mesh sizes,
 sensor params, conductivities, and solver settings. Override any field with
 `--set key.path=value`.
 
-```bash
-# Build anatomy → FEM → sensor array → forward solve → figures, in order.
-# Stages whose outputs already exist are skipped (use --force to rebuild).
-inob-pipeline --stages all                       # needs duneuropy for 'forward'
-inob-pipeline --stages geom,fem,sensors          # everything except the solve
-```
-
-Individual stages (same effect, finer control):
+The pipeline runs through one command, `inob`:
 
 ```bash
-inob-build-geom        # STLs → watertight geometry
-inob-build-fem         # geometry → multi-tissue tetrahedral FEM
-inob-sensors           # place the OPM triaxial array
-inob-electrodes        # place the HD-EMG surface patch
-inob-forward           # MEG leadfield via DUNEuro
-inob-eeg               # EEG leadfield via DUNEuro
-inob-topoplot --target dual    # MEG + EEG field topoplots
-inob-detect            # trials-to-detect for the configured sources
+inob doctor            # check this machine can run the pipeline
+inob status            # what's built, and what to run next
+inob run               # anatomy → FEM → sensors → leadfield → figures
+inob detect            # trials-to-detect for the configured sources
 ```
+
+`inob run` skips stages whose outputs already exist; `--force` rebuilds them,
+`--stages geom,fem,sensors` runs a subset (everything except the solve).
+
+| Group | Commands |
+| --- | --- |
+| Start here | `doctor` · `status` · `run` |
+| Build the model | `build-geom` · `build-fem` · `sensors` · `electrodes` |
+| Solve | `forward` (MEG) · `eeg` |
+| Analyse | `detect` · `snr` · `sensitivity` · `location` · `cross` · `physiology` · `cap-compare` |
+| Validate | `sarvas` · `calibrate` |
+| Figures | `topoplot` · `visualise` |
+
+`inob --help` lists them all; `inob <command> --help` documents one. The older
+`inob-*` binaries (`inob-pipeline`, `inob-build-fem`, …) still work unchanged —
+`inob run` and `inob-pipeline` are the same code.
 
 ## Example: field from a neck muscle (around C7)
 
@@ -97,7 +137,7 @@ neck muscle, pointing along the muscle's long axis.
 torso skin using the Sarvas single-sphere solution.
 
 ```bash
-inob-pipeline --stages geom                    # build the skin surface once
+inob run --stages geom                         # build the skin surface once
 python scripts/muscle_field_sarvas.py          # default: scalene group at C7
 python scripts/muscle_field_sarvas.py sternocleido   # or any muscle substring
 # writes outputs/muscle_skin_topoplot.png
@@ -108,9 +148,9 @@ dipoles with `forward.point_sources` (mm, in the atlas frame). The coordinates
 below are the centroids of the left/right scalenus anterior and medius:
 
 ```bash
-inob-pipeline --stages all --set \
+inob run --stages all --set \
   'forward.point_sources=[[33.8,-88.4,1379.8],[34.8,-78.4,1391.0],[-34.7,-88.1,1381.0],[-36.1,-78.4,1392.6]]'
-inob-topoplot --target meg --source-idx 0      # field map for source 0
+inob topoplot --target meg --source-idx 0      # field map for source 0
 ```
 
 Muscle is a FEM tissue by default (`fem.tissues` includes `muscle`,

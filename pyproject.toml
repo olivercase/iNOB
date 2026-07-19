@@ -51,6 +51,11 @@ gui = [
 ]
 
 [project.scripts]
+# The entry point: `inob <command>`. Run `inob --help` for the command list.
+inob            = "inob.cli.main:main"
+
+# Legacy one-binary-per-stage names, kept so existing scripts, the Makefile,
+# and the cluster job files keep working. `inob <command>` is the same code.
 inob-pipeline   = "inob.cli.pipeline:main"
 inob-build-geom = "inob.cli.build_geom:main"
 inob-build-fem  = "inob.cli.build_fem:main"
@@ -61,6 +66,7 @@ inob-eeg        = "inob.cli.run_eeg:main"
 inob-snr        = "inob.cli.snr:main"
 inob-sensitivity = "inob.cli.sensitivity:main"
 inob-sarvas     = "inob.cli.sarvas:main"
+inob-ladder     = "inob.cli.ladder:main"
 inob-cross      = "inob.cli.cross_modality:main"
 inob-detect     = "inob.cli.detectability:main"
 inob-location   = "inob.cli.location:main"

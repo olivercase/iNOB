@@ -34,7 +34,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from gui.backend import cluster
+from gui.backend import cluster, duneuro_setup
 from inob.analysis.detect import compute_detectability
 from inob.cli.pipeline import ALL_STAGES, run_pipeline
 from inob.config import ConfigError, load_config
@@ -163,6 +163,91 @@ def reset_config() -> dict[str, Any]:
     return get_config()
 
 
+# ── DUNEuro solver engine setup ────────────────────────────────────────────────
+#
+# The forward solve needs the compiled ``duneuropy`` extension. This lets the
+# user point the solver at a local build from the GUI and see, honestly, whether
+# this backend can actually load it (a build is tied to one Python version).
+
+def _active_duneuro_path() -> str | None:
+    raw, _ = _read_raw_safe(_active_config_path())
+    value = (raw.get("forward") or {}).get("duneuro_path")
+    return str(value) if value else None
+
+
+# ── forward-model ladder (Biot–Savart → Sarvas → FEM) ──────────────────────
+
+@app.post("/api/ladder")
+def run_ladder_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run selected rungs of the analytic ladder for the current config.
+
+    Same principle as the pipeline run — it loads the working config and calls
+    the same ``run_ladder`` the CLI uses. The ladder is the *validation* path:
+    it benchmarks the configured vagus source polyline (picked by
+    ``source_idx``), not the clicked planning sources. The analytic rungs need
+    no DUNEuro; the fem rung needs the leadfield and 409s cleanly without it.
+    """
+    from inob.analysis.sarvas_compare import LADDER_RUNGS, run_ladder
+
+    rungs = payload.get("rungs") or list(LADDER_RUNGS)
+    rungs = [r for r in rungs if r in LADDER_RUNGS]
+    if not rungs:
+        raise HTTPException(status_code=422,
+                            detail={"errors": ["no valid rungs requested"]})
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    try:
+        return run_ladder(
+            cfg, rungs=rungs,
+            Q_nAm=float(payload.get("Q_nAm", 1.0)),
+            source_idx=int(payload.get("source_idx", -1)),
+        )
+    except FileNotFoundError as e:
+        # Almost always: fem rung requested but geometry/mesh/leadfield missing.
+        raise HTTPException(
+            status_code=409,
+            detail={"errors": [str(e)],
+                    "hint": "Build the model first (Run), or drop the fem rung "
+                            "to compare only the analytic rungs."},
+        ) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+
+@app.get("/api/duneuro")
+def duneuro_status() -> dict[str, Any]:
+    """Report the running interpreter and any local DUNEuro builds found."""
+    return duneuro_setup.discover(_active_duneuro_path())
+
+
+@app.post("/api/duneuro")
+def set_duneuro_path(payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist ``forward.duneuro_path`` into the working config (or clear it).
+
+    Same principle as every other GUI edit: it writes the YAML the pipeline
+    reads. An empty/null path means "use whatever duneuropy the interpreter
+    already has".
+    """
+    path = (payload or {}).get("path")
+    path = str(path).strip() if path else None
+
+    raw, errors = _read_raw_safe(_active_config_path())
+    if errors:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+    raw.setdefault("forward", {})["duneuro_path"] = path
+    validation = _validate_raw(raw)
+    if validation:
+        raise HTTPException(status_code=422, detail={"errors": validation})
+    WORKING_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    with WORKING_CONFIG.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, sort_keys=False)
+    return duneuro_setup.discover(path)
+
+
 # ── meshes (for the 3-D viewer) ────────────────────────────────────────────────
 #
 # The viewer shows the whole multi-tissue anatomy, one toggle per tissue. Each
@@ -260,7 +345,7 @@ def _merged_stl(name: str, paths: list[Path]) -> Path | None:
         mesh = concat_stls(list(paths), check_units_mm=False)
         mesh.export(cached, file_type="stl")  # binary STL
         return cached
-    except Exception as e:  # noqa: BLE001 — surfaced as a missing tissue, logged
+    except Exception as e:
         logger.warning("mesh merge failed for %s (%d files): %s", name, len(paths), e)
         return None
 
@@ -422,9 +507,9 @@ async def run_ws(ws: WebSocket) -> None:
                 stages = [s for s in stages_in if s in ALL_STAGES]
             statuses = run_pipeline(cfg, stages=stages, force=force)
             result["statuses"] = statuses
-            # Turn the solved leadfield into the planning answer. Best-effort:
-            # if the required leadfield was not produced, the client falls back
-            # to its own estimate (see API_CONTRACT.md).
+            # Turn the solved leadfield into the planning answer. If the
+            # leadfield is missing we report *why* rather than returning
+            # nothing — the client shows the reason instead of guessing.
             try:
                 result["detect"] = compute_detectability(
                     cfg, strengths_nAm=strengths or None,
@@ -432,6 +517,14 @@ async def run_ws(ws: WebSocket) -> None:
                 )
             except FileNotFoundError as e:
                 logger.info("detectability skipped (no leadfield yet): %s", e)
+                result["detect_unavailable"] = {
+                    "reason": "No leadfield has been computed yet, so "
+                              "trials-to-detect cannot be calculated.",
+                    "detail": str(e),
+                    "hint": "Run the full pipeline including the forward "
+                            "solve. That stage needs DUNEuro (duneuropy) "
+                            "installed, or submit it to the cluster.",
+                }
         except Exception as e:  # surfaced to the client, not swallowed
             error["message"] = f"{type(e).__name__}: {e}"
         finally:
@@ -453,7 +546,11 @@ async def run_ws(ws: WebSocket) -> None:
         else:
             if "detect" in result:
                 await ws.send_json({"type": "result", "detect": result["detect"]})
-            await ws.send_json({"type": "done", "statuses": result.get("statuses", {})})
+            await ws.send_json({
+                "type": "done",
+                "statuses": result.get("statuses", {}),
+                "detect_unavailable": result.get("detect_unavailable"),
+            })
     except WebSocketDisconnect:
         pass
     finally:

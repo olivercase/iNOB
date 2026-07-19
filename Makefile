@@ -1,7 +1,8 @@
-.PHONY: install install-dev lint test pipeline geom fem sensors forward viz clean clean-outputs
+.PHONY: install install-dev lint test doctor status pipeline geom fem sensors forward viz clean clean-outputs
 
 PYTHON ?= python
 CONFIG ?= configs/default.yaml
+INOB = $(PYTHON) -m inob.cli.main
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -15,23 +16,29 @@ lint:
 test:
 	$(PYTHON) -m pytest -q
 
+doctor:
+	$(INOB) doctor --config $(CONFIG)
+
+status:
+	$(INOB) status --config $(CONFIG)
+
 pipeline:
-	$(PYTHON) -m inob.cli.pipeline --config $(CONFIG)
+	$(INOB) run --config $(CONFIG)
 
 geom:
-	$(PYTHON) -m inob.cli.build_geom --config $(CONFIG)
+	$(INOB) build-geom --config $(CONFIG)
 
 fem:
-	$(PYTHON) -m inob.cli.build_fem --config $(CONFIG)
+	$(INOB) build-fem --config $(CONFIG)
 
 sensors:
-	$(PYTHON) -m inob.cli.generate_sensors --config $(CONFIG)
+	$(INOB) sensors --config $(CONFIG)
 
 forward:
-	$(PYTHON) -m inob.cli.run_forward --config $(CONFIG)
+	$(INOB) forward --config $(CONFIG)
 
 viz:
-	$(PYTHON) -m inob.cli.visualise --config $(CONFIG)
+	$(INOB) visualise --config $(CONFIG)
 
 clean:
 	rm -rf build dist *.egg-info src/*.egg-info

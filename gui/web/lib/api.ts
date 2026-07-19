@@ -43,7 +43,15 @@ export interface DetectResult {
     noise_unit?: string;
     threshold_snr: number;
   };
-  mocked?: boolean;
+}
+
+// Sent instead of a result when the backend could not compute detectability —
+// almost always because no leadfield exists yet. The UI shows this verbatim
+// rather than substituting an estimate of its own.
+export interface DetectUnavailable {
+  reason: string;
+  detail?: string;
+  hint?: string;
 }
 
 export async function getHealth(): Promise<{ status: string } | null> {
@@ -95,7 +103,10 @@ export interface RunHandlers {
   onLog: (line: string) => void;
   onStatuses?: (statuses: Record<string, string>) => void;
   onResult?: (detect: DetectResult) => void;
-  onDone: (statuses: Record<string, string>) => void;
+  onDone: (
+    statuses: Record<string, string>,
+    unavailable?: DetectUnavailable,
+  ) => void;
   onError: (message: string) => void;
 }
 
@@ -129,7 +140,10 @@ export function runSimulation(
       case "done":
         lastStatuses = (msg.statuses as Record<string, string>) ?? lastStatuses;
         handlers.onStatuses?.(lastStatuses);
-        handlers.onDone(lastStatuses);
+        handlers.onDone(
+          lastStatuses,
+          (msg.detect_unavailable as DetectUnavailable | null) ?? undefined,
+        );
         ws.close();
         break;
       case "error":
@@ -145,23 +159,104 @@ export function runSimulation(
   return () => ws.close();
 }
 
-// Dev fallback: ask the local mock route for a detectability estimate when the
-// backend does not (yet) emit a {type:"result"} message. See app/api/detect.
-export async function detectFallback(
-  sources: PointSource[],
-  thresholdSnr: number,
-  noiseFloorFt: number,
-): Promise<DetectResult | null> {
+// ── forward-model ladder ────────────────────────────────────────────────────
+
+export type LadderRung = "biot" | "sarvas" | "fem";
+
+export interface LadderResult {
+  Q_nAm: number;
+  source_index: number;
+  n_sources: number;
+  source_pos_mm: number[];
+  n_radial_coils: number;
+  rungs: Record<
+    string,
+    { label: string; peak_fT_per_nAm: number; rms_fT_per_nAm: number }
+  >;
+  ratios: Record<string, number>;
+}
+
+// Runs the analytic ladder on the configured vagus polyline. Returns {result}
+// on success, or {error, hint} when the backend can't (e.g. the fem rung with
+// no leadfield yet).
+export async function runLadder(
+  rungs: LadderRung[],
+): Promise<{ result?: LadderResult; error?: string; hint?: string }> {
   try {
-    const r = await fetch("/api/detect", {
+    const r = await fetch("/api/ladder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sources,
-        threshold_snr: thresholdSnr,
-        noise_floor_fT: noiseFloorFt,
-      }),
+      body: JSON.stringify({ rungs }),
     });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const detail = body.detail ?? body;
+      return {
+        error: (detail.errors ?? [`request failed: ${r.status}`]).join("; "),
+        hint: detail.hint,
+      };
+    }
+    return { result: body as LadderResult };
+  } catch (e) {
+    return { error: `could not reach the backend: ${String(e)}` };
+  }
+}
+
+// ── DUNEuro solver engine setup ────────────────────────────────────────────
+
+export interface DuneuroCandidate {
+  path: string;
+  module: string;
+  label: string;
+  python_tag: string;
+  importable: boolean;
+  note: string;
+}
+
+export interface DuneuroStatus {
+  running: {
+    executable: string;
+    python: string;
+    duneuropy_importable: boolean;
+    duneuropy_location: string | null;
+  };
+  candidates: DuneuroCandidate[];
+  active_path: string | null;
+  hint: string;
+}
+
+export async function getDuneuro(): Promise<DuneuroStatus | null> {
+  try {
+    const r = await fetch("/api/duneuro", { cache: "no-store" });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+// Persist forward.duneuro_path (empty string clears it). Returns fresh status.
+export async function setDuneuroPath(
+  path: string | null,
+): Promise<DuneuroStatus | null> {
+  try {
+    const r = await fetch("/api/duneuro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path ?? "" }),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+// Revert the working config back to the shipped defaults. The backend has
+// always supported this; the old UI just never offered a way to call it.
+export async function resetConfig(): Promise<{ config: Cfg } | null> {
+  try {
+    const r = await fetch("/api/config/reset", { method: "POST" });
     if (!r.ok) return null;
     return await r.json();
   } catch {

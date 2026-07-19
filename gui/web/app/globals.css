@@ -1,178 +1,712 @@
-/* iNOB GUI — layout + a refined dark theme on top of Blueprint (bp6-dark).
-   Blueprint styles the controls; this file owns the shell, panels, the 3-D
-   viewer overlays, and the small bespoke widgets (source rows, big number). */
+/* iNOB — "instrument panel" design language.
+ *
+ * The product plans the detection of femtotesla nerve fields with OPM sensors,
+ * so it is dressed as a lab console rather than a web app: a light, cool,
+ * clinical chassis wrapped around a recessed dark viewer "well" where the
+ * anatomy specimen sits. The accent system is the magnetometer field-map's own
+ * diverging pair — cobalt (negative pole, primary actions) and vermilion
+ * (positive pole, current sources) — so colour carries domain meaning rather
+ * than decoration. Type is Space Grotesk for the chassis and IBM Plex Mono for
+ * every measured quantity; the trials-to-detect readout is the one loud object.
+ */
+
 :root {
-  --bg: #0e1217;          /* app backdrop (darker than bp6 default for depth) */
-  --bg-elev: #161b22;     /* raised surface */
-  --panel: #1b212a;       /* card surface */
-  --panel-2: #202836;     /* card surface, hover/inner */
-  --border: #2b3441;      /* hairline */
-  --border-strong: #3a4657;
-  --accent: #4c8dff;      /* primary blue */
-  --accent-2: #5ad1c4;    /* teal — sources / actions */
-  --text: #e6ebf2;
-  --text-dim: #9aa6b5;
-  --text-mute: #6b7686;
-  --danger: #ff6b6b;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.28);
+  /* chassis */
+  --panel: #e7eaf0;
+  --panel-2: #eef1f6;
+  --card: #ffffff;
+  --well: #080b11; /* recessed 3-D viewer */
+  --well-edge: #00040a;
+
+  /* ink */
+  --ink: #171c24;
+  --ink-dim: #56616f;
+  --ink-mute: #8a94a2;
+
+  /* structure */
+  --line: #d6dce4;
+  --line-strong: #c1c9d4;
+
+  /* field-map poles */
+  --cobalt: #1c50d8;
+  --cobalt-deep: #123da8;
+  --cobalt-wash: #e8eefc;
+  --vermilion: #df472a;
+  --vermilion-deep: #b83617;
+  --amber: #b26a00;
+
+  --font-ui: var(--font-display), "Segoe UI", system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --shadow-card: 0 1px 2px rgba(20, 28, 44, 0.06),
+    0 2px 10px rgba(20, 28, 44, 0.05);
+  --shadow-well: inset 0 2px 3px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+  --radius: 12px;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
-  color: var(--text);
+  color: var(--ink);
+  font-family: var(--font-ui);
   font-size: 14px;
-  background:
-    radial-gradient(1200px 600px at 78% -8%, rgba(76, 141, 255, 0.10), transparent 60%),
-    radial-gradient(900px 500px at 0% 108%, rgba(90, 209, 196, 0.07), transparent 55%),
-    var(--bg);
+  background: var(--panel);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Refined scrollbars so the many scroll panes feel intentional. */
-* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
+/* Blueprint sets its own body font; reassert ours and let controls inherit. */
+.bp6-button,
+.bp6-input,
+.bp6-tag,
+.bp6-html-select select,
+.bp6-callout,
+.bp6-navbar {
+  font-family: var(--font-ui);
+}
+
+.mono,
+.bp6-input[type="number"] {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* scrollbars — quiet, on the light chassis */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
 *::-webkit-scrollbar-thumb {
-  background: var(--border-strong); border-radius: 6px;
-  border: 2px solid transparent; background-clip: padding-box;
+  background: var(--line-strong);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-*::-webkit-scrollbar-thumb:hover { background: #4a5768; background-clip: padding-box; }
 
+/* ── shell ─────────────────────────────────────────────────────────────── */
 .app {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr;
   height: 100vh;
 }
 
-/* ── Navbar ─────────────────────────────────────────────────────────── */
+/* ── header bezel ──────────────────────────────────────────────────────── */
 .app .bp6-navbar {
-  background: linear-gradient(180deg, rgba(27, 33, 42, 0.92), rgba(20, 25, 32, 0.92));
-  backdrop-filter: blur(8px);
-  box-shadow: inset 0 -1px 0 var(--border), 0 1px 12px rgba(0, 0, 0, 0.35);
-  height: 52px;
+  height: 56px;
+  background: linear-gradient(180deg, #fbfcfe, #eef1f6);
+  box-shadow: inset 0 -1px 0 var(--line), 0 1px 0 rgba(255, 255, 255, 0.6);
+  padding: 0 18px;
 }
-.app .bp6-navbar-heading { display: flex; align-items: baseline; gap: 8px; }
+.app .bp6-navbar-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
 .brand {
-  letter-spacing: 0.5px;
-  font-size: 19px;
-  background: linear-gradient(92deg, #7ab6ff, #7ef9ec);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+/* the "o" set as a field dot — a small nod to the topographic maps */
+.brand::first-letter {
+  color: var(--cobalt);
+}
+.subtitle {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
 }
 
-/* ── Main grid ──────────────────────────────────────────────────────── */
-.main {
+/* ── workspace grid ────────────────────────────────────────────────────── */
+.workspace {
   display: grid;
-  grid-template-columns: 1.45fr 1fr;
+  grid-template-columns: minmax(0, 1fr) 428px;
   min-height: 0;
 }
-.col {
-  overflow: auto;
+
+/* left: the specimen well + its control strip */
+.canvas {
+  display: grid;
+  grid-template-rows: 1fr auto;
   min-height: 0;
-  border-right: 1px solid var(--border);
-  padding-bottom: 8px;
+  padding: 16px;
+  gap: 12px;
+  border-right: 1px solid var(--line);
 }
-.col:last-child { border-right: 0; }
 .viewerWrap {
-  position: relative; height: 100%; min-height: 360px;
-  background: radial-gradient(120% 120% at 50% 0%, #10141b 0%, #080a0f 100%);
-}
-.viewerWrap:first-child { border-bottom: 1px solid var(--border); }
-
-/* ── Panels / cards ─────────────────────────────────────────────────── */
-.panel { margin: 12px; }
-.app .bp6-card.panel {
-  background: linear-gradient(180deg, var(--panel), #171c24);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  padding: 14px 16px;
-  transition: border-color 0.15s ease;
-}
-.app .bp6-card.panel:hover { border-color: var(--border-strong); }
-.panel .bp6-form-group { margin-bottom: 8px; }
-.section-title {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px;
-  margin: 0 0 12px; color: var(--text-dim); font-weight: 700;
-  display: flex; align-items: center; gap: 8px;
-}
-.section-title::before {
-  content: ""; width: 3px; height: 12px; border-radius: 2px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
-}
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; }
-.field-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; margin: 6px 0;
-}
-.field-row label { color: var(--text-dim); flex: 1; font-size: 13px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-
-/* ── Bottom dock (console + results) ────────────────────────────────── */
-.bottom {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-top: 1px solid var(--border);
+  position: relative;
   min-height: 0;
-  background: rgba(8, 10, 15, 0.35);
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius);
+  background: radial-gradient(130% 120% at 50% 0%, #10151d 0%, var(--well) 55%, var(--well-edge) 100%);
+  box-shadow: var(--shadow-well);
+  overflow: hidden;
 }
-.bottom > div { border-right: 1px solid var(--border); overflow: auto; max-height: 340px; }
-.bottom > div:last-child { border-right: 0; }
+/* The R3F canvas element fills the well (its container is sized 100% inline). */
+.viewerWrap canvas {
+  display: block;
+  touch-action: none;
+}
+
+.viewer-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+  color: var(--ink-dim);
+  font-size: 12.5px;
+}
+.viewer-legend .bp6-html-select select {
+  font-weight: 600;
+  color: var(--cobalt);
+}
+.legend-spacer {
+  flex: 1;
+}
+
+/* ── right rail: the numbered procedure ────────────────────────────────── */
+.step-rail {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px 20px 40px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each step is a station on the console. A hairline spine connects them, and
+   the badge is the indicator that lights as you advance. */
+.step {
+  position: relative;
+  padding: 0 0 22px 44px;
+}
+.step::before {
+  /* the connecting spine */
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 30px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--line);
+}
+.step:last-child::before {
+  display: none;
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.step-badge {
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--card);
+  color: var(--ink-mute);
+  border: 1.5px solid var(--line-strong);
+  transition: all 0.2s ease;
+}
+.step-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  transition: color 0.2s ease;
+}
+
+.step--active > .step-head .step-badge {
+  color: var(--cobalt);
+  border-color: var(--cobalt);
+  background: var(--cobalt-wash);
+  box-shadow: 0 0 0 4px rgba(28, 80, 216, 0.1);
+}
+.step--active > .step-head .step-title {
+  color: var(--ink);
+}
+.step--done > .step-head .step-badge {
+  color: #fff;
+  background: var(--cobalt);
+  border-color: var(--cobalt);
+}
+.step--done > .step-head .step-title {
+  color: var(--ink-dim);
+}
+
+/* a step that isn't reachable yet recedes */
+.step--todo {
+  opacity: 0.55;
+}
+
+.step-lead {
+  margin: 0 0 12px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+.step-lead b {
+  color: var(--ink);
+}
+
+/* ── panels / cards shared by rail + drawer ────────────────────────────── */
+.panel {
+  margin: 0;
+}
+.bp6-card.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+  padding: 12px 14px;
+}
+.section-title {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin: 0 0 10px;
+  color: var(--ink-mute);
+  font-weight: 600;
+}
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0;
+}
+.field-row label {
+  color: var(--ink-dim);
+  flex: 1;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── run controls ──────────────────────────────────────────────────────── */
+.run-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.run-threshold {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.run-threshold > span {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.run-threshold .bp6-html-select {
+  width: 100%;
+}
+.app .run-controls .bp6-button.bp6-large {
+  height: 46px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.run-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: var(--ink-dim);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
 
 .console {
-  font-family: var(--mono); font-size: 12px; line-height: 1.55;
-  background: #0a0d12; color: #c7d0db; padding: 12px 14px;
-  height: 168px; overflow: auto; white-space: pre-wrap; margin: 12px;
-  border-radius: 8px; border: 1px solid var(--border);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3), inset 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  background: var(--well);
+  color: #b9c5d3;
+  padding: 12px 14px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  border-radius: 8px;
+  border: 1px solid var(--well-edge);
 }
 
-/* ── Source rows ────────────────────────────────────────────────────── */
+/* ── source rows ───────────────────────────────────────────────────────── */
+.srcpanel {
+  padding: 4px 0 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+.srchdr {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
 .srcrow {
-  display: flex; gap: 6px; align-items: center; margin: 4px 0;
-  padding: 4px 7px; border-radius: 7px; cursor: pointer;
-  border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+  padding: 5px 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
 }
-.srcrow:hover { background: rgba(122, 162, 255, 0.07); }
+.srcrow:hover {
+  background: var(--panel-2);
+}
 .srcrow--sel {
-  background: rgba(90, 209, 196, 0.13);
-  border-color: rgba(90, 209, 196, 0.45);
-  box-shadow: 0 0 0 1px rgba(90, 209, 196, 0.12);
+  background: rgba(223, 71, 42, 0.07);
+  border-color: rgba(223, 71, 42, 0.4);
 }
-.srcrow .bp6-input { width: 64px; }
-.srcnum { color: var(--text-mute); font-family: var(--mono); text-align: center; }
-.srcrow--sel .srcnum { color: #7ef9ec; font-weight: 700; }
-
-/* ── Headline number (trials-to-detect) ─────────────────────────────── */
-.big {
-  font-size: 30px; font-weight: 800; font-family: var(--mono);
-  letter-spacing: -0.5px; line-height: 1.1; margin: 2px 0 4px;
-  background: linear-gradient(92deg, #6db3ff, #7ef9ec);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
+.srcrow .bp6-input {
+  width: 58px;
 }
-.mono { font-family: var(--mono); }
+.srcnum {
+  color: var(--vermilion);
+  font-family: var(--mono);
+  font-weight: 600;
+  text-align: center;
+}
 
-/* ── 3-D viewer overlays ────────────────────────────────────────────── */
+/* ── the readout: the one loud object ──────────────────────────────────── */
+.result-headline {
+  padding: 4px 0 2px;
+  border-bottom: 2px solid var(--cobalt);
+  margin-bottom: 12px;
+  display: inline-block;
+}
+.result-number {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: clamp(46px, 9vw, 66px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--cobalt-deep);
+  font-variant-numeric: tabular-nums;
+}
+.result-range {
+  color: var(--cobalt);
+  font-weight: 500;
+}
+.result-unit {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.result-verdict {
+  margin: 0 0 4px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* ── advanced-settings drawer (portaled — styled unscoped) ─────────────── */
+.bp6-drawer {
+  background: var(--panel);
+}
+.bp6-drawer-header {
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.drawer-body {
+  padding: 18px 20px 40px;
+  overflow-y: auto;
+  height: 100%;
+}
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+.drawer-rule {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 22px 0 16px;
+}
+
+.adv-group {
+  margin-bottom: 26px;
+}
+.adv-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  margin: 0 0 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.adv-blurb {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+.adv-field {
+  margin-bottom: 14px;
+}
+.adv-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.adv-field-head label {
+  font-weight: 500;
+  color: var(--ink);
+}
+.adv-unit {
+  color: var(--ink-mute);
+  font-weight: 400;
+}
+.adv-help {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  max-width: 46ch;
+}
+
+/* ── DUNEuro setup picker ──────────────────────────────────────────────── */
+.dun-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.led {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+.led--on {
+  background: #1faa5a;
+  box-shadow: 0 0 0 3px rgba(31, 170, 90, 0.18), 0 0 8px rgba(31, 170, 90, 0.6);
+}
+.led--off {
+  background: var(--amber);
+  box-shadow: 0 0 0 3px rgba(178, 106, 0, 0.16);
+}
+.dun-line {
+  font-weight: 600;
+  color: var(--ink);
+}
+.dun-sub {
+  font-size: 12px;
+  color: var(--ink-mute);
+  font-family: var(--mono);
+  word-break: break-all;
+}
+.dun-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+.dun-field > span {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.dun-custom {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.dun-custom .bp6-input-group {
+  flex: 1;
+}
+.dun code {
+  font-size: 11.5px;
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* ── forward-model ladder ──────────────────────────────────────────────── */
+.rail-extra {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.rail-extra-body {
+  padding: 12px 2px 4px;
+}
+.ladder-rungs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+}
+.ladder-rung {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--card);
+  transition: border-color 0.12s, background 0.12s;
+}
+.ladder-rung--on {
+  border-color: var(--cobalt);
+  background: var(--cobalt-wash);
+}
+.ladder-rung-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ladder-rung-blurb {
+  flex: 1;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.ladder-tag {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+  border: 1px solid rgba(178, 106, 0, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.ladder-ratios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ladder-ratio {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+.ladder-ratio b {
+  font-family: var(--mono);
+  color: var(--cobalt-deep);
+}
+
+/* ── Blueprint accent overrides: bend "primary" to cobalt ──────────────── */
+.bp6-button.bp6-intent-primary,
+.app .bp6-button.bp6-intent-primary {
+  background-color: var(--cobalt);
+}
+.bp6-button.bp6-intent-primary:hover {
+  background-color: var(--cobalt-deep);
+}
+.bp6-tag.bp6-intent-primary {
+  background-color: var(--cobalt);
+}
+.bp6-callout.bp6-intent-primary {
+  background-color: var(--cobalt-wash);
+}
+
+/* ── 3-D viewer overlays (sit over the dark well, so stay dark) ────────── */
 .viewerHud {
-  position: absolute; display: flex; align-items: center; gap: 8px;
-  z-index: 5; pointer-events: none;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+  pointer-events: none;
 }
-.viewerHud > * { pointer-events: auto; }
-.viewerHud--tl { top: 12px; left: 12px; flex-wrap: wrap; max-width: calc(100% - 24px); }
-.viewerHud--bl { bottom: 12px; left: 12px; flex-wrap: wrap; max-width: calc(100% - 24px); }
-.hudSwitch { margin: 0 !important; align-self: center; }
-.hudSwitch .bp6-control-indicator { margin-top: 0; }
-
-/* dipole label rendered in-scene via drei <Html> */
+.viewerHud > * {
+  pointer-events: auto;
+}
+.viewerHud--tl {
+  top: 12px;
+  left: 12px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+.viewerHud--bl {
+  bottom: 12px;
+  left: 12px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+}
+.hudSwitch {
+  margin: 0 !important;
+  align-self: center;
+}
+.hudSwitch .bp6-control-indicator {
+  margin-top: 0;
+}
 .srcLabel {
-  font-family: var(--mono); font-size: 11px; white-space: nowrap;
-  background: rgba(8, 11, 17, 0.9); color: #7ef9ec;
-  border: 1px solid rgba(90, 209, 196, 0.5); border-radius: 5px;
-  padding: 3px 8px; transform: translateY(-150%); pointer-events: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  background: rgba(8, 11, 17, 0.92);
+  color: #ff9d84;
+  border: 1px solid rgba(223, 71, 42, 0.6);
+  border-radius: 5px;
+  padding: 3px 8px;
+  transform: translateY(-150%);
+  pointer-events: none;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* ── responsive: stack the console under the well on narrow viewports ──── */
+@media (max-width: 940px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: 55vh auto;
+    overflow-y: auto;
+  }
+  .canvas {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

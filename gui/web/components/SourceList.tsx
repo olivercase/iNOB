@@ -26,12 +26,12 @@ export default function SourceList({ sources, selected, onSelect, onChange }: Pr
   };
 
   return (
-    <Card className="panel" compact>
-      <h3 className="section-title">Sources ({sources.length})</h3>
-      {sources.length === 0 && (
-        <p className="bp6-text-muted">
-          Click <b>Place source</b> in the viewer to drop dipoles, or add one manually.
-        </p>
+    <Card className="panel srcpanel" compact>
+      {sources.length > 0 && (
+        <div className="srchdr bp6-text-muted">
+          {sources.length} source{sources.length > 1 ? "s" : ""} · position mm ·
+          strength nA·m
+        </div>
       )}
       {sources.map((s, i) => (
         <div
@@ -71,9 +71,8 @@ export default function SourceList({ sources, selected, onSelect, onChange }: Pr
         </div>
       ))}
       <Button icon="add" minimal small onClick={add} style={{ marginTop: 6 }}>
-        Add source
+        Add source manually
       </Button>
-      <span className="bp6-text-muted" style={{ marginLeft: 8 }}>x, y, z mm · strength nA·m</span>
     </Card>
   );
 }
