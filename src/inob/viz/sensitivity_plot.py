@@ -21,6 +21,7 @@ from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
     apply_nature_style,
+    save_figure,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,9 +100,4 @@ def render_sensitivity(
     add_panel_label(ax, "a")
     fig.tight_layout()
 
-    out = Path(out_path) if out_path else (sdir / "sensitivity_comparison.png")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
-    logger.info("[saved] %s", out)
-    return out
+    return save_figure(fig, out_path or (sdir / "sensitivity_comparison.png"), dpi=dpi)

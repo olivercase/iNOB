@@ -9,6 +9,7 @@ import logging
 
 import numpy as np
 
+from inob.config import source_tissue_labels
 from inob.io.hdf5 import FemMesh
 
 logger = logging.getLogger(__name__)
@@ -51,12 +52,46 @@ def vagus_sources(
     return pos
 
 
+def _sample_one(fem: FemMesh, label: str, *, spacing_mm: float) -> np.ndarray:
+    """Sample one tissue, dispatching muscle to its volume-fill sampler."""
+    if label == "muscle":
+        from inob.sources.muscle import muscle_sources
+        return muscle_sources(fem, spacing_mm=spacing_mm)
+    return vagus_sources(fem, label, spacing_mm=spacing_mm)
+
+
+def sample_source_tissues(
+    fem: FemMesh, source_tissue: str, *, spacing_mm: float,
+) -> np.ndarray:
+    """Sample dipoles across one or more comma-separated tissue labels.
+
+    ``source_tissue`` may name a single tissue (``"vagus_left"``) or several
+    (``"spinal_cord,vagus_left"``); positions from each are concatenated. This
+    is what lets the cluster pipeline target vagus, spine, or both.
+
+    ``muscle`` is sampled differently: it is a bulky bilateral tissue, so the
+    Z-slab averaging used for thin midline nerves would place dipoles outside
+    the muscle. It is volume-filled inside the tissue instead (see
+    :func:`inob.sources.muscle.muscle_sources`).
+    """
+    labels = source_tissue_labels(source_tissue)
+    if not labels:
+        raise ValueError(f"source_tissue is empty: {source_tissue!r}")
+    parts = [_sample_one(fem, lab, spacing_mm=spacing_mm) for lab in labels]
+    if len(parts) == 1:
+        return parts[0]
+    pos = np.concatenate(parts, axis=0)
+    logger.info("combined %d dipole positions across tissues %s", len(pos), labels)
+    return pos
+
+
 def resolve_source_positions(cfg, fem: FemMesh) -> np.ndarray:
     """Dipole positions for the forward solve, ``(S, 3)`` mm.
 
     If ``cfg.forward.point_sources`` is set (e.g. points clicked in the GUI),
     those explicit positions are used verbatim; otherwise dipoles are sampled
-    along ``cfg.forward.source_tissue`` at ``cfg.forward.source_spacing_mm``.
+    along ``cfg.forward.source_tissue`` (one or more comma-separated tissues)
+    at ``cfg.forward.source_spacing_mm``.
     """
     if cfg.forward.point_sources:
         pos = np.asarray(cfg.forward.point_sources, dtype=np.float64)
@@ -64,6 +99,6 @@ def resolve_source_positions(cfg, fem: FemMesh) -> np.ndarray:
             raise ValueError(f"point_sources must be (S, 3); got {pos.shape}")
         logger.info("%d explicit point sources (overriding vagus sampling)", len(pos))
         return pos
-    return vagus_sources(
+    return sample_source_tissues(
         fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
     )

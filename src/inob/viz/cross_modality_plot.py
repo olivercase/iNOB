@@ -25,7 +25,7 @@ from inob.analysis.cross_modality import (
     per_source_amplitude,
     predict_meg_from_eeg,
 )
-from inob.config import Config
+from inob.config import Config, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
 from inob.viz.style import (
@@ -34,6 +34,7 @@ from inob.viz.style import (
     apply_nature_style,
     divergent_cmap,
     divergent_norm,
+    save_figure,
 )
 from inob.viz.topoplot import (
     _draw_eeg_2d_topoplot,
@@ -202,10 +203,6 @@ def render_cross_modality(
         fontsize=11, fontweight="bold", y=0.985,
     )
 
-    out = out_path or cfg.outputs.base / "cross_modality.png"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    logger.info("[saved] %s  (Pearson r=%.3f, slope=%.3f, RMS err=%.1f%%)",
-                out, stats.pearson_r, stats.log_log_slope, 100 * rel_err)
-    plt.close(fig)
-    return out
+    logger.info("cross-modality Pearson r=%.3f, slope=%.3f, RMS err=%.1f%%",
+                stats.pearson_r, stats.log_log_slope, 100 * rel_err)
+    return save_figure(fig, out_path or target_output(cfg, "cross_modality.png"), dpi=dpi)

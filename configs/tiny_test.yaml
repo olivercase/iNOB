@@ -14,10 +14,10 @@ data:
 
 outputs:
   base: outputs
-  geometry_mat: outputs/geometry/vagus_geometry.mat
-  geometry_png: outputs/geometry/vagus_geometry.png
-  fem_mat: outputs/fem/fem_vagus.mat
-  fem_png: outputs/fem/fem_vagus.png
+  geometry_mat: outputs/geometry/geometry.mat
+  geometry_png: outputs/geometry/geometry.png
+  fem_mat: outputs/fem/fem.mat
+  fem_png: outputs/fem/fem.png
   sensors_mat: outputs/sensors/sensor_array.mat
   sensors_png: outputs/sensors/sensor_array.png
   electrodes_mat: outputs/sensors/electrode_array.mat

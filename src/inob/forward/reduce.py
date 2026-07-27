@@ -14,7 +14,7 @@ from inob.config import Config
 from inob.forward.duneuro_driver import build_conductivity_vector
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
 from inob.io.npz import Leadfield, save_leadfield, validate_leadfield
-from inob.sources.vagus import vagus_sources
+from inob.sources.vagus import sample_source_tissues
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def reduce_chunks(cfg: Config) -> Path:
             f"missing rows: {len(missing)} channels (e.g. {missing[:5].tolist()})"
         )
 
-    src_pos = vagus_sources(
+    src_pos = sample_source_tissues(
         fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
     )
     if 3 * len(src_pos) != n_cols:

@@ -15,11 +15,12 @@ HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
 inob__init
+inob__source_target        # SOURCE_TARGET (vagus|spine|spine_vagus) -> TISSUES + TARGET_TAG
 
 WHICH="${1:-}"
 case "${WHICH}" in
-    array|build|reduce) ;;
-    -h|--help|"") echo "usage: CLUSTER_PROFILE=<myriad|kathleen> bash cluster/submit.sh array|build|reduce" >&2; exit 2 ;;
+    array|build|reduce|eeg) ;;
+    -h|--help|"") echo "usage: CLUSTER_PROFILE=<myriad|kathleen> bash cluster/submit.sh array|build|reduce|eeg" >&2; exit 2 ;;
     *) echo "unknown task: ${WHICH}" >&2; exit 2 ;;
 esac
 
@@ -39,7 +40,7 @@ COMMON_FLAGS=(
 
 case "${WHICH}" in
     array)
-        JOB_NAME="vagus_fwd"
+        JOB_NAME="fwd_${TARGET_TAG}"
         FLAGS=(
             -N "${JOB_NAME}"
             -pe ${PE_DIRECTIVE}
@@ -47,6 +48,10 @@ case "${WHICH}" in
             -t "1-${TASKS}"
             -o '$JOB_NAME.$JOB_ID.$TASK_ID.log'
         )
+        # Optional: chain this target behind another one, e.g. queue spine to
+        # start only once the muscle run has finished:
+        #   HOLD_JID=reduce_muscle SOURCE_TARGET=spine bash cluster/submit.sh array
+        [[ -n "${HOLD_JID:-}" ]] && FLAGS+=(-hold_jid "${HOLD_JID}")
         BODY="${HERE}/run_array.sh"
         ;;
     build)
@@ -59,8 +64,18 @@ case "${WHICH}" in
         )
         BODY="${HERE}/run_build.sh"
         ;;
+    eeg)
+        JOB_NAME="eeg_${TARGET_TAG}"
+        FLAGS=(
+            -N "${JOB_NAME}"
+            -pe ${PE_DIRECTIVE}
+            -l "h_rt=${WALLTIME_EEG:-${WALLTIME_ARRAY}},mem=${MEM_EEG:-${MEM_PER_TASK}}"
+            -o '$JOB_NAME.$JOB_ID.log'
+        )
+        BODY="${HERE}/run_eeg.sh"
+        ;;
     reduce)
-        JOB_NAME="vagus_reduce"
+        JOB_NAME="reduce_${TARGET_TAG}"
         # Reduce is single-threaded; force the smaller PE if available.
         REDUCE_PE="${PE_DIRECTIVE%% *} 1"
         if [[ "${PE_DIRECTIVE}" == mpi* ]]; then
@@ -71,7 +86,7 @@ case "${WHICH}" in
             -N "${JOB_NAME}"
             -pe ${REDUCE_PE}
             -l "h_rt=${WALLTIME_REDUCE},mem=${MEM_PER_TASK}"
-            -hold_jid vagus_fwd
+            -hold_jid "fwd_${TARGET_TAG}${HOLD_JID:+,${HOLD_JID}}"
             -o '$JOB_NAME.$JOB_ID.log'
         )
         BODY="${HERE}/run_reduce.sh"

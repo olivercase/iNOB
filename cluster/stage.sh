@@ -7,10 +7,17 @@
 
 set -euo pipefail
 
+# rsync >=3.4 protects remote args by default ("secluded args"), so the remote
+# shell no longer expands the literal ``${HOME}`` in REMOTE_BASE (below). Restore
+# the old pass-through-the-remote-shell behaviour so that expansion still works.
+export RSYNC_OLD_ARGS=1
+
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${HERE}/lib.sh"
 inob__init
+# TARGET_TAG selects which per-target electrode array to stage (see below).
+inob__source_target
 
 DRY_RUN=""
 for arg in "$@"; do
@@ -30,13 +37,49 @@ REMOTE_BASE_LIT="${REMOTE_BASE}"
 EXCL=(--exclude '._*' --exclude '.DS_Store')
 
 inob__log "ensuring remote dirs on ${REMOTE_HOST}: ${REMOTE_BASE_LIT}"
-ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_BASE_LIT}/{inputs,code,out,logs,configs}"
+# Pre-create nested leaf dirs too: rsync only mkdirs one missing level, and the
+# remote rsync (3.1.2) is too old for --mkpath, so code/scripts/patches must exist.
+ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_BASE_LIT}/{out,logs,configs,outputs/fem,outputs/sensors,outputs/forward,code/src,code/cluster,code/scripts/patches,data/muscle}"
 
+# Inputs must land where the config expects them (cfg.outputs.fem_mat =
+# outputs/fem/fem.mat, cfg.outputs.sensors_mat = outputs/sensors/...),
+# not a flat inputs/ dir, or inob.forward.chunk can't find them.
 inob__log "rsyncing inputs (FEM + sensors)"
 rsync -avh ${DRY_RUN} "${EXCL[@]}" --progress \
-    "${LOCAL_DIR}/outputs/fem/fem_vagus.mat" \
+    "${LOCAL_DIR}/outputs/fem/fem.mat" \
+    "${REMOTE_HOST}:${REMOTE_BASE_LIT}/outputs/fem/"
+rsync -avh ${DRY_RUN} "${EXCL[@]}" --progress \
     "${LOCAL_DIR}/outputs/sensors/sensor_array.mat" \
-    "${REMOTE_HOST}:${REMOTE_BASE_LIT}/inputs/"
+    "${REMOTE_HOST}:${REMOTE_BASE_LIT}/outputs/sensors/"
+# HD electrode array (cfg.outputs.electrodes_mat) — needed by the EEG forward
+# solve (inob.cli.run_eeg). The patch is sited over the target tissue, so
+# --source-target writes a per-target file (electrode_array_<tag>.mat); the
+# untagged name is still staged for older runs. Optional: skip quietly if not
+# generated.
+ELEC_STAGED=0
+for elec in "electrode_array_${TARGET_TAG}.mat" "electrode_array.mat"; do
+    if [[ -f "${LOCAL_DIR}/outputs/sensors/${elec}" ]]; then
+        rsync -avh ${DRY_RUN} "${EXCL[@]}" --progress \
+            "${LOCAL_DIR}/outputs/sensors/${elec}" \
+            "${REMOTE_HOST}:${REMOTE_BASE_LIT}/outputs/sensors/"
+        ELEC_STAGED=1
+    fi
+done
+if [[ "${ELEC_STAGED}" -eq 0 ]]; then
+    inob__log "no electrode array locally — skipping (run 'inob-electrodes --source-target ${TARGET_TAG}' for EEG)"
+fi
+
+# Muscle STLs (data/muscle/*.stl). The muscle target reads these directly at
+# solve time — muscle source sampling and the fibre-aligned anisotropy tensors
+# both need them on the cluster; the FEM .mat does NOT carry them. Without this,
+# SOURCE_TARGET=muscle array tasks die with "no muscle STLs in .../data/muscle".
+# Cheap + harmless for other targets, so always stage.
+if [[ -d "${LOCAL_DIR}/data/muscle" ]]; then
+    inob__log "rsyncing muscle STLs (data/muscle/)"
+    rsync -avh ${DRY_RUN} "${EXCL[@]}" \
+        "${LOCAL_DIR}/data/muscle/" \
+        "${REMOTE_HOST}:${REMOTE_BASE_LIT}/data/muscle/"
+fi
 
 inob__log "rsyncing package source (src/ + cluster/ + configs/)"
 rsync -avh ${DRY_RUN} "${EXCL[@]}" \

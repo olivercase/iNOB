@@ -17,9 +17,11 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
-    assert calls["ap_width_ms"] == 0.5
+    # ap_width_ms / duration_ms default to None so the physiology profile
+    # supplies them (profile-driven cap_compare); only fs_hz/dpi are fixed here.
+    assert calls["ap_width_ms"] is None
     assert calls["fs_hz"] == 30_000.0
-    assert calls["duration_ms"] == 30.0
+    assert calls["duration_ms"] is None
     assert calls["out_path"] is None
     assert calls["dpi"] == 300
 

@@ -41,7 +41,7 @@ def test_load_tiny() -> None:
 
 def test_paths_are_resolved_against_project_root() -> None:
     cfg = load_config(DEFAULT_CFG)
-    assert cfg.outputs.geometry_mat == cfg.project_root / "outputs/geometry/vagus_geometry.mat"
+    assert cfg.outputs.geometry_mat == cfg.project_root / "outputs/geometry/geometry.mat"
     assert cfg.data.torso_skin == (
         cfg.project_root / "data/torso/FJ2810_BP22617_FMA7163_Skin.stl"
     )

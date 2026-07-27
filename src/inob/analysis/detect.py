@@ -29,17 +29,20 @@ import numpy as np
 from inob.analysis.snr import compute_noise_floors, per_source_peak
 from inob.config import Config
 from inob.io.npz import load_leadfield
+from inob.physiology.profiles import profile_for
 
 logger = logging.getLogger(__name__)
 
 
-def _coerce_strengths(strengths_nAm, n_sources: int) -> np.ndarray:
+def _coerce_strengths(
+    strengths_nAm, n_sources: int, *, default_nAm: float = 70.0,
+) -> np.ndarray:
     """Return an (S,) strength array, broadcasting a scalar / resizing a list."""
     if strengths_nAm is None:
-        return np.full(n_sources, 70.0)
+        return np.full(n_sources, default_nAm)
     arr = np.asarray(strengths_nAm, dtype=float).reshape(-1)
     if arr.size == 0:
-        return np.full(n_sources, 70.0)
+        return np.full(n_sources, default_nAm)
     if arr.size == 1:
         return np.full(n_sources, float(arr[0]))
     if arr.size != n_sources:
@@ -81,7 +84,22 @@ def compute_detectability(
     peak = per_source_peak(lf.L_fT_per_nAm)          # (S,) fT/nAm or µV/nAm
     n_sources = int(peak.shape[0])
     pos = np.asarray(lf.source_pos, dtype=float)
-    strengths = _coerce_strengths(strengths_nAm, n_sources)
+    # Default event strength comes from the target's physiology rather than a
+    # single hardcoded figure: a spinal dorsal-column volley (~5 nA·m) and the
+    # cervical-vagus A+C summation reference (70 nA·m) differ by more than an
+    # order of magnitude, and trials-to-detect scales as 1/strength².
+    # The vagus and muscle profiles carry the historical 70 nA·m, so their
+    # results are unchanged.
+    profile = profile_for(cfg)
+    strengths = _coerce_strengths(
+        strengths_nAm, n_sources, default_nAm=profile.default_strength_nAm,
+    )
+    if strengths_nAm is None:
+        logger.info(
+            "[detect] source strength %.2f nA·m from the %s physiology profile "
+            "(%s)",
+            profile.default_strength_nAm, profile.label, profile.paradigm,
+        )
 
     snr = (peak * strengths) / sigma if sigma > 0 else np.full(n_sources, np.inf)
     thr = float(threshold_snr)

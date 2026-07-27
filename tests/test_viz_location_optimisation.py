@@ -92,5 +92,5 @@ def test_render_location_optimisation_default_out_path(tmp_path: Path) -> None:
         wholebody_mat=wb_mat,
         source_idx=3,
     )
-    assert out == cfg.outputs.base / "location_optimisation.png"
+    assert out == cfg.outputs.base / "location_optimisation_vagus.png"
     assert out.exists()

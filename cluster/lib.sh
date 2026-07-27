@@ -85,6 +85,36 @@ inob__log() {
     echo "[${ts}] [${PROFILE_NAME:-?}] $*"
 }
 
+inob__source_target() {
+    # Map SOURCE_TARGET -> TISSUES (comma-sep tissue labels for the solver) and
+    # TARGET_TAG (slug for per-target chunk dirs, output NPZ, and job names).
+    # Lets one pipeline run vagus, spine, or both without editing configs.
+    local t="${SOURCE_TARGET:-vagus}"
+    # SOURCE_SPACING: per-target dipole spacing (mm). Empty ⇒ use the config's
+    # forward.source_spacing_mm. Muscle is volume-filled, so a 5 mm grid yields
+    # thousands of sources; default it to a tractable 15 mm (~380 sources).
+    SOURCE_SPACING=""
+    # MUSCLE_ANISOTROPY: when "1", the solver gives the muscle compartment a
+    # fibre-aligned conductivity tensor (σ∥≠σ⊥). Only the muscle target sets it,
+    # so vagus/spine leadfields stay isotropic and byte-identical.
+    MUSCLE_ANISOTROPY=""
+    case "${t}" in
+        vagus)       TISSUES="vagus_left";             TARGET_TAG="vagus" ;;
+        spine)       TISSUES="spinal_cord";            TARGET_TAG="spine" ;;
+        spine_vagus) TISSUES="spinal_cord,vagus_left"; TARGET_TAG="spine_vagus" ;;
+        muscle)      TISSUES="muscle";                 TARGET_TAG="muscle"
+                     SOURCE_SPACING="${SOURCE_SPACING:-15}"
+                     MUSCLE_ANISOTROPY="${MUSCLE_ANISOTROPY:-1}" ;;
+        *)
+            echo "[lib.sh] unknown SOURCE_TARGET '${t}'. Use: vagus | spine | spine_vagus | muscle" >&2
+            return 2 ;;
+    esac
+    # Honour a caller-provided SOURCE_SPACING override for any target.
+    SOURCE_SPACING="${SOURCE_SPACING_OVERRIDE:-${SOURCE_SPACING}}"
+    MUSCLE_ANISOTROPY="${MUSCLE_ANISOTROPY_OVERRIDE:-${MUSCLE_ANISOTROPY}}"
+    export SOURCE_TARGET="${t}" TISSUES TARGET_TAG SOURCE_SPACING MUSCLE_ANISOTROPY
+}
+
 inob__init() {
     inob__load_user_env
     inob__load_profile

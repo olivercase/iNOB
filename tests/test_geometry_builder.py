@@ -95,7 +95,7 @@ def test_gather_inputs_missing_torso_skin_raises(cfg: Config) -> None:
 def test_gather_inputs_resolves_all_compartments(populated_data_dirs: Config) -> None:
     out = gather_inputs(populated_data_dirs)
     assert set(out) == {
-        "mesh_skin", "mesh_bone", "mesh_muscle",
+        "mesh_skin", "mesh_bone", "mesh_muscle", "mesh_spinal_cord",
         "mesh_blood_vessel", "mesh_vagus_left", "mesh_vagus_right",
     }
     assert out["mesh_skin"] == [populated_data_dirs.data.torso_skin]

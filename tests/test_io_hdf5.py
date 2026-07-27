@@ -110,14 +110,15 @@ def test_fem_validate_rejects_noncontiguous_tissues() -> None:
 
 
 def test_fem_load_legacy_artifact() -> None:
-    """A locally-built fem_vagus.mat (in outputs/fem/) must load + validate.
+    """A locally-built fem.mat (in outputs/fem/) must load + validate.
 
-    Asserts structural invariants only — NOT a hardcoded tissue list. The set
-    of tissues is config-driven (adding spinal_cord, or any structure, changes
-    it), so pinning an exact tuple here would make an ordinary config change
-    fail an unrelated I/O test.
+    Geometry/FEM are shared across every source-target and stay untagged, so the
+    artifact is fem.mat (not fem_<target>.mat). Asserts structural invariants
+    only — NOT a hardcoded tissue list. The set of tissues is config-driven
+    (adding spinal_cord, or any structure, changes it), so pinning an exact
+    tuple here would make an ordinary config change fail an unrelated I/O test.
     """
-    artifact = REPO_ROOT / "outputs" / "fem" / "fem_vagus.mat"
+    artifact = REPO_ROOT / "outputs" / "fem" / "fem.mat"
     if not artifact.exists():
         pytest.skip("FEM artifact not present")
     mesh = load_fem(artifact)
@@ -131,7 +132,7 @@ def test_fem_load_legacy_artifact() -> None:
 
 
 def test_fem_load_legacy_geometry() -> None:
-    artifact = REPO_ROOT / "outputs" / "geometry" / "vagus_geometry.mat"
+    artifact = REPO_ROOT / "outputs" / "geometry" / "geometry.mat"
     if not artifact.exists():
         pytest.skip("legacy geometry artifact not present")
     geom = load_geometry(artifact)

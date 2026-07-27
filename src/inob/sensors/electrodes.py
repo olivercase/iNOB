@@ -1,10 +1,16 @@
 """HD surface-electrode array placement on the skin.
 
 For the dual-modality (MEG/EEG) forward model, we co-locate a high-density
-PEDOT:PSS-style electrode patch over the cervical vagus territory. Geometry:
+PEDOT:PSS-style electrode patch over the imaging target. Which tissue the
+patch is centred over follows ``electrodes.target_tissue``, which
+``--source-target`` sets from :data:`inob.config.SOURCE_TARGETS` — a spine run
+sites the patch over the cord, a vagus run over the cervical vagus. The OPM
+array wraps the whole torso and is target-agnostic; this patch is not, so
+leaving it on the vagus for a spine solve would compare patch placement rather
+than modality. Geometry:
 
-  1. Find a centre pose on the skin near the cervical vagus (project the
-     mean of vagus_left tet centroids over a Z slab onto the skin surface).
+  1. Find a centre pose on the skin near the target (project the mean of the
+     target tissue's tet centroids over a Z slab onto the skin surface).
   2. Build a tangent frame at that centre (outward normal + two tangents).
   3. Generate a regular ``rows × cols`` grid of contact positions in that
      local frame, with ``contact_pitch_mm`` spacing.
@@ -55,8 +61,8 @@ class ElectrodeArrayParams:
     sample_seed: int = 0                 # whole_body: RNG seed for surface sampling
 
 
-def _vagus_neck_centre(fem: FemMesh, target_tissue: str,
-                       z_low_factor: float, z_high_factor: float) -> np.ndarray:
+def _target_centre(fem: FemMesh, target_tissue: str,
+                   z_low_factor: float, z_high_factor: float) -> np.ndarray:
     """Compute a 3-D centre by averaging tet centroids of ``target_tissue``
     within the [z_low, z_high] range (fractional Z over the body bbox)."""
     if target_tissue not in fem.tissue_labels:
@@ -207,7 +213,7 @@ def build_electrode_array(
             unit="mm",
         )
 
-    centre_3d = _vagus_neck_centre(
+    centre_3d = _target_centre(
         fem, params.target_tissue,
         params.target_z_low_factor, params.target_z_high_factor,
     )

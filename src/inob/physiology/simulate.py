@@ -1,21 +1,33 @@
-"""Time-domain simulation of vagal CAP trains at every sensor.
+"""Time-domain simulation of CAP event trains at every sensor.
 
 For each event in a :class:`~inob.physiology.scenarios.Scenario`, builds a
 biphasic compound action potential (Hämäläinen-Q × n_fibres × biphasic
-shape) and projects it through the leadfield at the cervical-source hot
-spot. The output is a per-channel time series in **the leadfield's native
-units** (Tesla for MEG, Volt for EEG; convert to fT/µV for plotting).
+shape) and projects it through the leadfield column for the scenario's
+generator position. The output is a per-channel time series in **the
+leadfield's native units** (Tesla for MEG, Volt for EEG; convert to fT/µV
+for plotting).
 
-Why a stationary-source approximation
--------------------------------------
-Conduction-velocity propagation along the nerve happens on ~1 ms × cervical
-length, which is comparable to the action-potential duration itself, so
-*propagation along the cervical vagus polyline only smears each event by a
-fraction of an AP width*. For a 1 nA·m – 1 µA·m source train at 1–10 Hz
-event rates, the dominant phenomenon is the temporal pattern (cardiac
-locking, respiratory locking), not the millimetre-scale propagation. This
-keeps the simulator clean and fast — :func:`inob.sources.cap.cap_signal`
-remains available for the propagation-resolved view.
+The stationary-source approximation, and when it holds
+------------------------------------------------------
+This simulator lumps each event into one stationary dipole. That is a
+*target-dependent* approximation, not a universal one, and each target's
+:class:`~inob.physiology.profiles.PhysiologyProfile` records whether it is
+expected to hold via ``stationary_ok``:
+
+  * **Vagus** (``stationary_ok=True``) — baroreceptor afferents are localised
+    to the ~50 mm cervical bundle, crossed in ~1 ms at 47 m/s, comparable to
+    the 0.5 ms AP width. Propagation smears each event by a fraction of an AP
+    width, and the dominant phenomenon is the temporal pattern (cardiac,
+    respiratory locking) rather than millimetre-scale propagation.
+  * **Spine** (``stationary_ok=False``) — the volley ascends the whole imaged
+    cord, ~450 mm at 59 m/s ≈ 7.6 ms, an order of magnitude longer than its
+    0.7 ms AP width. The lumped model overestimates the peak roughly threefold.
+    Use it for event-train timing and rate structure; for single-event
+    amplitude or waveform use the propagation-resolved path.
+
+:mod:`inob.viz.cap_compare` renders and *measures* that comparison for the
+selected target, and :func:`inob.sources.cap.cap_signal` provides the
+propagation-resolved signal directly.
 """
 from __future__ import annotations
 
@@ -45,9 +57,39 @@ class SimulatedSignal:
     source_idx: int             # the cervical source position used
 
 
-def _pick_cervical_source(source_pos_mm: np.ndarray) -> int:
-    """Pick the highest-Z source on the polyline (most cervical, closest to neck patch)."""
+def _pick_rostral_source(source_pos_mm: np.ndarray) -> int:
+    """Pick the highest-Z source on the polyline (most rostral, nearest the neck)."""
     return int(np.argmax(source_pos_mm[:, 2]))
+
+
+def _pick_source_at_z(source_pos_mm: np.ndarray, z_mm: float) -> int:
+    """Index of the source closest to axial position ``z_mm``."""
+    return int(np.argmin(np.abs(source_pos_mm[:, 2] - z_mm)))
+
+
+def resolve_source_index(
+    source_pos_mm: np.ndarray, scenario: Scenario,
+) -> int:
+    """Which source position generates ``scenario``'s events.
+
+    A scenario that names its generator (``generator_z_mm`` — the spinal SSEP
+    scenarios do, because a median-nerve volley enters the cord ~330 mm rostral
+    to a tibial-nerve one) is placed there. Otherwise we fall back to the most
+    rostral source, which is the right default for a cervical vagal generator.
+    """
+    if scenario.generator_z_mm is None:
+        return _pick_rostral_source(source_pos_mm)
+    idx = _pick_source_at_z(source_pos_mm, scenario.generator_z_mm)
+    err = abs(float(source_pos_mm[idx, 2]) - scenario.generator_z_mm)
+    if err > 25.0:
+        logger.warning(
+            "scenario %r wants a generator at z=%.0f mm but the nearest modelled "
+            "source is at z=%.0f mm (%.0f mm away) — the solved region may not "
+            "cover this generator",
+            scenario.name, scenario.generator_z_mm,
+            float(source_pos_mm[idx, 2]), err,
+        )
+    return idx
 
 
 def simulate_train(
@@ -73,8 +115,12 @@ def simulate_train(
 
     L_long, _arc, _tan = longitudinal_leadfield(leadfield.L, leadfield.source_pos)
     if source_idx is None:
-        source_idx = _pick_cervical_source(leadfield.source_pos)
+        source_idx = resolve_source_index(leadfield.source_pos, scenario)
     L_col = L_long[:, source_idx]          # (C,)  T or V per A·m of moment
+    # A scenario may carry its own AP width (spinal volleys are broader than
+    # vagal ones, and a tibial volley is broader still than a median one).
+    if scenario.ap_width_ms is not None:
+        ap_width_ms = scenario.ap_width_ms
 
     n_total = round(scenario.duration_s * fs_hz)
     t_s = np.arange(n_total, dtype=np.float64) / fs_hz

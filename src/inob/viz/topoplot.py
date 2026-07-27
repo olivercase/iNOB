@@ -25,7 +25,7 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from inob.config import Config
+from inob.config import Config, source_region_label
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
 from inob.viz.style import (
@@ -572,12 +572,13 @@ def render_dual_topoplot(
     add_panel_label(ax_d, "d")
 
     fig.suptitle(
-        f"Dual-modality forward model of a single vagus_left source "
+        f"Dual-modality forward model of a single {source_region_label(cfg)} source "
         f"(z = {src[2]:.0f} mm, longitudinal moment)",
         fontsize=11, fontweight="bold", y=0.985,
     )
 
-    out = out_path or cfg.outputs.base / "dual_topoplot.png"
+    _tag = source_region_label(cfg).replace(" + ", "_").replace(" ", "_")
+    out = out_path or cfg.outputs.base / f"dual_topoplot_{_tag}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=dpi, bbox_inches="tight")
     logger.info("[saved] %s", out)
@@ -604,11 +605,12 @@ def render_meg_montage(
             panel_label=panel_letters[k] if k < len(panel_letters) else None,
         )
     fig.suptitle(
-        "MEG topoplot montage along the cervical vagus",
+        f"MEG topoplot montage along the {source_region_label(cfg)}",
         fontsize=11, fontweight="bold", y=0.99,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    out = out_path or cfg.outputs.base / "meg_topoplot_montage.png"
+    _tag = source_region_label(cfg).replace(" + ", "_").replace(" ", "_")
+    out = out_path or cfg.outputs.base / f"meg_topoplot_montage_{_tag}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=dpi, bbox_inches="tight")
     logger.info("[saved] %s", out)

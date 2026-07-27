@@ -6,12 +6,12 @@ Loaders return typed dataclasses; ``validate_*`` functions raise
 
 On-disk schemas (kept stable for backward compat with existing artefacts):
 
-  vagus_geometry.mat
+  geometry.mat
     /<compartment>/vertices    (3, Nv) float64    — MATLAB-style transpose
     /<compartment>/faces       (3, Nf) float64    — 1-indexed (MATLAB)
     /<compartment>/unit        (2, 1)  uint8      — b"mm" packed
 
-  fem_vagus.mat
+  fem.mat
     /pos                       (N, 3)  float64    — node coordinates [mm]
     /tet                       (M, 4)  int32      — 0-indexed
     /tissue                    (M,)    int32      — 1..K

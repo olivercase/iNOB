@@ -11,13 +11,15 @@ from inob.config import load_config
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 
-# Relative to project_root, per configs/tiny_test.yaml.
+# Relative to project_root, per configs/tiny_test.yaml. Geometry/FEM/sensors are
+# shared across every source-target, so they stay untagged; only the forward
+# leadfield carries the target slug.
 STAGE_FILES: dict[str, tuple[str, ...]] = {
-    "geom": ("outputs/geometry/vagus_geometry.mat",),
-    "fem": ("outputs/fem/fem_vagus.mat",),
+    "geom": ("outputs/geometry/geometry.mat",),
+    "fem": ("outputs/fem/fem.mat",),
     "sensors": ("outputs/sensors/sensor_array.mat",),
     "forward": ("outputs/forward/duneuro_leadfield_vagus.npz",),
-    "viz": ("outputs/geometry/vagus_geometry.png", "outputs/fem/fem_vagus.png"),
+    "viz": ("outputs/geometry/geometry.png", "outputs/fem/fem.png"),
 }
 
 

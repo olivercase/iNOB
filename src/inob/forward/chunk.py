@@ -12,6 +12,38 @@ Outputs (per chunk, into ``cfg.outputs.forward_chunks_dir``):
 The companion :mod:`inob.forward.reduce` stitches all chunks back into a
 single leadfield NPZ identical in schema to the local
 :mod:`inob.forward.solve` output (``source_pos`` included).
+
+# TODO: source-first cluster mode for sensor optimisation
+#
+# The current reciprocal (sensor-first) approach commits to a fixed sensor
+# geometry before the FEM runs — T must be fully recomputed for any change
+# to the array. This makes sensor optimisation loops (e.g. greedy placement,
+# gradient-based layout search) prohibitively expensive.
+#
+# An alternative is a source-first cluster mode: chunk by SOURCE instead of
+# by sensor. For each source chunk, solve ∇·σ∇φ = f_source once and store
+# φ on the mesh (or the Biot-Savart integral pre-projected onto a dense
+# candidate sensor set). The full volumetric field is then available and any
+# sensor position can be evaluated cheaply as a post-hoc inner product,
+# without re-running the FEM.
+#
+# Cost trade-off: n_source solves (cheap if n_src is small, e.g. ~150 vagus
+# positions) vs n_sensor reciprocal solves (8190 currently). For optimisation
+# loops with a large candidate sensor set this flips the scaling decisively.
+#
+# The 2730-position / 8190-channel current array is far beyond physically
+# viable hardware — the intent is to be able to vary sensor count and
+# placement freely as a knob during optimisation, then commit to a realistic
+# subset for the final DUNEuro run.
+#
+# Implementation sketch:
+#   - New ``run_chunk_source(cfg, chunk_id, n_chunks)`` that chunks over
+#     source positions rather than coil indices.
+#   - Store per-source φ or pre-projected B at a dense candidate surface grid.
+#   - New ``reduce_sources.py`` that assembles the full source × candidate
+#     leadfield and exposes a ``sample_at(sensor_pos, sensor_ori)`` API.
+#   - Wrap in a new CLI entry point ``inob-forward-source`` alongside the
+#     existing ``inob-forward``.
 """
 from __future__ import annotations
 
@@ -31,7 +63,7 @@ from inob.forward.duneuro_driver import (
     import_duneuro,
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
-from inob.sources.vagus import vagus_sources
+from inob.sources.vagus import sample_source_tissues
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +85,7 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
     sensors = load_sensors(cfg.outputs.sensors_mat)
     validate_sensors(sensors)
 
-    src_pos_mm = vagus_sources(
+    src_pos_mm = sample_source_tissues(
         fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
     )
     n_src = len(src_pos_mm)

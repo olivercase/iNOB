@@ -75,12 +75,74 @@ def build_conductivity_vector(
     return cond
 
 
+def build_conductivity_tensors(
+    cfg: Config, fem: FemMesh,
+) -> tuple[np.ndarray, list[np.ndarray]] | None:
+    """Per-element conductivity tensors for fibre-aligned muscle anisotropy.
+
+    Returns ``(labels, tensors)`` — ``labels`` (one index per tet) into
+    ``tensors`` (a list of 3×3 S/mm matrices) — or ``None`` when the isotropic
+    scalar path applies instead.
+
+    Whether anisotropy applies is *derived*, not flagged: under the default
+    ``forward.muscle_anisotropy.mode = "auto"`` it is on exactly when ``muscle``
+    is one of the ``forward.source_tissue`` labels. So a muscle solve gets the
+    tensor and a vagus/spine solve stays byte-identical to the scalar path,
+    with nothing to remember to set (see :meth:`MuscleAnisotropyCfg.active_for`).
+
+    Layout: the first ``L = len(cond)`` tensors are the isotropic ``σ·I`` of
+    every tissue (positions match the scalar ``build_conductivity_vector``);
+    then one anisotropic tensor per muscle STL is appended and every muscle tet
+    is relabelled to point at its muscle's tensor. Muscle tensor:
+    ``σ_⊥·I + (σ_∥ − σ_⊥)·ê⊗ê`` with ``ê`` the muscle's unit fibre axis.
+    duneuro (``volume_conductor.tensors``) then reads ``tensors[labels[e]]``.
+    """
+    aniso = cfg.forward.muscle_anisotropy
+    if "muscle" not in fem.tissue_labels:
+        return None
+    if not aniso.active_for(cfg.forward.source_tissue):
+        return None
+
+    from inob.sources.muscle import muscle_tet_fibre_axes
+
+    scale = cfg.forward.sigma_unit_scale
+    cond = build_conductivity_vector(cfg, fem)          # (L,) S/mm, isotropic
+    eye = np.eye(3, dtype=np.float64)
+    tensors: list[np.ndarray] = [float(c) * eye for c in cond]
+    base = len(tensors)
+
+    group, axes, mask = muscle_tet_fibre_axes(fem, muscle_dir=cfg.data.muscle_dir)
+    sl, st = aniso.sigma_long_sm * scale, aniso.sigma_trans_sm * scale
+    for e in axes:
+        e = e / max(float(np.linalg.norm(e)), 1e-12)
+        tensors.append(np.ascontiguousarray(
+            st * eye + (sl - st) * np.outer(e, e), dtype=np.float64))
+
+    labels = (fem.tissue.astype(np.int64) - 1)
+    labels[mask] = base + group
+    return labels, tensors
+
+
 def build_driver_config(
     cfg: Config, fem: FemMesh, cond: np.ndarray,
+    *, aniso_tensors: tuple[np.ndarray, list[np.ndarray]] | None = None,
 ) -> dict[str, Any]:
-    """Return the MEEGDriver3d configuration dictionary."""
+    """Return the MEEGDriver3d configuration dictionary.
+
+    When ``aniso_tensors`` is given the volume conductor is described by full
+    per-element 3×3 tensors (``labels`` + ``tensors``); otherwise by the scalar
+    isotropic ``labels`` + ``conductivities`` path.
+    """
     s = cfg.forward.solver
     tissue0 = (fem.tissue.astype(np.int64) - 1)
+    if aniso_tensors is not None:
+        labels, tensor_list = aniso_tensors
+        vc_tensors: dict[str, Any] = {
+            "labels": labels.astype(np.int64),
+            "tensors": [np.asarray(t, dtype=np.float64) for t in tensor_list],
+        }
+    else:
+        vc_tensors = {"labels": tissue0, "conductivities": cond}
     return {
         "type":             "fitted",
         "solver_type":      s.type,
@@ -97,7 +159,7 @@ def build_driver_config(
         },
         "volume_conductor": {
             "grid":    {"nodes": fem.nodes, "elements": fem.tets.astype(np.int64)},
-            "tensors": {"labels": tissue0, "conductivities": cond},
+            "tensors": vc_tensors,
         },
         "meg": {"intorderadd": str(s.intorderadd), "type": "physical"},
     }
@@ -114,7 +176,18 @@ def build_driver(cfg: Config, fem: FemMesh) -> tuple[Any, dict[str, Any], np.nda
     logger.info("Conductivities (S/mm scaled):")
     for lab, tid in sorted(fem.label_to_id.items(), key=lambda x: x[1]):
         logger.info("  %-11s (id=%d): %.6f", lab, tid, cond[tid - 1])
-    driver_cfg = build_driver_config(cfg, fem, cond)
+    aniso_tensors = build_conductivity_tensors(cfg, fem)
+    if aniso_tensors is not None:
+        a = cfg.forward.muscle_anisotropy
+        n_muscle_stl = len(aniso_tensors[1]) - cond.shape[0]
+        logger.info(
+            "Muscle anisotropy ENABLED: sigma_long=%.3f sigma_trans=%.3f S/m "
+            "(%.1f:1) over %d muscle STLs (%d muscle tets)",
+            a.sigma_long_sm, a.sigma_trans_sm,
+            a.sigma_long_sm / max(a.sigma_trans_sm, 1e-12),
+            n_muscle_stl, int((fem.tissue == fem.label_to_id["muscle"]).sum()),
+        )
+    driver_cfg = build_driver_config(cfg, fem, cond, aniso_tensors=aniso_tensors)
     driver = dp.MEEGDriver3d(driver_cfg)
     return driver, driver_cfg, cond
 

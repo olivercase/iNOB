@@ -14,10 +14,10 @@ data:
 
 outputs:
   base: outputs
-  geometry_mat: outputs/geometry/vagus_geometry.mat
-  geometry_png: outputs/geometry/vagus_geometry.png
-  fem_mat: outputs/fem/fem_vagus.mat
-  fem_png: outputs/fem/fem_vagus.png
+  geometry_mat: outputs/geometry/geometry.mat
+  geometry_png: outputs/geometry/geometry.png
+  fem_mat: outputs/fem/fem.mat
+  fem_png: outputs/fem/fem.png
   sensors_mat: outputs/sensors/sensor_array.mat
   sensors_png: outputs/sensors/sensor_array.png
   electrodes_mat: outputs/sensors/electrode_array.mat
@@ -38,6 +38,11 @@ geometry:
     mesh_vagus_right: {pitch: 0.5, n_samples: 80000,  close_iter: 1, decimate_target: 8000,  smooth_iter: 4}
     mesh_muscle:      {pitch: 1.0, n_samples: 150000, close_iter: 1, decimate_target: 15000, smooth_iter: 6}
     mesh_blood_vessel: {pitch: 0.5, n_samples: 60000, close_iter: 1, decimate_target: 6000,  smooth_iter: 3}
+    # Cord is thin (~9 mm) but 450 mm long, so it needs a high sample count:
+    # at 200k the splat leaves gaps that close_iter cannot bridge and the
+    # shrinkwrap intermittently degenerates (1 seed in 8). 600k is clean on
+    # 8/8 seeds and reconstructs 35 cm^3 vs ~31 cm^3 true volume.
+    mesh_spinal_cord: {pitch: 0.8, n_samples: 600000, close_iter: 1, decimate_target: 12000, smooth_iter: 4}
   validate:
     require_watertight: true
     require_winding_consistent: true
@@ -73,6 +78,12 @@ forward:
     bone:         0.0042
     skin:         0.43
   sigma_unit_scale: 1.0e-3     # S/m → S/mm (DUNEuro mm-mode)
+  muscle_anisotropy:           # fibre-aligned muscle conductivity tensor
+    mode: auto                 # auto = on iff 'muscle' is a source_tissue.
+                               # vagus/spine stay isotropic automatically;
+                               # force with on/off for an A/B comparison.
+    sigma_long_sm:  0.40       # along fibre (Gabriel 1996; Rush 1963)
+    sigma_trans_sm: 0.10       # across fibre (≈4:1 anisotropy)
   source_spacing_mm: 5.0
   source_tissue: vagus_left
   duneuro_path: null           # optional override; default = use installed duneuropy

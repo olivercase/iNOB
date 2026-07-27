@@ -22,6 +22,10 @@ from inob.paths import find_project_root, resolve_path
 logger = logging.getLogger(__name__)
 
 
+class ConfigError(ValueError):
+    """Raised when config construction fails (missing/extra keys, bad types)."""
+
+
 # ── leaf configs ───────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -124,6 +128,72 @@ class ForwardValidate:
     max_abs_fT_per_nAm: float = 1.0e6
 
 
+def source_tissue_labels(source_tissue: str) -> list[str]:
+    """Split a comma-separated ``forward.source_tissue`` into tissue labels.
+
+    Shared by the source sampler and the conductivity builder so the tissues
+    that get *sampled* and the tissues that drive the conductivity model can
+    never disagree.
+    """
+    return [t.strip() for t in source_tissue.split(",") if t.strip()]
+
+
+@dataclass(frozen=True)
+class MuscleAnisotropyCfg:
+    """Anisotropic (fibre-aligned) conductivity for the muscle compartment.
+
+    Skeletal muscle conducts several-fold better *along* its fibres than
+    *across* them. When active, the muscle tissue is given a per-element
+    conductivity tensor ``σ = σ_⊥·I + (σ_∥ − σ_⊥)·ê⊗ê`` with ``ê`` the local
+    fibre axis (per-muscle long axis, the same fibre proxy used for source
+    orientation). All other tissues stay isotropic.
+
+    ``mode`` decides when it applies — there is no flag to remember:
+
+      * ``"auto"`` (default) — on iff ``muscle`` is one of the forward
+        ``source_tissue`` labels. Muscle runs get the tensor; vagus/spine runs
+        take the scalar path, byte-identical to before.
+      * ``"on"`` / ``"off"`` — force it, for an isotropic-vs-anisotropic A/B.
+
+    Note ``auto`` is a *reproducibility* rule, not a physical one: muscle sits
+    in the volume conductor of every run, so a physics purist would enable it
+    always. Tying it to the source keeps previously-solved vagus/spine
+    leadfields comparable; use ``"on"`` if you want it everywhere.
+
+    Defaults: σ_∥ = 0.40, σ_⊥ = 0.10 S/m (≈4:1), bracketing the isotropic
+    mean 0.35 S/m used before (Gabriel et al. 1996; Rush et al. 1963).
+    """
+    mode: str = "auto"
+    sigma_long_sm: float = 0.40
+    sigma_trans_sm: float = 0.10
+
+    def __post_init__(self) -> None:
+        # YAML 1.1 parses bare ``on``/``off`` as booleans, so both ``mode: on``
+        # in a config file and ``--set ...mode=on`` on the command line arrive
+        # as True/False rather than the strings the user typed — and the scalar
+        # coercer, seeing this field annotated ``str``, may have already turned
+        # those into ``"True"``/``"False"``. Normalise every spelling to the
+        # canonical trio rather than rejecting what the docs tell people to write.
+        mode = self.mode
+        if isinstance(mode, bool):
+            mode = "on" if mode else "off"
+        elif isinstance(mode, str):
+            mode = {"true": "on", "false": "off"}.get(mode.strip().lower(),
+                                                       mode.strip().lower())
+        object.__setattr__(self, "mode", mode)
+        if mode not in ("auto", "on", "off"):
+            raise ConfigError(
+                "[forward.muscle_anisotropy] mode must be 'auto', 'on' or 'off'; "
+                f"got {self.mode!r}"
+            )
+
+    def active_for(self, source_tissue: str) -> bool:
+        """Whether the fibre-aligned tensor applies to this source target."""
+        if self.mode != "auto":
+            return self.mode == "on"
+        return "muscle" in source_tissue_labels(source_tissue)
+
+
 @dataclass(frozen=True)
 class ForwardCfg:
     conductivities_sm: dict[str, float]
@@ -133,6 +203,7 @@ class ForwardCfg:
     duneuro_path: Path | None
     solver: SolverCfg
     validate: ForwardValidate
+    muscle_anisotropy: MuscleAnisotropyCfg = field(default_factory=MuscleAnisotropyCfg)
     # Optional explicit dipole positions (mm). When non-empty, the forward
     # solve uses these instead of geometry-derived ``vagus_sources`` sampling
     # — this is how the GUI's clicked source points reach the solver.
@@ -229,6 +300,101 @@ class Config:
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
 
+# ── source targets ──────────────────────────────────────────────────────────
+#
+# Canonical definition of the source regions the pipeline can target. This is
+# the single source of truth for the ``--source-target`` CLI flag; it MUST stay
+# in sync with ``inob__source_target`` in ``cluster/lib.sh`` (same keys, same
+# tissue mappings). Each entry maps a slug to:
+#
+#   tissues    the FEM ``source_tissue`` string whose tets are sampled;
+#   label      the human-readable name used in figure titles;
+#   electrodes the tissue the HD surface-electrode patch is centred over.
+#
+# ``electrodes`` matters because the EEG patch is small (32 contacts over a few
+# cm) and directional: a patch sited over the cervical vagus reads a spinal-cord
+# source badly, and the resulting MEG-vs-EEG comparison measures patch placement
+# rather than modality. For combined targets the patch follows the deeper/larger
+# structure, which is the one the array must be sited for.
+SOURCE_TARGETS: dict[str, dict[str, str]] = {
+    "vagus":       {"tissues": "vagus_left",             "label": "vagus",
+                    "electrodes": "vagus_left"},
+    "spine":       {"tissues": "spinal_cord",            "label": "spine",
+                    "electrodes": "spinal_cord"},
+    "spine_vagus": {"tissues": "spinal_cord,vagus_left", "label": "spine + vagus",
+                    "electrodes": "spinal_cord"},
+    "muscle":      {"tissues": "muscle",                 "label": "muscle",
+                    "electrodes": "muscle"},
+}
+
+# Leadfield filename prefixes stripped to recover the ``--source-target`` slug.
+# Longest first so ``duneuro_eeg_leadfield_`` wins over ``duneuro_leadfield_``.
+_LEADFIELD_PREFIXES = (
+    "duneuro_eeg_leadfield_", "duneuro_leadfield_",
+    "duneuro_eeg_leadfield", "duneuro_leadfield",
+)
+
+
+def source_target_tag(cfg: Config) -> str:
+    """The ``--source-target`` slug carried by the forward leadfield filename.
+
+    ``outputs/forward/duneuro_leadfield_spine_vagus.npz`` → ``"spine_vagus"``.
+    Returns ``""`` for an untagged/plain ``duneuro_leadfield.npz``.
+    """
+    stem = cfg.outputs.forward_npz.stem            # e.g. duneuro_leadfield_spine
+    for prefix in _LEADFIELD_PREFIXES:
+        if stem.startswith(prefix):
+            return stem[len(prefix):].lstrip("_")
+    return ""
+
+
+def tag_path(path: Path, tag: str) -> Path:
+    """Insert ``_<tag>`` into a filename before its suffix; append for dirs.
+
+    ``outputs/forward/chunks`` + ``spine`` → ``outputs/forward/chunks_spine``
+    ``outputs/detectability.png`` + ``spine`` → ``outputs/detectability_spine.png``
+
+    An empty tag returns ``path`` unchanged, so untagged legacy runs keep the
+    paths they have always used. Idempotent: re-tagging with the same tag is a
+    no-op, so this is safe to apply to a path that already carries it.
+    """
+    if not tag:
+        return path
+    if path.stem.endswith(f"_{tag}") or path.name.endswith(f"_{tag}"):
+        return path
+    return path.with_name(f"{path.stem}_{tag}{path.suffix}")
+
+
+def target_output(cfg: Config, filename: str) -> Path:
+    """Default path under ``outputs/`` for a figure that depends on the target.
+
+    Every analysis artefact derived from a leadfield must carry the target slug
+    or a spine run silently overwrites the vagus figure of the same name. This
+    is the single place that decides how, so the naming cannot drift between
+    the modules that produce those artefacts.
+    """
+    return cfg.outputs.base / tag_path(Path(filename), source_target_tag(cfg)).name
+
+
+def source_region_label(cfg: Config) -> str:
+    """Human-readable label for the analysed source region.
+
+    Single source of truth for figure titles / axis labels across the
+    pipeline, so every visualisation names whatever source is actually being
+    analysed instead of a hardcoded "vagus". Derived from the forward
+    leadfield filename, which carries the ``--source-target`` slug
+    (see :data:`SOURCE_TARGETS`). Known slugs use their curated label
+    (``spine_vagus`` → "spine + vagus"); an unrecognised-but-present slug is
+    prettified generically; an untagged/plain filename falls back to "nerve".
+    """
+    tag = source_target_tag(cfg)
+    if not tag:
+        return "nerve"
+    if tag in SOURCE_TARGETS:
+        return SOURCE_TARGETS[tag]["label"]
+    return tag.replace("_", " + ")
+
+
 # ── overrides ──────────────────────────────────────────────────────────────
 
 def parse_override(spec: str) -> tuple[list[str], Any]:
@@ -262,10 +428,6 @@ def apply_overrides(data: dict[str, Any], overrides: list[str] | None) -> dict[s
 
 
 # ── construction ───────────────────────────────────────────────────────────
-
-class ConfigError(ValueError):
-    """Raised when config construction fails (missing/extra keys, bad types)."""
-
 
 def _check_keys(
     name: str, expected: set[str], got: set[str],
@@ -412,7 +574,11 @@ def _build_fem(d: dict[str, Any]) -> FemCfg:
 def _build_forward(d: dict[str, Any]) -> ForwardCfg:
     solver = _build_dataclass(SolverCfg, d.get("solver", {}), "forward.solver")
     val = _build_dataclass(ForwardValidate, d.get("validate", {}), "forward.validate")
-    body = {k: v for k, v in d.items() if k not in ("solver", "validate")}
+    aniso = _build_dataclass(
+        MuscleAnisotropyCfg, d.get("muscle_anisotropy", {}), "forward.muscle_anisotropy"
+    )
+    body = {k: v for k, v in d.items()
+            if k not in ("solver", "validate", "muscle_anisotropy")}
     duneuro_path = body.get("duneuro_path")
     body["duneuro_path"] = Path(duneuro_path).expanduser() if duneuro_path else None
     if body.get("point_sources"):
@@ -422,7 +588,8 @@ def _build_forward(d: dict[str, Any]) -> ForwardCfg:
     # allow_defaults=True so the optional point_sources field may be omitted;
     # the other forward fields have no defaults and so remain required.
     return _build_dataclass(
-        ForwardCfg, {**body, "solver": solver, "validate": val},
+        ForwardCfg,
+        {**body, "solver": solver, "validate": val, "muscle_anisotropy": aniso},
         "forward", allow_defaults=True,
     )
 

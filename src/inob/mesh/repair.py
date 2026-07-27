@@ -43,6 +43,37 @@ def cheap_repair(m: trimesh.Trimesh) -> trimesh.Trimesh:
     return m
 
 
+def drop_degenerate_components(
+    m: trimesh.Trimesh, *, min_faces: int = 4,
+) -> trimesh.Trimesh:
+    """Drop connected components too small to bound a volume.
+
+    A component of fewer than 4 faces cannot enclose anything, so it is never
+    tissue — it is stray geometry from the source atlas. Such fragments are
+    actively harmful downstream: they make ``boolean_union_overlapping`` fail
+    ("Not all meshes are volumes!"), and they give ``pymeshfix`` a spurious
+    closed shell to prefer over the real body. The spinal-cord STL ships with
+    two isolated single triangles that did exactly this.
+
+    Returns ``m`` unchanged if it is a single component or nothing qualifies.
+    """
+    parts = m.split(only_watertight=False)
+    if len(parts) <= 1:
+        return m
+    keep = [p for p in parts if len(p.faces) >= min_faces]
+    if len(keep) == len(parts):
+        return m
+    dropped = len(parts) - len(keep)
+    logger.info(
+        "  dropped %d degenerate component(s) (< %d faces); %d remain",
+        dropped, min_faces, len(keep),
+    )
+    if not keep:
+        logger.warning("all components were degenerate; returning input unchanged")
+        return m
+    return trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+
+
 def is_perfect(m: trimesh.Trimesh) -> bool:
     """True iff watertight, winding-consistent, and Euler==2 (genus 0)."""
     try:

@@ -84,5 +84,5 @@ def test_render_surface_topoplots_smoke(tmp_path: Path) -> None:
 def test_render_surface_topoplots_default_out_path(tmp_path: Path) -> None:
     cfg = build_pipeline_cfg(tmp_path)
     out = render_surface_topoplots(cfg, source_idx=2)
-    assert out == cfg.outputs.base / "surface_topoplots.png"
+    assert out == cfg.outputs.base / "surface_topoplots_vagus.png"
     assert out.exists()

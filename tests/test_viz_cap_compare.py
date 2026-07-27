@@ -75,5 +75,7 @@ def test_render_cap_compare_writes_png(cfg, cervical_leadfield: Leadfield, tmp_p
 
 def test_render_cap_compare_default_out_path(cfg, cervical_leadfield: Leadfield) -> None:
     out = render_cap_compare(cfg, n_fibres=10, duration_ms=6.0, fs_hz=5_000.0)
-    assert out == cfg.outputs.base / "cap_compare.png"
+    # Figures are target-tagged (multi-target namespacing): the default vagus
+    # leadfield yields the `_vagus` suffix so a spine run can't overwrite it.
+    assert out == cfg.outputs.base / "cap_compare_vagus.png"
     assert out.exists()

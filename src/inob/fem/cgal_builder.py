@@ -45,6 +45,33 @@ from inob.mesh.voxelize import (
 logger = logging.getLogger(__name__)
 
 
+# How each multi-STL tissue is turned into voxels. Declared per tissue rather
+# than branched inline, so adding a target means adding a row here.
+#
+#   method="solid"    convex-hull fill. Correct only for convex, blob-like
+#                     structures. A hull chords across any curvature or
+#                     concavity, over-filling and displacing the centroid.
+#   method="surface"  surface splat + closing + exterior flood-fill. Follows
+#                     the true shape; the right choice for anything thin,
+#                     curved, or sheet-like.
+#
+# Measured on the shipped atlas: switching the spinal cord from "solid" to
+# "surface" cut its volume from 201 cm^3 to 60 cm^3 (true ~31 cm^3 at this
+# 3 mm pitch) and moved its mid-thoracic centroid 24 mm to within 1.5 mm of
+# the true cord axis — which is where every sampled source dipole sits.
+VOXELISATION: dict[str, dict] = {
+    # Individually compact bones; hulls are a good approximation and fast.
+    "bone":         {"method": "solid"},
+    # Thin curved sheets (platysma, splenius) wrap the neck; a hull would
+    # fill it with non-muscle tissue and misplace muscle source dipoles.
+    "muscle":       {"method": "surface"},
+    # Narrow tubes: dilate so they survive the voxel grid at all.
+    "blood_vessel": {"method": "solid", "dilate_voxels": 1},
+    # One long mesh following the cervical lordosis / thoracic kyphosis.
+    "spinal_cord":  {"method": "surface"},
+}
+
+
 def _build_grid(
     all_v: np.ndarray, *, pitch: float, pad: float,
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int],
@@ -99,18 +126,32 @@ def _voxelise_skin(m_skin, X, *, pitch, mn, closing_mm: float) -> np.ndarray:
 
 def _voxelise_group_solid(
     paths, X, Y, Z, *, pitch, mn, skin_occ, label: str, dilate_voxels: int = 0,
+    method: str = "solid", closing_mm: float = 2.0,
 ) -> np.ndarray:
-    """Per-mesh solid voxelisation, unioned and clipped to skin.
+    """Per-mesh voxelisation, unioned and clipped to skin.
 
     Used for bone, muscle and blood_vessel — each is a set of independent
-    closed surfaces. ``dilate_voxels`` thickens thin structures (vessels) so
-    they survive the voxel grid."""
-    logger.info("Voxelising %s (%d meshes, per-mesh solid, clipped to skin)…",
-                label, len(paths))
+    surfaces. ``dilate_voxels`` thickens thin structures (vessels) so they
+    survive the voxel grid.
+
+    ``method`` selects how each mesh is filled:
+      * ``"solid"``   — convex-hull occupancy. Fast and fine for blob-like
+        structures (bone, compact muscles), but a convex hull grossly
+        over-fills thin, curved, or C-shaped meshes (e.g. platysma wraps the
+        neck, so its hull is a solid wedge ~5× the true volume).
+      * ``"surface"`` — surface-splat + closing + exterior flood-fill (the same
+        routine used for skin). Follows the true mesh shape, so it is the right
+        choice for anatomically non-convex muscles.
+    """
+    logger.info("Voxelising %s (%d meshes, per-mesh %s, clipped to skin)…",
+                label, len(paths), method)
     occ = np.zeros(X.shape, dtype=bool)
     for i, p in enumerate(paths):
         bm = load_stl(p, check_units_mm=False)
-        occ |= voxelize_solid_for_mesh(bm, X, Y, Z, pitch=pitch, mn=mn)
+        if method == "surface":
+            occ |= voxelize_mesh(bm, X, pitch=pitch, mn=mn, closing_mm=closing_mm)
+        else:
+            occ |= voxelize_solid_for_mesh(bm, X, Y, Z, pitch=pitch, mn=mn)
         if (i + 1) % 25 == 0:
             logger.debug("  %s %d/%d", label, i + 1, len(paths))
     if dilate_voxels > 0:
@@ -212,19 +253,18 @@ def build_fem(cfg: Config) -> Path:
     logger.info("Grid shape=%s (%.1fM voxels)", shape, np.prod(shape) / 1e6)
 
     skin_occ = _voxelise_skin(m_skin, X, pitch=pitch, mn=mn, closing_mm=fcfg.bone_closing_mm)
-    bone_occ = _voxelise_group_solid(bone_paths, X, Y, Z, pitch=pitch, mn=mn,
-                                     skin_occ=skin_occ, label="bone") \
-        if "bone" in fcfg.tissues else np.zeros_like(skin_occ)
-    muscle_occ = _voxelise_group_solid(muscle_paths, X, Y, Z, pitch=pitch, mn=mn,
-                                       skin_occ=skin_occ, label="muscle") \
-        if "muscle" in fcfg.tissues and muscle_paths else np.zeros_like(skin_occ)
-    vessel_occ = _voxelise_group_solid(vessel_paths, X, Y, Z, pitch=pitch, mn=mn,
-                                       skin_occ=skin_occ, label="blood_vessel",
-                                       dilate_voxels=1) \
-        if "blood_vessel" in fcfg.tissues and vessel_paths else np.zeros_like(skin_occ)
-    spinal_cord_occ = _voxelise_group_solid(spinal_cord_paths, X, Y, Z, pitch=pitch, mn=mn,
-                                            skin_occ=skin_occ, label="spinal_cord") \
-        if "spinal_cord" in fcfg.tissues and spinal_cord_paths else np.zeros_like(skin_occ)
+
+    def _voxelise(label: str, paths, **kw) -> np.ndarray:
+        if label not in fcfg.tissues or not paths:
+            return np.zeros_like(skin_occ)
+        opts = {**VOXELISATION[label], **kw}
+        return _voxelise_group_solid(paths, X, Y, Z, pitch=pitch, mn=mn,
+                                     skin_occ=skin_occ, label=label, **opts)
+
+    bone_occ = _voxelise("bone", bone_paths)
+    muscle_occ = _voxelise("muscle", muscle_paths)
+    vessel_occ = _voxelise("blood_vessel", vessel_paths)
+    spinal_cord_occ = _voxelise("spinal_cord", spinal_cord_paths)
     vl_occ = _voxelise_vagus(m_vl, X, pitch=pitch, mn=mn,
                               dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ) \
         if "vagus_left" in fcfg.tissues else np.zeros_like(skin_occ)

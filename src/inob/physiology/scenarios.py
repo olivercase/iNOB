@@ -1,6 +1,21 @@
-"""Physiologically-grounded vagal CAP event-train scenarios.
+"""Physiologically-grounded CAP event-train scenarios, per target.
 
-Two scenarios that produce structured cervical-vagus afferent activity:
+Which scenarios apply to a run is decided by the target's
+:class:`~inob.physiology.profiles.PhysiologyProfile`, not by this module.
+
+**Vagus** — two scenarios of spontaneous cervical-vagus afferent activity
+(baroreceptor, deep breathing), described below.
+
+**Spine** — two evoked scenarios at the bottom of this file
+(:func:`median_nerve_ssep_scenario`, :func:`tibial_nerve_ssep_scenario`). The
+cord's counterpart to spontaneous vagal traffic is the stimulus-evoked
+dorsal-column volley, which is what SSEP and magnetospinography actually
+record. Unlike the vagal scenarios these carry a ``generator_z_mm``, because
+the entry segment — cervical for median nerve, lumbosacral for tibial — is
+what determines both the depth under the sensors and the distance the volley
+travels through the imaged cord.
+
+The vagal scenarios:
 
   * **Baroreceptor**: the carotid-sinus / aortic-arch baroreceptor afferents
     fire in cardiac-locked bursts (one burst per R-wave, ≈ 100–200 ms after
@@ -24,6 +39,27 @@ Each scenario generates a list of :class:`CapEvent`. The simulator in
 :mod:`inob.physiology.simulate` superposes the per-event CAP responses
 to produce a time-domain signal at every MEG / EEG sensor.
 
+.. PHYSIOLOGY-TODO: muscle (magnetomyography) dynamics — NOT IMPLEMENTED.
+   Both scenarios above are *vagal afferent* event trains. The muscle
+   source-target currently has only a **static** physiology: fibre-aligned
+   anisotropic conductivity in the forward solve
+   (``forward.muscle_anisotropy``) and muscle-magnitude equivalent current
+   dipoles in :data:`inob.viz.detectability.MUSCLE_SCENARIOS`. That was a
+   deliberate sequencing choice — get an accurate forward model first, then
+   hang dynamics off it — so any *time-domain* muscle output (cap_compare,
+   physiology_plot, simulate) still reuses the vagus CAP model and remains
+   PROVISIONAL.
+
+   The deferred muscle-dynamics module would need:
+     * a muscle-fibre population (d ≈ 40–80 µm, not the 2–15 µm axon range)
+       and the muscle-fibre conduction velocity ≈ 3–5 m/s (vs ≈ 50 m/s nerve);
+     * a MUAP waveform + motor-unit model (100s–1000s of fibres per MU,
+       innervation-zone origin, propagation to both tendons);
+     * recruitment / rate-coding (size principle, 8–30 Hz firing, asynchronous
+       MUs → interference EMG rather than a synchronous compound AP);
+     * an activation scenario (isometric hold, twitch, evoked M-wave).
+   Grep ``PHYSIOLOGY-TODO`` before publishing any time-domain muscle figure.
+
 References
 ----------
 * Bu Y *et al.* 2024 *Comm Biol* 7:893 — measurement of cervical-vagus
@@ -31,6 +67,9 @@ References
 * Pelot NA *et al.* 2017 *Front Neurosci* 12:601 — vagal fibre populations.
 * Kubin L *et al.* 2006 *Anat Rec* 288A:961 — pulmonary RAR/SAR projections.
 * Hämäläinen M *et al.* 1993 *Rev Mod Phys* 65:413 — Q = π·d²·σ_in·ΔV/4.
+* Cruccu G *et al.* 2008 *Clin Neurophysiol* 119:1705 — SSEP recording standards.
+* Kawabata S *et al.* 2002 *Clin Neurophysiol* 113:1874 — magnetospinography of
+  the ascending cord volley.
 """
 from __future__ import annotations
 
@@ -69,6 +108,17 @@ class Scenario:
     rate_hz: float = 0.0
     physiology_trace_label: str = ""    # "ECG (a.u.)" or "Lung volume (a.u.)"
     physiology_trace: np.ndarray | None = None    # (T,) optional context plot
+    generator_z_mm: float | None = None
+    """Axial position of the generator, mm in the atlas frame.
+
+    ``None`` keeps the historical behaviour of using the most rostral source on
+    the polyline (right for a cervical vagal generator). Spinal SSEP scenarios
+    set it to the entry segment, because a median-nerve volley enters the cord
+    at C6–T1 and a tibial-nerve volley at the conus — ~400 mm apart, and at
+    very different depths under the sensor array.
+    """
+    ap_width_ms: float | None = None
+    """Per-scenario AP width override, ms. ``None`` uses the caller's default."""
 
 
 # ── A-fibre and mixed-fibre helpers ────────────────────────────────────────
@@ -82,6 +132,17 @@ def a_fibre_population(
         mean_um=mean_um, sigma_log=sigma_log,
         n_bins=n_bins, lo_um=2.0, hi_um=15.0,
     )
+
+
+def dorsal_column_population(
+    *, mean_um: float = 10.0, sigma_log: float = 0.25, n_bins: int = 20,
+) -> FibreDistribution:
+    """Dorsal-column ascending afferents — see
+    :func:`inob.physiology.profiles.dorsal_column_population`."""
+    from inob.physiology.profiles import (
+        dorsal_column_population as _dc,
+    )
+    return _dc(mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins)
 
 
 def mixed_pulmonary_population(
@@ -227,4 +288,131 @@ def respiratory_scenario(
         rate_hz=breath_hz,
         physiology_trace_label="Lung volume (a.u.)",
         physiology_trace=lv,
+    )
+
+
+# ── spinal somatosensory evoked scenarios ──────────────────────────────────
+#
+# The spinal cord's analogue of the vagal CAP is not spontaneous traffic but
+# the evoked ascending volley: stimulate a peripheral nerve, and a synchronous
+# large-myelinated discharge enters the cord at that nerve's root segment and
+# ascends the dorsal columns. This is the paradigm behind clinical SSEP and
+# behind magnetospinography, and it maps directly onto the package's planning
+# question, because both already work by averaging many stimulus repetitions.
+#
+# Entry-segment Z values are for the BodyParts3D cord (z = 1031..1482 mm, most
+# rostral at the top). They are defaults, not constants — override per subject.
+MEDIAN_NERVE_ENTRY_Z_MM: float = 1390.0   # C6-T1, cervical enlargement
+TIBIAL_NERVE_ENTRY_Z_MM: float = 1060.0   # L4-S1, lumbosacral enlargement / conus
+
+
+def _stimulus_marker_trace(
+    duration_s: float, rate_hz: float, n_stim: int, fs: int = 1000,
+) -> np.ndarray:
+    """Unit impulse at each stimulus time, for the context panel."""
+    n_samples = int(duration_s * fs)
+    trace = np.zeros(n_samples)
+    for k in range(n_stim):
+        idx = int(k / rate_hz * fs)
+        if 0 <= idx < n_samples:
+            trace[idx] = 1.0
+    return trace
+
+
+def _ssep_scenario(
+    *, name: str, nerve: str, entry_z_mm: float, segment: str,
+    duration_s: float, rate_hz: float, n_fibres: int,
+    ap_amplitude_mV: float, ap_width_ms: float, jitter_ms: float, seed: int,
+) -> Scenario:
+    """Shared builder for peripheral-nerve SSEP volleys."""
+    rng = np.random.default_rng(seed)
+    n_stim = int(duration_s * rate_hz) + 1
+    fibres = dorsal_column_population()
+
+    events: list[CapEvent] = []
+    for k in range(n_stim):
+        t_stim = k / rate_hz
+        # Peripheral conduction delay from stimulator to cord entry is absorbed
+        # into the event time; what matters downstream is the spacing and the
+        # trial-to-trial jitter, not the absolute latency.
+        t_entry = t_stim + float(rng.normal(0.0, jitter_ms * 1e-3))
+        events.append(CapEvent(
+            t_start_s=float(t_entry),
+            n_fibres=n_fibres,
+            fibres=fibres,
+            ap_amplitude_mV=ap_amplitude_mV,
+            label=f"{name}_stim_{k:03d}",
+        ))
+
+    return Scenario(
+        name=name,
+        description=(
+            f"{nerve} stimulation at {rate_hz:g} Hz. Each stimulus evokes a "
+            f"synchronous dorsal-column volley of {n_fibres} large-myelinated "
+            f"afferents entering the cord at {segment} (z = {entry_z_mm:.0f} mm) "
+            f"and ascending rostrally."
+        ),
+        duration_s=duration_s,
+        events=events,
+        rate_hz=rate_hz,
+        physiology_trace_label=f"{nerve} stimulus",
+        physiology_trace=_stimulus_marker_trace(duration_s, rate_hz, n_stim),
+        generator_z_mm=entry_z_mm,
+        ap_width_ms=ap_width_ms,
+    )
+
+
+def median_nerve_ssep_scenario(
+    *,
+    duration_s: float = 4.0,
+    rate_hz: float = 4.7,
+    n_fibres: int = 800,
+    entry_z_mm: float = MEDIAN_NERVE_ENTRY_Z_MM,
+    ap_amplitude_mV: float = 80.0,
+    ap_width_ms: float = 0.7,
+    jitter_ms: float = 0.2,
+    seed: int = 0,
+) -> Scenario:
+    """Median-nerve SSEP — cervical entry, the standard clinical montage.
+
+    The 4.7 Hz default is the usual non-integer clinical stimulation rate
+    (Cruccu et al. 2008): it avoids locking to 50/60 Hz mains harmonics, so
+    line noise averages out across trials instead of summing coherently.
+    The evoked volley enters at C6-T1 and generates the cervical N13 before
+    ascending — the response that dominates cervical magnetospinography.
+    """
+    return _ssep_scenario(
+        name="ssep_median", nerve="Median nerve", entry_z_mm=entry_z_mm,
+        segment="C6-T1", duration_s=duration_s, rate_hz=rate_hz,
+        n_fibres=n_fibres, ap_amplitude_mV=ap_amplitude_mV,
+        ap_width_ms=ap_width_ms, jitter_ms=jitter_ms, seed=seed,
+    )
+
+
+def tibial_nerve_ssep_scenario(
+    *,
+    duration_s: float = 6.0,
+    rate_hz: float = 3.1,
+    n_fibres: int = 600,
+    entry_z_mm: float = TIBIAL_NERVE_ENTRY_Z_MM,
+    ap_amplitude_mV: float = 80.0,
+    ap_width_ms: float = 0.9,
+    jitter_ms: float = 0.4,
+    seed: int = 0,
+) -> Scenario:
+    """Tibial-nerve SSEP — lumbosacral entry, the hard case for detection.
+
+    Differs from the median-nerve scenario in three ways that all reduce
+    detectability, which is exactly why it is worth simulating: the volley
+    enters ~330 mm more caudally (deeper under thicker tissue and further from
+    the cervical sensors), fewer afferents are recruited, and the longer
+    peripheral path disperses the volley across conduction velocities, giving
+    a broader and lower-amplitude response. Clinical practice compensates with
+    a slower rate and more averages.
+    """
+    return _ssep_scenario(
+        name="ssep_tibial", nerve="Tibial nerve", entry_z_mm=entry_z_mm,
+        segment="L4-S1", duration_s=duration_s, rate_hz=rate_hz,
+        n_fibres=n_fibres, ap_amplitude_mV=ap_amplitude_mV,
+        ap_width_ms=ap_width_ms, jitter_ms=jitter_ms, seed=seed,
     )

@@ -14,6 +14,7 @@ from inob.viz.style import (
     add_panel_label,
     apply_nature_style,
     divergent_cmap,
+    save_figure,
 )
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def render_sarvas_vs_fem(
     result: SarvasVsFemResult, *, source_idx: int = -1,
-    out_path: Path, dpi: int = 300,
+    out_path: Path, dpi: int = 300, region: str = "nerve",
 ) -> Path:
     """Four-panel benchmark figure:
 
@@ -107,9 +108,9 @@ def render_sarvas_vs_fem(
                       np.maximum(sarvas_peak, fem_peak),
                       color=NATURE_PALETTE["stone"], alpha=0.45,
                       label="Difference band")
-    ax_c.set_xlabel("Source z position along cervical vagus  ·  mm")
+    ax_c.set_xlabel(f"Source z position along {region}  ·  mm")
     ax_c.set_ylabel(f"Peak |B| over OPM array  ·  {unit_label}")
-    ax_c.set_title("Peak field along the vagus")
+    ax_c.set_title(f"Peak field along the {region}")
     ax_c.legend(loc="upper right", handlelength=1.4)
     add_panel_label(ax_c, "c")
 
@@ -149,8 +150,4 @@ def render_sarvas_vs_fem(
         color=NATURE_PALETTE["axis"], style="italic",
     )
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
-    logger.info("[saved] %s", out_path)
-    plt.close(fig)
-    return out_path
+    return save_figure(fig, out_path, dpi=dpi)

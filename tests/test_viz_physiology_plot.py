@@ -68,5 +68,5 @@ def test_render_physiology_multiple_scenarios(tmp_path: Path) -> None:
 def test_render_physiology_default_out_path(tmp_path: Path) -> None:
     cfg = build_pipeline_cfg(tmp_path)
     out = render_physiology(cfg, scenarios=(_tiny_scenario(),), fs_hz=2000.0)
-    assert out == cfg.outputs.base / "physiology.png"
+    assert out == cfg.outputs.base / "physiology_vagus.png"
     assert out.exists()

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from inob.cli._common import add_common_args, setup
+from inob.config import source_region_label
 from inob.viz.topoplot import (
     render_dual_topoplot,
     render_eeg_topoplot,
@@ -31,18 +32,22 @@ def main(argv: list[str] | None = None) -> int:
 
     import matplotlib.pyplot as plt
 
+    # Tag default filenames with the source-target so a run for one region never
+    # overwrites another's figure (e.g. muscle vs spine at the same source-idx).
+    tag = source_region_label(cfg).replace(" + ", "_").replace(" ", "_")
+
     if args.target == "dual":
         render_dual_topoplot(cfg, source_idx=args.source_idx, out_path=args.out,
                               dpi=args.dpi)
     elif args.target == "meg":
         fig, _ = render_meg_topoplot(cfg, source_idx=args.source_idx, show_skin=True)
-        out = args.out or (cfg.outputs.base / "meg_topoplot.png")
+        out = args.out or (cfg.outputs.base / f"meg_topoplot_{tag}.png")
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=args.dpi, bbox_inches="tight")
         plt.close(fig)
     elif args.target == "eeg":
         fig = render_eeg_topoplot(cfg, source_idx=args.source_idx)
-        out = args.out or (cfg.outputs.base / "eeg_topoplot.png")
+        out = args.out or (cfg.outputs.base / f"eeg_topoplot_{tag}.png")
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=args.dpi, bbox_inches="tight")
         plt.close(fig)

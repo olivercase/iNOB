@@ -23,13 +23,14 @@ from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from inob.analysis.snr import compute_noise_floors
-from inob.config import Config
+from inob.config import Config, source_region_label, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
     apply_nature_style,
+    save_figure,
     sequential_cmap,
 )
 from inob.viz.surface_topoplot import gaussian_interpolate_surface
@@ -78,6 +79,7 @@ def render_location_optimisation(
     wb_lf = load_leadfield(wholebody_npz)
     paddle_sensors = load_sensors(paddle_mat)
     wb_sensors = load_sensors(wholebody_mat)
+    region = source_region_label(cfg)
     geom = load_geometry(cfg.outputs.geometry_mat)
     skin_comp = geom.compartments["mesh_skin"]
     skin = trimesh.Trimesh(skin_comp.vertices, skin_comp.faces, process=False)
@@ -200,7 +202,7 @@ def render_location_optimisation(
               label=f"{len(wb_sensors.coilpos)}-ch whole-body  (peak {wb_peak.max():.2e} µV/nAm)")
     ax_c.axhline(3.0, color=NATURE_PALETTE["axis"], lw=0.8, linestyle="--",
                  label="SNR = 3")
-    ax_c.set_xlabel("Source z along cervical vagus (mm)")
+    ax_c.set_xlabel(f"Source z along {region} (mm)")
     ax_c.set_ylabel(f"Single-trial SNR  ·  Q = {Q_ref:g} nA·m, σ = {sigma:.1f} µV")
     ax_c.set_yscale("log")
     ax_c.set_title("Single-trial SNR  ·  paddle vs whole-body")
@@ -216,10 +218,10 @@ def render_location_optimisation(
     ax_d.fill_between(z, paddle_peak, wb_peak, where=(wb_peak > paddle_peak),
                        color=NATURE_PALETTE["stone"], alpha=0.45,
                        label="Whole-body advantage")
-    ax_d.set_xlabel("Source z along cervical vagus (mm)")
+    ax_d.set_xlabel(f"Source z along {region} (mm)")
     ax_d.set_ylabel("Best-channel |L|  ·  µV  (1 nA·m source)")
     ax_d.set_yscale("log")
-    ax_d.set_title("Best-channel |L| along the vagus")
+    ax_d.set_title(f"Best-channel |L| along the {region}")
     ax_d.legend(loc="lower center", fontsize=7, handlelength=1.4)
     add_panel_label(ax_d, "d")
 
@@ -297,10 +299,6 @@ def render_location_optimisation(
         fontsize=12, fontweight="bold", y=0.985,
     )
 
-    out = out_path or cfg.outputs.base / "location_optimisation.png"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    logger.info("[saved] %s  ·  paddle peak %.3e  whole-body peak %.3e  ratio %.2f×",
-                out, paddle_best_val, wb_best_val, ratio)
-    plt.close(fig)
-    return out
+    logger.info("location-optimisation paddle peak %.3e  whole-body peak %.3e  ratio %.2f×",
+                paddle_best_val, wb_best_val, ratio)
+    return save_figure(fig, out_path or target_output(cfg, "location_optimisation.png"), dpi=dpi)

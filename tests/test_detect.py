@@ -105,3 +105,26 @@ def test_point_sources_override_config() -> None:
 def test_point_sources_default_empty() -> None:
     cfg = load_config(DEFAULT_CFG)
     assert cfg.forward.point_sources == ()
+
+
+def test_detectability_scenarios_follow_source_target() -> None:
+    """Muscle gets the magnetomyography Q range; other targets keep vagal-CAP."""
+    from inob.viz.detectability import (
+        DEFAULT_SCENARIOS,
+        MUSCLE_SCENARIOS,
+        scenarios_for_target,
+    )
+    base = "outputs/forward/duneuro_leadfield_{}.npz"
+    for target in ("vagus", "spine", "spine_vagus"):
+        cfg = load_config(DEFAULT_CFG,
+                          overrides=[f"outputs.forward_npz={base.format(target)}"])
+        assert scenarios_for_target(cfg) is DEFAULT_SCENARIOS
+
+    cfg = load_config(DEFAULT_CFG,
+                      overrides=[f"outputs.forward_npz={base.format('muscle')}"])
+    assert scenarios_for_target(cfg) is MUSCLE_SCENARIOS
+    # Muscle sources are far stronger than vagal CAPs. The ranges overlap at the
+    # bottom (a single MUAP is comparable to a modest CAP), but muscle is shifted
+    # up throughout and tops out an order of magnitude higher.
+    assert min(s.Q_nAm for s in MUSCLE_SCENARIOS) > min(s.Q_nAm for s in DEFAULT_SCENARIOS)
+    assert max(s.Q_nAm for s in MUSCLE_SCENARIOS) > 10 * max(s.Q_nAm for s in DEFAULT_SCENARIOS)

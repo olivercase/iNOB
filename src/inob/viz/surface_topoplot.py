@@ -24,7 +24,7 @@ import trimesh
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from inob.config import Config
+from inob.config import Config, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
 from inob.viz.style import (
@@ -33,6 +33,7 @@ from inob.viz.style import (
     apply_nature_style,
     divergent_cmap,
     divergent_norm,
+    save_figure,
 )
 
 logger = logging.getLogger(__name__)
@@ -310,9 +311,4 @@ def render_surface_topoplots(
         fontsize=12, fontweight="bold", y=0.985,
     )
 
-    out = out_path or cfg.outputs.base / "surface_topoplots.png"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    logger.info("[saved] %s", out)
-    plt.close(fig)
-    return out
+    return save_figure(fig, out_path or target_output(cfg, "surface_topoplots.png"), dpi=dpi)

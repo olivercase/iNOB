@@ -21,7 +21,7 @@ def test_render_cross_modality_smoke(tmp_path: Path) -> None:
 def test_render_cross_modality_default_out_path(tmp_path: Path) -> None:
     cfg = build_pipeline_cfg(tmp_path)
     out = render_cross_modality(cfg)
-    assert out == cfg.outputs.base / "cross_modality.png"
+    assert out == cfg.outputs.base / "cross_modality_vagus.png"
     assert out.exists()
 
 

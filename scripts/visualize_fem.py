@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the multi-tissue FEM (outputs/fem/fem_vagus.mat) coloured by tissue.
+"""Render the multi-tissue FEM (outputs/fem/fem.mat) coloured by tissue.
 
 Produces, under ``--out`` (default ``outputs/fem``):
   fem_<view>.png          full + clipped (interior-exposing) renders
@@ -194,7 +194,7 @@ def montage(pngs, mesh, out: Path):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--fem", type=Path, default=Path("outputs/fem/fem_vagus.mat"))
+    ap.add_argument("--fem", type=Path, default=Path("outputs/fem/fem.mat"))
     ap.add_argument("--out", type=Path, default=Path("outputs/fem"))
     ap.add_argument("--size", type=int, default=1200)
     args = ap.parse_args(argv)

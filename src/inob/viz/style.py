@@ -8,6 +8,7 @@ A small, opinionated styling layer:
                                     minor-tick chrome stripped).
   * `add_panel_label(ax, "a")`  — bold panel labels in the top-left, the
                                     Nature Reviews convention.
+  * `save_figure(fig, path)`    — mkdir + savefig + log + close, in one place.
 
 Design principles (from the Nature Reviews "Guide to designing figures"):
 
@@ -19,11 +20,16 @@ Design principles (from the Nature Reviews "Guide to designing figures"):
 """
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Any
 
 import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+
+logger = logging.getLogger(__name__)
 
 NATURE_PALETTE: dict[str, str] = {
     # neutral context
@@ -108,6 +114,21 @@ def add_panel_label(ax: Any, label: str, *, x: float = -0.04, y: float = 1.04) -
         va="bottom", ha="left",
         color=NATURE_PALETTE["axis"],
     )
+
+
+def save_figure(fig: Any, out: Any, *, dpi: int = 300) -> Any:
+    """Write ``fig`` to ``out``, log it, close it, and return the path.
+
+    Every render_* function ends with the same four lines; keeping them here
+    means the output directory is always created and the figure is always
+    closed (matplotlib leaks figures otherwise in long pipeline runs).
+    """
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=dpi, bbox_inches="tight")
+    logger.info("[saved] %s", out)
+    plt.close(fig)
+    return out
 
 
 def divergent_norm(values: np.ndarray) -> tuple[float, float]:

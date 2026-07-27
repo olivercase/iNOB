@@ -76,7 +76,7 @@ irrelevant for an anteriorly-sited HD-EMG patch. This rules out
 ```bash
 python3 - <<'PY'
 import h5py, numpy as np
-with h5py.File("outputs/fem/fem_vagus.mat", "r") as f:
+with h5py.File("outputs/fem/fem.mat", "r") as f:
     pos = f["pos"][:]; tet = f["tet"][:]; tissue = f["tissue"][:].ravel()
     labels = [bytes(np.asarray(s).tobytes()).rstrip(b"\x00").decode()
               for s in f["tissue_labels"][:]]

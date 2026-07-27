@@ -21,7 +21,7 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 
 from inob.analysis.snr import compute_noise_floors
-from inob.config import Config
+from inob.config import Config, target_output
 from inob.io.npz import load_leadfield
 from inob.physiology.scenarios import (
     Scenario,
@@ -37,6 +37,7 @@ from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
     apply_nature_style,
+    save_figure,
 )
 from inob.viz.topoplot import (
     _radial_channel_mask,
@@ -234,9 +235,4 @@ def render_physiology(
         "and slow / deep-breathing (respiratory)",
         fontsize=12, fontweight="bold", y=0.985,
     )
-    out = out_path or cfg.outputs.base / "physiology.png"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=dpi, bbox_inches="tight")
-    logger.info("[saved] %s", out)
-    plt.close(fig)
-    return out
+    return save_figure(fig, out_path or target_output(cfg, "physiology.png"), dpi=dpi)

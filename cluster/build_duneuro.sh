@@ -81,9 +81,35 @@ curl -fsSL -o "${DUNEURO_PATCH}" \
 git -C "${SRC}/duneuro" reset --hard "${DUNEURO_COMMIT}" >/dev/null
 git -C "${SRC}/duneuro" clean -fdq
 inob__log "applying duneuro patch"
-git -C "${SRC}/duneuro" apply "${DUNEURO_PATCH}"
+# git apply has no fuzz factor and is strict about blank-context lines, so fall
+# back to GNU patch (which tolerates whitespace/offset drift) if it refuses.
+if git -C "${SRC}/duneuro" apply --reverse --check "${DUNEURO_PATCH}" 2>/dev/null; then
+    inob__log "duneuro patch already applied — skipping"
+elif git -C "${SRC}/duneuro" apply --check "${DUNEURO_PATCH}" 2>/dev/null; then
+    git -C "${SRC}/duneuro" apply "${DUNEURO_PATCH}"
+else
+    inob__log "git apply refused — falling back to GNU patch --fuzz=3"
+    patch -d "${SRC}/duneuro" -p1 --fuzz=3 --ignore-whitespace < "${DUNEURO_PATCH}"
+fi
 
-cat > "${SRC}/release.opts" <<'OPTS'
+# duneuro-py configures with the deprecated find_package(PythonLibs), which does
+# not locate the module/venv Python on its own (dunecontrol aborts with
+# "Could NOT find PythonLibs"). Compute explicit hints so both the old (PYTHON_*)
+# and new (Python3_*) CMake finders resolve to our venv Python.
+PYEXE="${BASE}/venv/bin/python"
+PYINC="$("${PYEXE}" -c 'import sysconfig; print(sysconfig.get_path("include"))')"
+PYLIBDIR="$("${PYEXE}" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+PYLDLIB="$("${PYEXE}" -c 'import sysconfig; print(sysconfig.get_config_var("LDLIBRARY"))')"
+PYLIB="${PYLIBDIR}/${PYLDLIB}"
+if [[ ! -f "${PYLIB}" ]]; then
+    # LDLIBRARY may be a static lib or live in a multiarch subdir; find the .so.
+    PYLIB="$(find "${PYLIBDIR}" -maxdepth 2 -name 'libpython3.*.so*' 2>/dev/null | head -1)"
+fi
+inob__log "python for duneuro-py: exe=${PYEXE} inc=${PYINC} lib=${PYLIB}"
+[[ -f "${PYLIB}" && -f "${PYINC}/Python.h" ]] || {
+    inob__log "ERROR: could not locate libpython/Python.h (inc=${PYINC} lib=${PYLIB})"; exit 1; }
+
+cat > "${SRC}/release.opts" <<OPTS
 CMAKE_FLAGS="
   -DCMAKE_BUILD_TYPE=Release
   -DCMAKE_CXX_STANDARD=20
@@ -91,23 +117,29 @@ CMAKE_FLAGS="
   -DCMAKE_C_FLAGS='-O3 -DNDEBUG -fPIC'
   -DBUILD_SHARED_LIBS=ON
   -DDUNE_ENABLE_PYTHONBINDINGS=ON
+  -DDUNE_PYTHON_INSTALL_LOCATION=none
+  -DPython3_EXECUTABLE=${PYEXE}
+  -DPython3_INCLUDE_DIR=${PYINC}
+  -DPython3_LIBRARY=${PYLIB}
+  -DPYTHON_EXECUTABLE=${PYEXE}
+  -DPYTHON_INCLUDE_DIR=${PYINC}
+  -DPYTHON_LIBRARY=${PYLIB}
 "
 OPTS
 
 inob__log "running dunecontrol all (this is the long step)"
 "${SRC}/dune-common/bin/dunecontrol" --opts="${SRC}/release.opts" all
 
-# Install duneuro-py extension into the venv.
-cd "${SRC}/duneuro-py"
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CXX_STANDARD=20 \
-      -DPython3_EXECUTABLE="${BASE}/venv/bin/python" \
-      ..
-make -j"${CORES_PER_TASK:-4}"
+# Install the duneuro-py extension into the venv. dunecontrol already built
+# duneuropy.so under duneuro-py/build-cmake as part of `all`; a standalone cmake
+# here fails because it can't resolve the dune-common package config outside the
+# dunecontrol build, so just copy the artefact it produced.
+inob__log "installing duneuropy into venv"
 PYSITE="$("${BASE}/venv/bin/python" -c 'import site; print(site.getsitepackages()[0])')"
-cp -r src/duneuropy* "${PYSITE}/" 2>/dev/null || \
-    find . -name 'duneuropy*.so' -exec cp {} "${PYSITE}/" \;
+DUNEUROPY_SO="$(find "${SRC}/duneuro-py/build-cmake" -name 'duneuropy*.so' 2>/dev/null | head -1)"
+[[ -n "${DUNEUROPY_SO}" ]] || { inob__log "ERROR: duneuropy.so not found under duneuro-py/build-cmake"; exit 1; }
+cp "${DUNEUROPY_SO}" "${PYSITE}/"
+inob__log "copied ${DUNEUROPY_SO} -> ${PYSITE}/"
 
 inob__log "verifying import"
 "${BASE}/venv/bin/python" -c "import duneuropy as dp; print('duneuro OK:', dir(dp)[:5])"

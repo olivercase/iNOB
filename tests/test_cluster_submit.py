@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib
+import re
+from pathlib import Path
 
 import pytest
 
@@ -88,3 +90,40 @@ def test_fetch_dryrun(monkeypatch) -> None:
     res = cluster.fetch("kathleen")
     assert res["state"] == "dryrun"
     assert "rsync" in res["command"]
+
+
+# ── Python <-> shell source-target mirror ──────────────────────────────────
+#
+# cluster/lib.sh duplicates SOURCE_TARGETS so the SGE scripts can resolve a
+# target without importing Python. Duplication drifts, and drift here means a
+# cluster run solves a different tissue than the same flag does locally.
+
+def _lib_sh_targets() -> dict[str, str]:
+    """Parse the SOURCE_TARGET -> TISSUES case block out of cluster/lib.sh."""
+    lib = Path(__file__).resolve().parents[1] / "cluster" / "lib.sh"
+    body = lib.read_text()
+    block = re.search(
+        r"inob__source_target\(\)\s*\{.*?\bcase\b.*?\besac\b", body, re.S,
+    )
+    assert block, "could not locate the case block in cluster/lib.sh"
+    return {
+        m.group("tag"): m.group("tissues")
+        for m in re.finditer(
+            r'^\s*(?P<tag>\w+)\)\s*TISSUES="(?P<tissues>[^"]+)"',
+            block.group(0), re.M,
+        )
+    }
+
+
+def test_lib_sh_mirrors_source_targets_exactly() -> None:
+    from inob.config import SOURCE_TARGETS
+    shell = _lib_sh_targets()
+    assert set(shell) == set(SOURCE_TARGETS), (
+        "cluster/lib.sh and inob.config.SOURCE_TARGETS disagree on which "
+        "targets exist"
+    )
+    for tag, spec in SOURCE_TARGETS.items():
+        assert shell[tag] == spec["tissues"], (
+            f"target {tag!r}: lib.sh solves {shell[tag]!r} but Python solves "
+            f"{spec['tissues']!r}"
+        )

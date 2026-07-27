@@ -11,6 +11,7 @@ from inob.analysis.sarvas_compare import (
     save_comparison_summary,
 )
 from inob.cli._common import add_common_args, setup
+from inob.config import source_region_label, target_output
 from inob.viz.sarvas_plot import render_sarvas_vs_fem
 
 
@@ -50,9 +51,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {label}  →  Q = {Q:.4f} nA·m")
 
     result = compare_sarvas_vs_fem(cfg, Q_nAm=args.Q_nAm)
-    out = args.out or (cfg.outputs.base / "sarvas_vs_fem.png")
+    out = args.out or (target_output(cfg, "sarvas_vs_fem.png"))
     render_sarvas_vs_fem(result, source_idx=args.source_idx, out_path=out,
-                          dpi=args.dpi)
+                          dpi=args.dpi, region=source_region_label(cfg))
     summary_path = out.with_suffix(".json")
     save_comparison_summary(result, summary_path)
     print(f"figure: {out}")

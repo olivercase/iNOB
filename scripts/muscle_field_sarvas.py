@@ -51,7 +51,7 @@ from inob.viz.surface_topoplot import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-GEOM = ROOT / "outputs/geometry/vagus_geometry.mat"
+GEOM = ROOT / "outputs/geometry/geometry.mat"
 MUSCLE_DIR = ROOT / "data/muscle"
 OUT_PNG         = ROOT / "outputs/muscle_skin_topoplot.png"
 OUT_PNG_TANG1   = ROOT / "outputs/muscle_skin_topoplot_tang1.png"
