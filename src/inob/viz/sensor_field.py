@@ -20,9 +20,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
+from inob.anatomy import vertebra_z_band as _anatomy_z_band
 from inob.config import Config, target_output
 from inob.io.npz import Leadfield, load_leadfield
-from inob.io.stl import load_first_stl
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -92,43 +92,14 @@ def aggregate_field(
 
 # ── vertebral-level source selection ────────────────────────────────────────
 #
-# The leadfield carries no vertebral labels — only source_pos (mm). We locate a
-# level (e.g. C7) from its own segmented vertebra STL and take the cord sources
-# whose Z falls inside that bone's Z bounding box. Reproducible and anatomy-driven
-# (no hard-coded coordinates), and generalises to any labelled vertebra.
-
-# level code → substring of the vertebra STL filename in ``cfg.data.bone_dir``.
-_VERTEBRA_STL: dict[str, str] = {
-    "c1": "Atlas", "c2": "Axis",
-    "c3": "Third cervical vertebra", "c4": "Fourth cervical vertebra",
-    "c5": "Fifth cervical vertebra", "c6": "Sixth cervical vertebra",
-    "c7": "Seventh cervical vertebra",
-    "t1": "First thoracic vertebra", "t2": "Second thoracic vertebra",
-    "t3": "Third thoracic vertebra", "t4": "Fourth thoracic vertebra",
-    "t5": "Fifth thoracic vertebra", "t6": "Sixth thoracic vertebra",
-    "t7": "Seventh thoracic vertebra", "t8": "Eighth thoracic vertebra",
-    "t9": "Ninth thoracic vertebra", "t10": "Tenth thoracic vertebra",
-    "t11": "Eleventh thoracic vertebra", "t12": "Twelfth thoracic vertebra",
-    "l1": "First lumbar vertebra", "l2": "Second lumbar vertebra",
-    "l3": "Third lumbar vertebra", "l4": "Fourth lumbar vertebra",
-    "l5": "Fifth lumbar vertebra",
-}
-
-VERTEBRA_LEVELS: tuple[str, ...] = tuple(_VERTEBRA_STL)
+# The level→STL lookup and Z-band derivation live in :mod:`inob.anatomy` so
+# electrode placement can share them. Re-exported here for back-compat with
+# callers importing ``VERTEBRA_LEVELS`` / ``vertebra_z_band`` from this module.
 
 
 def vertebra_z_band(cfg: Config, level: str) -> tuple[float, float]:
     """Z bounding-box (z_lo, z_hi) mm of a vertebra from its segmented STL."""
-    key = level.lower()
-    if key not in _VERTEBRA_STL:
-        raise ValueError(
-            f"unknown vertebral level {level!r} (have {', '.join(VERTEBRA_LEVELS)})"
-        )
-    pattern = str(cfg.data.bone_dir / f"*{_VERTEBRA_STL[key]}*.stl")
-    mesh = load_first_stl(pattern)
-    z_lo, z_hi = float(mesh.bounds[0, 2]), float(mesh.bounds[1, 2])
-    logger.info("%s vertebra Z band: %.1f..%.1f mm", key.upper(), z_lo, z_hi)
-    return z_lo, z_hi
+    return _anatomy_z_band(cfg.data.bone_dir, level)
 
 
 def sources_in_z_band(lf: Leadfield, z_lo: float, z_hi: float) -> np.ndarray:

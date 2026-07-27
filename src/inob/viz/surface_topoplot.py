@@ -24,7 +24,7 @@ import trimesh
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from inob.config import Config, target_output
+from inob.config import Config, source_region_label, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
 from inob.viz.style import (
@@ -249,8 +249,10 @@ def render_surface_topoplots(
 
     # ── panel d: EEG patch heatmap (3-D placement) ─────────────────────────
     ax_d = fig.add_subplot(gs[1, 0], projection="3d")
-    # Light grey skin context
-    band_alpha = 0.04
+    # Neck-band skin context so the patch is visibly located on the body — the
+    # alpha stays low enough not to occlude the (near-side) contacts but high
+    # enough to read as a body silhouette rather than the previous ghost.
+    band_alpha = 0.12
     coll_skin = Poly3DCollection(
         band_v[band_f], facecolor=NATURE_PALETTE["skin"],
         edgecolor="none", alpha=band_alpha,
@@ -261,14 +263,15 @@ def render_surface_topoplots(
         electrodes.coilpos[:, 0], electrodes.coilpos[:, 1], electrodes.coilpos[:, 2],
         c=eeg_val, cmap=cmap, vmin=vmin_eeg, vmax=vmax_eeg,
         s=80, edgecolor=NATURE_PALETTE["axis"], linewidths=0.4, depthshade=False,
+        zorder=5,
     )
     ax_d.scatter([src[0]], [src[1]], [src[2]],
                  s=200, c=NATURE_PALETTE["glow"],
                  edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*")
-    ax_d.set_xlim(electrodes.coilpos[:, 0].min() - 50,
-                   electrodes.coilpos[:, 0].max() + 50)
-    ax_d.set_ylim(electrodes.coilpos[:, 1].min() - 50,
-                   electrodes.coilpos[:, 1].max() + 50)
+    # Frame the whole cervical band (not just the patch bbox) so you can see
+    # where on the neck the ~30 mm patch actually sits.
+    ax_d.set_xlim(band_v[:, 0].min() - 15, band_v[:, 0].max() + 15)
+    ax_d.set_ylim(band_v[:, 1].min() - 15, band_v[:, 1].max() + 15)
     ax_d.set_zlim(z_lo, z_hi)
     ax_d.view_init(elev=12, azim=42)
     ax_d.set_xlabel("X (mm)", labelpad=-3)
@@ -306,7 +309,7 @@ def render_surface_topoplots(
     add_panel_label(ax_f, "f")
 
     fig.suptitle(
-        f"Surface topoplots — vagus_left source #{source_idx} "
+        f"Surface topoplots — {source_region_label(cfg)} source #{source_idx} "
         f"@ z = {src[2]:.0f} mm  (longitudinal moment, 1 nA·m)",
         fontsize=12, fontweight="bold", y=0.985,
     )

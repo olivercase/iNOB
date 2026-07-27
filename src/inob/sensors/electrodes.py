@@ -31,6 +31,7 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
+from inob.anatomy import vertebra_z_band
 from inob.config import Config
 from inob.io.hdf5 import (
     FemMesh,
@@ -56,15 +57,26 @@ class ElectrodeArrayParams:
     target_tissue: str = "vagus_left"
     target_z_low_factor: float = 0.6
     target_z_high_factor: float = 0.9
+    # When set (e.g. "c7"), the patch is centred on this vertebra's absolute Z
+    # band instead of the fractional body-height slab — so it sits over the
+    # source of interest. ``target_z_band_mm`` is the resolved (z_lo, z_hi) mm,
+    # filled in by the caller (which has the STL dir); level is kept for logs.
+    target_level: str | None = None
+    target_z_band_mm: tuple[float, float] | None = None
     label_prefix: str = "elec"
     n_contacts: int = 1000               # whole_body: total contact count
     sample_seed: int = 0                 # whole_body: RNG seed for surface sampling
 
 
 def _target_centre(fem: FemMesh, target_tissue: str,
-                   z_low_factor: float, z_high_factor: float) -> np.ndarray:
-    """Compute a 3-D centre by averaging tet centroids of ``target_tissue``
-    within the [z_low, z_high] range (fractional Z over the body bbox)."""
+                   z_low_factor: float, z_high_factor: float,
+                   z_band_mm: tuple[float, float] | None = None) -> np.ndarray:
+    """3-D centre = mean of ``target_tissue`` tet centroids within a Z band.
+
+    The band is either an absolute ``z_band_mm`` (mm — e.g. a vertebra's STL
+    bounding box, used to place the patch over a chosen level) or, when that is
+    ``None``, the ``[z_low, z_high]`` fractional slab over the body Z extent.
+    """
     if target_tissue not in fem.tissue_labels:
         raise SchemaError(
             f"electrode target tissue {target_tissue!r} not in FEM "
@@ -75,10 +87,13 @@ def _target_centre(fem: FemMesh, target_tissue: str,
     if not mask.any():
         raise SchemaError(f"no tets with tissue id {tid} ({target_tissue!r})")
     centroids = fem.nodes[fem.tets[mask]].mean(axis=1)
-    body_z_lo = float(fem.nodes[:, 2].min())
-    body_z_hi = float(fem.nodes[:, 2].max())
-    z_lo = body_z_lo + z_low_factor * (body_z_hi - body_z_lo)
-    z_hi = body_z_lo + z_high_factor * (body_z_hi - body_z_lo)
+    if z_band_mm is not None:
+        z_lo, z_hi = z_band_mm
+    else:
+        body_z_lo = float(fem.nodes[:, 2].min())
+        body_z_hi = float(fem.nodes[:, 2].max())
+        z_lo = body_z_lo + z_low_factor * (body_z_hi - body_z_lo)
+        z_hi = body_z_lo + z_high_factor * (body_z_hi - body_z_lo)
     sel = (centroids[:, 2] >= z_lo) & (centroids[:, 2] <= z_hi)
     if not sel.any():
         logger.warning(
@@ -216,7 +231,11 @@ def build_electrode_array(
     centre_3d = _target_centre(
         fem, params.target_tissue,
         params.target_z_low_factor, params.target_z_high_factor,
+        z_band_mm=params.target_z_band_mm,
     )
+    if params.target_z_band_mm is not None:
+        logger.info("electrode patch centred on level %s (Z %.1f..%.1f mm)",
+                    params.target_level, *params.target_z_band_mm)
     centre, normal = _project_to_skin(skin, centre_3d)
     t1, t2 = _tangent_basis(normal)
 
@@ -269,10 +288,20 @@ def generate_electrode_array(
     cols: int | None = None,
     contact_pitch_mm: float | None = None,
     target_tissue: str | None = None,
+    target_level: str | None = None,
     out_path: Path | None = None,
 ) -> Path:
     """Generate the HD electrode array per ``cfg.electrodes`` and save it."""
     elec = cfg.electrodes
+    # A vertebral level (CLI --level, else cfg.electrodes.target_level) centres
+    # the patch on that vertebra's absolute Z band so it sits over the source of
+    # interest; without one the fractional body-height slab is used as before.
+    level = target_level if target_level is not None else getattr(elec, "target_level", None)
+    # An explicit empty string is the "full-region / mid-slab" opt-out (e.g. the
+    # spine full-cord survey): it forces the fractional slab even though the
+    # source-target default set a level. ``None`` (arg absent) falls to the cfg.
+    level = level or None
+    z_band_mm = vertebra_z_band(cfg.data.bone_dir, level) if level else None
     params = ElectrodeArrayParams(
         rows=rows if rows is not None else elec.rows,
         cols=cols if cols is not None else elec.cols,
@@ -284,6 +313,8 @@ def generate_electrode_array(
         target_tissue=target_tissue or elec.target_tissue,
         target_z_low_factor=elec.target_z_low_factor,
         target_z_high_factor=elec.target_z_high_factor,
+        target_level=level,
+        target_z_band_mm=z_band_mm,
         label_prefix=elec.label_prefix,
         n_contacts=getattr(elec, "n_contacts", 1000),
         sample_seed=getattr(elec, "sample_seed", 0),

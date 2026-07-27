@@ -226,6 +226,9 @@ class ElectrodeCfg:
     target_tissue: str = "vagus_left"
     target_z_low_factor: float = 0.65
     target_z_high_factor: float = 0.95
+    # Optional vertebral level (e.g. "c7") to centre the patch on, overriding the
+    # fractional slab above. Set per source-target in SOURCE_TARGETS (spine → c7).
+    target_level: str | None = None
     label_prefix: str = "elec"
     n_contacts: int = 1000           # whole_body: total contact count
     sample_seed: int = 0             # whole_body: RNG seed for skin sampling
@@ -320,9 +323,9 @@ SOURCE_TARGETS: dict[str, dict[str, str]] = {
     "vagus":       {"tissues": "vagus_left",             "label": "vagus",
                     "electrodes": "vagus_left"},
     "spine":       {"tissues": "spinal_cord",            "label": "spine",
-                    "electrodes": "spinal_cord"},
+                    "electrodes": "spinal_cord",         "level": "c7"},
     "spine_vagus": {"tissues": "spinal_cord,vagus_left", "label": "spine + vagus",
-                    "electrodes": "spinal_cord"},
+                    "electrodes": "spinal_cord",         "level": "c7"},
     "muscle":      {"tissues": "muscle",                 "label": "muscle",
                     "electrodes": "muscle"},
 }

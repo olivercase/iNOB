@@ -11,10 +11,10 @@ import json
 import sys
 from pathlib import Path
 
+from inob.anatomy import VERTEBRA_LEVELS
 from inob.cli._common import add_common_args, setup
 from inob.io.npz import load_leadfield
 from inob.viz.sensor_field import (
-    VERTEBRA_LEVELS,
     peak_amplitude_along_axis,
     region_summary,
     render_aggregate_field,

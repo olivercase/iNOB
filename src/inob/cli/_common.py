@@ -74,6 +74,10 @@ def setup(
         spec = SOURCE_TARGETS[target]
         tissues = spec["tissues"]
         elec_tissue = spec["electrodes"]
+        # Optional vertebral level to centre the electrode patch on (spine → c7),
+        # so the paddle sits over the source of interest rather than the mid-cord
+        # slab mean. None for targets without a vertebral level (vagus, muscle).
+        elec_level = spec.get("level")
         # Repoint both leadfields to the tagged files (same dir as the config
         # defaults, e.g. outputs/forward/duneuro_leadfield_<target>.npz) AND set
         # the source tissue, so a solve writes the region it names and an
@@ -102,7 +106,8 @@ def setup(
                 sensitivity_dir=tag_path(cfg.outputs.sensitivity_dir, target),
             ),
             forward=replace(cfg.forward, source_tissue=tissues),
-            electrodes=replace(cfg.electrodes, target_tissue=elec_tissue),
+            electrodes=replace(cfg.electrodes, target_tissue=elec_tissue,
+                               target_level=elec_level),
         )
         logger.info("source-target=%s → tissues=%s → leadfield %s",
                     target, tissues, cfg.outputs.forward_npz)

@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import inob.cli.location as cli_mod
+from inob.config import load_config, source_target_tag, tag_path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
@@ -17,10 +18,16 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
-    assert calls["paddle_mat"] == Path("outputs/sensors/electrode_array.mat")
-    assert calls["paddle_npz"] == Path("outputs/forward/duneuro_eeg_leadfield_vagus.npz")
+    # Paddle inputs now follow the source-target-aware config (no --source-target
+    # here → the untagged defaults), not hardcoded vagus paths.
+    cfg = load_config(TINY_CFG, overrides=[], project_root=tmp_path)
+    tag = source_target_tag(cfg)
+    assert calls["paddle_mat"] == cfg.outputs.electrodes_mat
+    assert calls["paddle_npz"] == cfg.outputs.forward_eeg_npz
     assert calls["wholebody_mat"] == Path("outputs/sensors/electrode_array_wholebody.mat")
-    assert calls["wholebody_npz"] == Path("outputs/forward/duneuro_eeg_leadfield_wholebody.npz")
+    assert calls["wholebody_npz"] == tag_path(
+        Path("outputs/forward/duneuro_eeg_leadfield_wholebody.npz"), tag
+    )
     assert calls["source_idx"] == -1
     assert calls["out_path"] is None
     assert calls["dpi"] == 300

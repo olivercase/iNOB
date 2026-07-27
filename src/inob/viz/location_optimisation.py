@@ -254,7 +254,7 @@ def render_location_optimisation(
     headline = (
         "Question: is the cervical paddle in the wrong place,\n"
         "or is EEG fundamentally limited by bone shielding?\n\n"
-        f"Source: vagus_left #{source_idx}  z = {src[2]:.0f} mm\n"
+        f"Source: {region} #{source_idx}  z = {src[2]:.0f} mm\n"
         f"Q = {Q_ref:g} nA·m, σ_EEG = {sigma:.1f} µV (1 kHz BW)\n\n"
         f"Cervical paddle (32 ch):\n"
         f"   peak |L|  = {paddle_best_val:.3e} µV / nA·m\n"
