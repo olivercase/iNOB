@@ -75,6 +75,7 @@ inob-physiology = "inob.cli.physiology:main"
 inob-cap-compare = "inob.cli.cap_compare:main"
 inob-topoplot   = "inob.cli.topoplot:main"
 inob-visualise  = "inob.cli.visualise:main"
+inob-muscle-sources = "inob.cli.muscle_sources:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

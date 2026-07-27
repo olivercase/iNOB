@@ -131,10 +131,19 @@ def save_figure(fig: Any, out: Any, *, dpi: int = 300) -> Any:
     return out
 
 
-def divergent_norm(values: np.ndarray) -> tuple[float, float]:
-    """Return (vmin, vmax) symmetric about zero for a divergent colour map."""
+def divergent_norm(values: np.ndarray, *, pct_clip: float | None = None) -> tuple[float, float]:
+    """Return (vmin, vmax) symmetric about zero for a divergent colour map.
+
+    ``pct_clip`` (0-100), if given, scales to that percentile of ``|values|``
+    instead of the exact max. A few near-field-dominated outliers (e.g. one
+    source a few mm from a sensor) can otherwise stretch the scale so far
+    that every other value renders as white — clipping lets a handful of
+    outliers saturate at the colour extreme instead of washing out the rest.
+    Default (``None``) keeps the exact abs-max behaviour used everywhere today.
+    """
     if values.size == 0:
         return -1.0, 1.0
-    v = float(np.max(np.abs(values)))
+    v = float(np.max(np.abs(values))) if pct_clip is None else float(
+        np.percentile(np.abs(values), pct_clip))
     v = v if v > 0 else 1.0
     return -v, v

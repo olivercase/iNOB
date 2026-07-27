@@ -13,10 +13,12 @@ A :class:`PhysiologyProfile` is looked up from the ``--source-target`` slug via
 
 Profile status
 --------------
-``vagus``  and ``spine`` are modelled from their own literature.
+``vagus`` and ``spine`` are modelled from their own literature.
 ``muscle`` remains **provisional**: it has an accurate static forward model
-(fibre-aligned anisotropy) but no MUAP/motor-unit dynamics, so it still borrows
-the nerve CAP machinery. See the PHYSIOLOGY-TODO in
+(fibre-aligned anisotropy) and its single-event fibre/CV/amplitude parameters
+are now muscle-specific (not borrowed from vagus), but it still has no
+MUAP/motor-unit/recruitment model, so it cannot represent voluntary
+interference EMG or build an event-train scenario. See the PHYSIOLOGY-TODO in
 :mod:`inob.physiology.scenarios`.
 
 References
@@ -32,6 +34,13 @@ References
   *Spine* 33:E836 — magnetospinography of the propagating cord volley, from
   which the ~55–70 m/s conduction velocity and single-nA·m equivalent current
   dipole used below are taken.
+* Lexell J, Taylor CC & Sjöström M 1988 *J Neurol Sci* 84:275 — human skeletal
+  muscle fibre diameter (Type I/II, ~40–80 µm).
+* McComas AJ 1977 *Neuromuscular Function and Disorders* — muscle-fibre
+  intracellular AP amplitude and duration.
+* Farina D & Merletti R 2004 *IEEE Rev Biomed Eng* — single-fibre and MUAP
+  conduction velocity (skeletal-muscle fibre CV ≈ 3–5 m/s, weakly diameter-
+  dependent, unlike saltatory conduction in myelinated nerve).
 """
 from __future__ import annotations
 
@@ -82,6 +91,23 @@ def dorsal_column_population(
     return lognormal_fibre_distribution(
         mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins,
         lo_um=3.0, hi_um=16.0,
+    )
+
+
+def muscle_fibre_population(
+    *, mean_um: float = 60.0, sigma_log: float = 0.20, n_bins: int = 20,
+) -> FibreDistribution:
+    """Skeletal-muscle fibres (mean d ≈ 60 µm, range 40–80 µm).
+
+    An order of magnitude coarser than any myelinated-axon population above:
+    these are the sarcolemmal fibres themselves, not axons. Diameter range
+    per Lexell et al. 1988 (human vastus lateralis, Type I/II fibres).
+    Conduction velocity does *not* follow the myelinated-axon CV≈k·D law —
+    see :data:`MUSCLE_PROFILE`'s ``cv_kwargs``.
+    """
+    return lognormal_fibre_distribution(
+        mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins,
+        lo_um=40.0, hi_um=80.0,
     )
 
 
@@ -141,13 +167,24 @@ class PhysiologyProfile:
     scenario_builder: Callable[..., tuple] | None = field(
         default=None, repr=False, compare=False,
     )
+    cv_kwargs: dict | None = None
+    """Override for :func:`inob.sources.cap.conduction_velocity_m_per_s`.
+
+    ``None`` uses that function's defaults — the myelinated-axon law
+    CV ≈ k·D (k = 6 m/s/µm), correct for nerve (vagus, spine). Muscle fibres
+    conduct via continuous sarcolemmal excitation, not saltatory conduction,
+    so CV is roughly diameter-independent at ≈ 3–5 m/s; that law does not
+    apply and must be overridden.
+    """
 
     # ── derived quantities ────────────────────────────────────────────────
 
     @property
     def mean_cv_m_per_s(self) -> float:
         """Fibre-population-weighted mean conduction velocity."""
-        cv = conduction_velocity_m_per_s(self.fibres.diameters_um)
+        cv = conduction_velocity_m_per_s(
+            self.fibres.diameters_um, **(self.cv_kwargs or {}),
+        )
         return float(np.sum(cv * self.fibres.weights))
 
     @property
@@ -306,25 +343,72 @@ SPINE_PROFILE = PhysiologyProfile(
 MUSCLE_PROFILE = PhysiologyProfile(
     name="muscle",
     label="muscle",
-    # Static forward model is sound (fibre-aligned anisotropy); the *dynamics*
-    # are still nerve-CAP machinery. See PHYSIOLOGY-TODO in scenarios.py.
+    # Static forward model is sound (fibre-aligned anisotropy) and the
+    # single-event fibre/CV/amplitude parameters below are now muscle-
+    # specific. Still provisional: there is no MUAP/motor-unit/recruitment
+    # model, so this can only represent one synchronous fibre volley (the
+    # evoked-M-wave case), not voluntary interference EMG, and no
+    # event-train scenario can be built. See PHYSIOLOGY-TODO in scenarios.py.
     validated=False,
-    fibres=a_fibre_population(),
-    ap_width_ms=0.5,
-    ap_amplitude_mV=70.0,
+    fibres=muscle_fibre_population(),
+    # Single muscle-fibre intracellular AP duration is longer than a nerve
+    # AP (continuous sarcolemmal excitation vs. saltatory conduction);
+    # ap_width_ms is the sigma of the biphasic shape, so 1.5 ms gives a
+    # FWHM of a few ms, consistent with single-fibre AP durations reported
+    # in surface/needle EMG (Farina & Merletti 2004).
+    ap_width_ms=1.5,
+    # Skeletal-muscle fibre AP amplitude (McComas 1977), slightly larger
+    # overshoot than the vagal/spinal axon figures used above.
+    ap_amplitude_mV=90.0,
     sigma_in_Sm=1.0,
-    n_fibres=200,
-    # Unchanged from the previous hardcoded default; muscle has no validated
-    # equivalent-dipole figure of its own yet (see PHYSIOLOGY-TODO).
-    default_strength_nAm=70.0,
+    # Calibration count (see SPINE_PROFILE.n_fibres for the same convention):
+    # chosen so the modelled event's total moment lands on the "single MUAP"
+    # Q ~= 10 nA.m estimate in inob.viz.detectability.MUSCLE_SCENARIOS,
+    # which cites the same Hamalainen formula at fibre-population scale
+    # (Cohen & Givler 1972). This also reconciles the two figures' magnitude
+    # assumptions, which previously used different d/sigma_in/AP-amplitude.
+    n_fibres=40,
+    # Matches the "evoked compound M-wave" scenario in MUSCLE_SCENARIOS —
+    # the closest muscle analogue to the spine profile's "the modelled event
+    # IS the thing being detected" (a synchronous, stimulus-locked volley
+    # rather than spontaneous/voluntary activity, which is not modelled).
+    default_strength_nAm=1000.0,
+    # NOTE: unlike vagus/spine, muscle source positions are a 3-D volume-fill
+    # of the whole muscle belly, not a 1-D ordered path — "arc length along
+    # the source list" is not a real anatomical distance here the way it is
+    # for a nerve trunk or cord. Using ``None`` ("whole polyline", as for
+    # spine) is unsafe: the cumulative arc length over an unordered point
+    # cloud is enormous and physically meaningless (~tens of metres for a
+    # ~300 mm muscle), which blows up cap_compare's transit-time window to
+    # tens of seconds of modelled signal. Bounding the span keeps the figure
+    # computable; it does not make the propagating-wavefront model
+    # physically correct for muscle (see PHYSIOLOGY-TODO — the source
+    # geometry itself needs a fibre-ordered path, not volume-fill points,
+    # before propagation along "arc length" means anything for this target).
     propagation_span_mm=50.0,
-    stationary_ok=True,
-    generator="PROVISIONAL — reuses vagal A-fibre bundle",
-    paradigm="PROVISIONAL — no MUAP / motor-unit model implemented",
+    # At CV ~= 4 m/s, 50 mm gives a 12.5 ms transit — far longer than the
+    # 1.5 ms AP width — so the stationary lumped-dipole approximation used
+    # for vagus (transit ~= AP width, 50 mm at ~47 m/s ~= 1 ms) is not
+    # defensible here even at this bounded span.
+    stationary_ok=False,
+    # Muscle-fibre CV is set by sarcolemmal membrane kinetics, not axon
+    # diameter, and is roughly constant across the fibre population
+    # (Farina & Merletti 2004, ~3-5 m/s) — the opposite of the myelinated
+    # CV~=k*D law used for vagus/spine. Push every fibre diameter below the
+    # "myelinated" threshold so conduction_velocity_m_per_s returns the flat
+    # c_unmyelinated rate instead of extrapolating the nerve law to a 60 um
+    # fibre (which would wrongly imply CV ~= 360 m/s).
+    cv_kwargs={"myelinated_threshold_um": 1000.0, "c_unmyelinated": 4.0},
+    generator="motor-endplate junction, propagating bidirectionally to tendons",
+    paradigm="PROVISIONAL — single synchronous fibre volley (evoked-M-wave "
+             "analogue); no MUAP/motor-unit/recruitment model",
     notes=(
-        "Muscle fibres conduct at 3-5 m/s (not ~50), are 40-80 um across (not "
-        "2-15), and fire asynchronously as interference EMG rather than a "
-        "synchronous compound AP. None of that is modelled yet."
+        "Fibre diameter, AP amplitude, and conduction velocity (~4 m/s, "
+        "diameter-independent) are now muscle-specific rather than reused "
+        "from vagus. Still missing: motor-unit/MUAP structure, recruitment "
+        "and rate-coding (size principle, 8-30 Hz), and the resulting "
+        "asynchronous interference-EMG waveform for voluntary contraction — "
+        "only a single synchronous evoked volley is representable."
     ),
     scenario_builder=None,
 )
@@ -335,6 +419,12 @@ PROFILES: dict[str, PhysiologyProfile] = {
     "spine": SPINE_PROFILE,
     "spine_vagus": SPINE_PROFILE,
     "muscle": MUSCLE_PROFILE,
+    # Same gap as spine_vagus -> SPINE_PROFILE above: a combined forward solve
+    # (spinal_cord + muscle tissue) still only gets spine's time-domain
+    # physiology for any figure. No combined-target physiology model exists;
+    # this is a placeholder that keeps every SOURCE_TARGET resolvable rather
+    # than silently falling back to vagus.
+    "spine_muscle": SPINE_PROFILE,
 }
 
 

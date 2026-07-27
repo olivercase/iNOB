@@ -67,15 +67,19 @@ DEFAULT_SCENARIOS: tuple[DetectabilityScenario, ...] = (
                            "Per Bu et al. 2024 Hämäläinen summation."),
 )
 
-# Muscle (magnetomyography) source-strength range. Muscle fibres are ~50 µm —
+# Muscle (magnetomyography) source-strength range. Muscle fibres are ~60 µm —
 # an order of magnitude fatter than the ~8 µm vagal A-fibres — so the per-fibre
-# Hämäläinen moment (Q ∝ d²) is ~40× larger, and a motor unit fires 100s of
+# Hämäläinen moment (Q ∝ d²) is far larger, and a motor unit fires 100s of
 # fibres near-synchronously. Static equivalent-current-dipole magnitudes only —
 # recruitment/firing dynamics are deliberately NOT modelled here; see the
 # PHYSIOLOGY-TODO block in :mod:`inob.physiology.scenarios` for the deferred
-# muscle dynamics work:
-#   per-fibre Q ≈ π·(50 µm)²·σ_in(0.4)·ΔV(0.1 V)/4 ≈ 0.08 nA·m
-#   single MUAP  ≈ 10²–10³ fibres      → ~10 nA·m
+# muscle dynamics work. Fibre/AP constants below match
+# :data:`inob.physiology.profiles.MUSCLE_PROFILE` (mean d=60 um,
+# sigma_in=1 S/m — the same Hamalainen convention used for vagus/spine,
+# not the peripheral-axon value — ap_amplitude=90 mV), so the two figures'
+# magnitude assumptions agree:
+#   per-fibre Q ≈ π·(60 µm)²·σ_in(1.0)·ΔV(0.09 V)/4 ≈ 0.25 nA·m
+#   single MUAP  ≈ 40 fibres near-synchronous (MUSCLE_PROFILE.n_fibres) → ~10 nA·m
 #   weak voluntary (few MUs recruited) → ~50 nA·m
 #   moderate voluntary contraction     → ~200 nA·m
 #   evoked compound M-wave (whole-muscle synchronous) → ~1000 nA·m
@@ -240,10 +244,15 @@ def render_detectability(
         if ymax is None:
             ymax = 10 ** np.ceil(np.log10(data_hi * 2.0))
         ax.set_ylim(ymin, ymax)
-        ax.axhline(max_trials, color=NATURE_PALETTE["axis"], lw=0.5,
-                   linestyle=":", alpha=0.6)
-        ax.text(z.min(), max_trials * 1.4, f"{max_trials:.0e} trials",
-                fontsize=6.5, color=NATURE_PALETTE["axis"], alpha=0.8)
+        # Only annotate the max-trials cap if it actually falls in the visible
+        # range — for very strong sources (e.g. muscle) required trials never
+        # approach it, and an off-axis text position with clip_on=False (the
+        # default) blows up the bbox_inches="tight" save to include it.
+        if ymin <= max_trials <= ymax:
+            ax.axhline(max_trials, color=NATURE_PALETTE["axis"], lw=0.5,
+                       linestyle=":", alpha=0.6)
+            ax.text(z.min(), max_trials * 1.4, f"{max_trials:.0e} trials",
+                    fontsize=6.5, color=NATURE_PALETTE["axis"], alpha=0.8)
 
     # Event-repetition rates for the averaging axis, and their label. Muscle
     # events recur at motor-unit firing rates (~8–30 Hz); vagal CAPs at the

@@ -86,6 +86,8 @@ COMMANDS: tuple[Command, ...] = (
             "MEG/EEG field maps on the body surface"),
     Command("visualise", "inob.cli.visualise", "Figures",
             "Render geometry and FEM mesh PNGs"),
+    Command("muscle-sources", "inob.cli.muscle_sources", "Figures",
+            "Muscle source dipoles: L/R pairing + fibre orientation (pre-solve)"),
 )
 
 BY_NAME: dict[str, Command] = {}

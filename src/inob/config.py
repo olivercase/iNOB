@@ -328,6 +328,8 @@ SOURCE_TARGETS: dict[str, dict[str, str]] = {
                     "electrodes": "spinal_cord",         "level": "c7"},
     "muscle":      {"tissues": "muscle",                 "label": "muscle",
                     "electrodes": "muscle"},
+    "spine_muscle": {"tissues": "spinal_cord,muscle",    "label": "spine + muscle",
+                    "electrodes": "spinal_cord",         "level": "c7"},
 }
 
 # Leadfield filename prefixes stripped to recover the ``--source-target`` slug.

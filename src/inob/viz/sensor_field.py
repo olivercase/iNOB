@@ -21,7 +21,7 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 
 from inob.anatomy import vertebra_z_band as _anatomy_z_band
-from inob.config import Config, target_output
+from inob.config import Config, source_target_tag, target_output
 from inob.io.npz import Leadfield, load_leadfield
 from inob.viz.style import (
     NATURE_PALETTE,
@@ -36,6 +36,22 @@ logger = logging.getLogger(__name__)
 
 
 # ── leadfield accessors ─────────────────────────────────────────────────────
+
+# Percentile clip for the divergent colour scale, keyed by source target.
+# Muscle volume-fills the whole muscle bulk, so a handful of near-surface
+# sources sit just a few mm from a sensor and their near-field response is
+# 10-40x stronger than the rest — an abs-max colour scale saturates those
+# outliers to full colour and washes everything else to white. Clipping to
+# a lower percentile lets those sources cap out instead, revealing the
+# structure in the remaining (still well-resolved) sources. Other targets
+# are untouched (``None`` keeps today's exact abs-max scale).
+_COLOR_PCT_CLIP_BY_TARGET: dict[str, float] = {"muscle": 99.0}
+
+
+def _color_pct_clip(cfg: Config) -> float | None:
+    """Divergent-scale percentile clip for this run's source target (see above)."""
+    return _COLOR_PCT_CLIP_BY_TARGET.get(source_target_tag(cfg))
+
 
 def _radial_idx(lf: Leadfield) -> np.ndarray:
     """Channel indices of the radial OPM component (first third of the array)."""
@@ -188,14 +204,16 @@ def render_aggregate_field(
     v = aggregate_field(lf, moment, mode=mode, sources=sources)
     _, pos = radial_field(lf, 0, moment)          # positions only
     src = lf.source_pos if sources is None else lf.source_pos[sources]
+    pct_clip = _color_pct_clip(cfg)
 
     if mode == "coherent":
         cmap = divergent_cmap()
-        vmin, vmax = divergent_norm(v)
+        vmin, vmax = divergent_norm(v, pct_clip=pct_clip)
         cbar_label = "Σ field (fT/nA·m)"
     else:
         cmap = plt.get_cmap("magma")
-        vmin, vmax = 0.0, float(np.max(v))
+        vmin = 0.0
+        vmax = float(np.max(v)) if pct_clip is None else float(np.percentile(v, pct_clip))
         cbar_label = "RMS field (fT/nA·m)"
 
     fig = plt.figure(figsize=(14, 6))
@@ -270,7 +288,7 @@ def render_sensor_field(
     v, pos = radial_field(lf, source_idx, moment)
     src = lf.source_pos[source_idx]
     cmap = divergent_cmap()
-    vmin, vmax = divergent_norm(v)
+    vmin, vmax = divergent_norm(v, pct_clip=_color_pct_clip(cfg))
 
     fig = plt.figure(figsize=(13, 10))
     gs = GridSpec(2, 2, figure=fig, left=0.06, right=0.95, top=0.92,

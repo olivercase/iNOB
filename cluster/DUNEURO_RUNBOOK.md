@@ -123,6 +123,7 @@ lives under it.
 | `spine` | `spinal_cord` | `out_spine/` | `duneuro_leadfield_spine.npz` |
 | `spine_vagus` | `spinal_cord,vagus_left` | `out_spine_vagus/` | `duneuro_leadfield_spine_vagus.npz` |
 | `muscle` | `muscle` | `out_muscle/` | `duneuro_leadfield_muscle.npz` |
+| `spine_muscle` | `spinal_cord,muscle` | `out_spine_muscle/` | `duneuro_leadfield_spine_muscle.npz` |
 
 Add a region by extending that `case` (any mesh tissue label works — the mesh
 already carries all compartments; only the *source placement* changes).

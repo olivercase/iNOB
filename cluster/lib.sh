@@ -95,8 +95,11 @@ inob__source_target() {
     # thousands of sources; default it to a tractable 15 mm (~380 sources).
     SOURCE_SPACING=""
     # MUSCLE_ANISOTROPY: when "1", the solver gives the muscle compartment a
-    # fibre-aligned conductivity tensor (σ∥≠σ⊥). Only the muscle target sets it,
-    # so vagus/spine leadfields stay isotropic and byte-identical.
+    # fibre-aligned conductivity tensor (σ∥≠σ⊥). Only targets with muscle in
+    # TISSUES set it, so vagus/spine-only leadfields stay isotropic and
+    # byte-identical. (The config's own mode="auto" already gates on whether
+    # "muscle" is in source_tissue, so this var is mostly informational/for
+    # the MUSCLE_ANISOTROPY_OVERRIDE A/B path — see run_array.sh/run_eeg.sh.)
     MUSCLE_ANISOTROPY=""
     case "${t}" in
         vagus)       TISSUES="vagus_left";             TARGET_TAG="vagus" ;;
@@ -105,8 +108,11 @@ inob__source_target() {
         muscle)      TISSUES="muscle";                 TARGET_TAG="muscle"
                      SOURCE_SPACING="${SOURCE_SPACING:-15}"
                      MUSCLE_ANISOTROPY="${MUSCLE_ANISOTROPY:-1}" ;;
+        spine_muscle) TISSUES="spinal_cord,muscle";    TARGET_TAG="spine_muscle"
+                     SOURCE_SPACING="${SOURCE_SPACING:-15}"
+                     MUSCLE_ANISOTROPY="${MUSCLE_ANISOTROPY:-1}" ;;
         *)
-            echo "[lib.sh] unknown SOURCE_TARGET '${t}'. Use: vagus | spine | spine_vagus | muscle" >&2
+            echo "[lib.sh] unknown SOURCE_TARGET '${t}'. Use: vagus | spine | spine_vagus | muscle | spine_muscle" >&2
             return 2 ;;
     esac
     # Honour a caller-provided SOURCE_SPACING override for any target.

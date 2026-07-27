@@ -41,24 +41,39 @@ to produce a time-domain signal at every MEG / EEG sensor.
 
 .. PHYSIOLOGY-TODO: muscle (magnetomyography) dynamics — NOT IMPLEMENTED.
    Both scenarios above are *vagal afferent* event trains. The muscle
-   source-target currently has only a **static** physiology: fibre-aligned
-   anisotropic conductivity in the forward solve
-   (``forward.muscle_anisotropy``) and muscle-magnitude equivalent current
-   dipoles in :data:`inob.viz.detectability.MUSCLE_SCENARIOS`. That was a
-   deliberate sequencing choice — get an accurate forward model first, then
-   hang dynamics off it — so any *time-domain* muscle output (cap_compare,
-   physiology_plot, simulate) still reuses the vagus CAP model and remains
-   PROVISIONAL.
+   source-target has a **static** forward model (fibre-aligned anisotropic
+   conductivity, ``forward.muscle_anisotropy``) and, since the muscle fibre/
+   CV/AP-amplitude fix, a muscle-specific single-event physiology in
+   :data:`inob.physiology.profiles.MUSCLE_PROFILE` (d ≈ 40–80 µm fibres,
+   CV ≈ 4 m/s, matched to :data:`inob.viz.detectability.MUSCLE_SCENARIOS`).
+   That single-event model can represent one synchronous fibre volley (the
+   evoked-M-wave case) but nothing beyond it — there is still no MUAP/motor-
+   unit/recruitment layer, so any *time-domain, multi-event* muscle output
+   (an event train from cap_compare/physiology_plot/simulate, i.e. voluntary
+   or spontaneous EMG rather than a single stimulated volley) remains
+   PROVISIONAL and un-buildable (``scenario_builder=None``).
 
    The deferred muscle-dynamics module would need:
-     * a muscle-fibre population (d ≈ 40–80 µm, not the 2–15 µm axon range)
-       and the muscle-fibre conduction velocity ≈ 3–5 m/s (vs ≈ 50 m/s nerve);
      * a MUAP waveform + motor-unit model (100s–1000s of fibres per MU,
        innervation-zone origin, propagation to both tendons);
      * recruitment / rate-coding (size principle, 8–30 Hz firing, asynchronous
        MUs → interference EMG rather than a synchronous compound AP);
-     * an activation scenario (isometric hold, twitch, evoked M-wave).
+     * an activation scenario (isometric hold, twitch, evoked M-wave) built
+       as a proper event train, the way the SSEP scenarios are for spine.
    Grep ``PHYSIOLOGY-TODO`` before publishing any time-domain muscle figure.
+
+   A second, separate gap: :mod:`inob.sources.muscle` places sources as a
+   3-D volume-fill of the whole muscle belly, not a 1-D ordered path along
+   a fibre axis. :mod:`inob.sources.cap`'s propagating-wavefront model
+   (used by ``cap_compare``) assumes source positions are arc-length-
+   ordered along a single path, as they are for the vagus bundle and the
+   cord — that assumption does not hold for muscle's point cloud, so any
+   "propagating vs stationary" comparison for muscle is only as meaningful
+   as :data:`inob.physiology.profiles.MUSCLE_PROFILE.propagation_span_mm`,
+   bounded small specifically to avoid computing over the (physically
+   meaningless) cumulative arc length of an unordered point cloud. Fixing
+   this properly needs a fibre-ordered source path for muscle, not just a
+   profile-parameter change.
 
 References
 ----------

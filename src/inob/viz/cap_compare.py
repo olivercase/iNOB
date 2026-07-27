@@ -129,7 +129,9 @@ def render_cap_compare(
     hot_idx = int(np.argmax(lf.source_pos[:, 2]))
 
     fibres = profile.fibres
-    cv_per_d = conduction_velocity_m_per_s(fibres.diameters_um)
+    cv_per_d = conduction_velocity_m_per_s(
+        fibres.diameters_um, **(profile.cv_kwargs or {}),
+    )
     cv_mean = float(np.sum(cv_per_d * fibres.weights))     # m/s
     # Per-fibre dipole moment, A·m, as a function of diameter d (Hämäläinen)
     Q_per_fibre_Am = (

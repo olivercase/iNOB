@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--source-idx", type=int, default=-1)
     p.add_argument("--out", type=Path, default=None,
-                   help="Output PNG path (default: cfg.outputs.base/sarvas_vs_fem.png).")
+                   help="Output PNG path (default: cfg.outputs.base/sarvas/sarvas_vs_fem.png).")
     p.add_argument("--dpi", type=int, default=300)
     p.add_argument(
         "--show-hamalainen", action="store_true",
@@ -51,7 +51,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {label}  →  Q = {Q:.4f} nA·m")
 
     result = compare_sarvas_vs_fem(cfg, Q_nAm=args.Q_nAm)
-    out = args.out or (target_output(cfg, "sarvas_vs_fem.png"))
+    out = args.out or (cfg.outputs.base / "sarvas" / target_output(cfg, "sarvas_vs_fem.png").name)
+    out.parent.mkdir(parents=True, exist_ok=True)
     render_sarvas_vs_fem(result, source_idx=args.source_idx, out_path=out,
                           dpi=args.dpi, region=source_region_label(cfg))
     summary_path = out.with_suffix(".json")

@@ -166,6 +166,27 @@ def muscle_tet_fibre_axes(
     return group, axes, mask
 
 
+def _nearest_index(positions: np.ndarray, centres_arr: np.ndarray) -> np.ndarray:
+    """Index of the nearest row of ``centres_arr`` for every position, ``(S,)``."""
+    idx = np.empty(len(positions), dtype=np.int64)
+    for i, p in enumerate(positions):
+        idx[i] = np.argmin(np.sum((centres_arr - p) ** 2, axis=1))
+    return idx
+
+
+def muscle_source_stl_assignment(positions: np.ndarray, *, muscle_dir) -> np.ndarray:
+    """Nearest-muscle-STL index (into ``sorted(Path(muscle_dir).glob("*.stl"))``)
+    for every source position, ``(S,)``.
+
+    The same nearest-STL rule :func:`muscle_source_orientations` uses to pick
+    each source's fibre axis, exposed on its own so a caller (e.g. a figure
+    that colours sources by which individual muscle they belong to) can use
+    the identical per-source assignment rather than re-deriving it.
+    """
+    _axes_arr, centres_arr = _muscle_stl_axes(muscle_dir)
+    return _nearest_index(positions, centres_arr)
+
+
 def muscle_source_orientations(
     fem: FemMesh, positions: np.ndarray, *,
     tissue_label: str = "muscle", muscle_dir=None,
@@ -185,14 +206,12 @@ def muscle_source_orientations(
     """
     if muscle_dir is not None:
         axes_arr, centres_arr = _muscle_stl_axes(muscle_dir)
+        nearest = _nearest_index(positions, centres_arr)
     else:
         labels, centroids = _muscle_components(fem, tissue_label)
         comp_ids = np.unique(labels)
         axes_arr = np.array([_principal_axis(centroids[labels == c]) for c in comp_ids])
         centres_arr = np.array([centroids[labels == c].mean(axis=0) for c in comp_ids])
+        nearest = _nearest_index(positions, centres_arr)
 
-    orient = np.empty_like(positions, dtype=np.float64)
-    for i, p in enumerate(positions):
-        nearest = np.argmin(np.sum((centres_arr - p) ** 2, axis=1))
-        orient[i] = axes_arr[nearest]
-    return orient
+    return axes_arr[nearest]

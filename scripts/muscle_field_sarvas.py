@@ -13,12 +13,12 @@ the local neck axis at the source's own z (moving-sphere convention,
 inob.analysis.sarvas_compare).
 
 Outputs:
-  outputs/muscle_skin_topoplot.png        radial component
-  outputs/muscle_skin_topoplot_tang1.png  superior-inferior tangential
-  outputs/muscle_skin_topoplot_tang2.png  azimuthal tangential
-  outputs/muscle_skin_topoplot_vectors.png  measurement-vector directions
-  outputs/muscle_skin_distance_decay.png  amplitude vs distance (new)
-  outputs/muscle_skin_topoplot.json       peak values for all three
+  outputs/sarvas/muscle_skin_topoplot.png        radial component
+  outputs/sarvas/muscle_skin_topoplot_tang1.png  superior-inferior tangential
+  outputs/sarvas/muscle_skin_topoplot_tang2.png  azimuthal tangential
+  outputs/sarvas/muscle_skin_topoplot_vectors.png  measurement-vector directions
+  outputs/sarvas/muscle_skin_distance_decay.png  amplitude vs distance (new)
+  outputs/sarvas/muscle_skin_topoplot.json       peak values for all three
 Units: fT per 1 nA·m of dipole moment (iNOB leadfield convention).
 Pass --Q-nAm <value> to annotate figures with physiological amplitudes.
 """
@@ -53,12 +53,15 @@ from inob.viz.surface_topoplot import (
 ROOT = Path(__file__).resolve().parents[1]
 GEOM = ROOT / "outputs/geometry/geometry.mat"
 MUSCLE_DIR = ROOT / "data/muscle"
-OUT_PNG         = ROOT / "outputs/muscle_skin_topoplot.png"
-OUT_PNG_TANG1   = ROOT / "outputs/muscle_skin_topoplot_tang1.png"
-OUT_PNG_TANG2   = ROOT / "outputs/muscle_skin_topoplot_tang2.png"
-OUT_PNG_VECTORS = ROOT / "outputs/muscle_skin_topoplot_vectors.png"
-OUT_PNG_DIST    = ROOT / "outputs/muscle_skin_distance_decay.png"
-OUT_JSON        = ROOT / "outputs/muscle_skin_topoplot.json"
+# Sarvas (analytic-sphere) figures live in their own folder so they are never
+# confused with the FEM forward-model figures under outputs/.
+SARVAS_DIR      = ROOT / "outputs/sarvas"
+OUT_PNG         = SARVAS_DIR / "muscle_skin_topoplot.png"
+OUT_PNG_TANG1   = SARVAS_DIR / "muscle_skin_topoplot_tang1.png"
+OUT_PNG_TANG2   = SARVAS_DIR / "muscle_skin_topoplot_tang2.png"
+OUT_PNG_VECTORS = SARVAS_DIR / "muscle_skin_topoplot_vectors.png"
+OUT_PNG_DIST    = SARVAS_DIR / "muscle_skin_distance_decay.png"
+OUT_JSON        = SARVAS_DIR / "muscle_skin_topoplot.json"
 
 DEFAULT_PATTERNS = [
     "scalenus anter",
