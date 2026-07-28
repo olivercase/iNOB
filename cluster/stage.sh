@@ -57,7 +57,7 @@ rsync -avh ${DRY_RUN} "${EXCL[@]}" --progress \
 # untagged name is still staged for older runs. Optional: skip quietly if not
 # generated.
 ELEC_STAGED=0
-for elec in "electrode_array_${TARGET_TAG}.mat" "electrode_array.mat"; do
+for elec in "electrode_array_${TARGET_TAG}.mat" "electrode_array.mat" "electrode_array_wholebody.mat"; do
     if [[ -f "${LOCAL_DIR}/outputs/sensors/${elec}" ]]; then
         rsync -avh ${DRY_RUN} "${EXCL[@]}" --progress \
             "${LOCAL_DIR}/outputs/sensors/${elec}" \

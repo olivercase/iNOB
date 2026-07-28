@@ -45,12 +45,24 @@ fi
 # The HD patch is sited over the target tissue, so each target has its own
 # array file (electrode_array_<tag>.mat). Fall back to the untagged name for
 # runs staged before per-target patches existed.
-ELEC="${BASE}/outputs/sensors/electrode_array_${TARGET_TAG}.mat"
-if [[ ! -f "${ELEC}" ]]; then
-    ELEC="${BASE}/outputs/sensors/electrode_array.mat"
-    inob__log "WARNING: no electrode_array_${TARGET_TAG}.mat — falling back to"
-    inob__log "  ${ELEC}, which may be sited over a different tissue. Regenerate"
-    inob__log "  with 'inob-electrodes --source-target ${SOURCE_TARGET}' and restage."
+#
+# WHOLEBODY=1 swaps this for the target-independent 1,000-contact whole-skin
+# net (outputs/sensors/electrode_array_wholebody.mat, generated locally via
+# `inob electrodes --set electrodes.shape=whole_body --set
+# outputs.electrodes_mat=outputs/sensors/electrode_array_wholebody.mat` and
+# staged like any other input) — used by `inob location` to compare the
+# cervical paddle against a full-body sweep.
+if [[ "${WHOLEBODY:-0}" == "1" ]]; then
+    ELEC="${BASE}/outputs/sensors/electrode_array_wholebody.mat"
+    FINAL="${BASE}/duneuro_eeg_leadfield_wholebody_${TARGET_TAG}.npz"
+else
+    ELEC="${BASE}/outputs/sensors/electrode_array_${TARGET_TAG}.mat"
+    if [[ ! -f "${ELEC}" ]]; then
+        ELEC="${BASE}/outputs/sensors/electrode_array.mat"
+        inob__log "WARNING: no electrode_array_${TARGET_TAG}.mat — falling back to"
+        inob__log "  ${ELEC}, which may be sited over a different tissue. Regenerate"
+        inob__log "  with 'inob-electrodes --source-target ${SOURCE_TARGET}' and restage."
+    fi
 fi
 
 # Optional explicit FEM mesh — see run_array.sh. MUST match the MEG run's mesh.

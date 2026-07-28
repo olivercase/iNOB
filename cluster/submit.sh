@@ -65,7 +65,9 @@ case "${WHICH}" in
         BODY="${HERE}/run_build.sh"
         ;;
     eeg)
-        JOB_NAME="eeg_${TARGET_TAG}"
+        WB_SUFFIX=""
+        [[ "${WHOLEBODY:-0}" == "1" ]] && WB_SUFFIX="_wb"
+        JOB_NAME="eeg_${TARGET_TAG}${WB_SUFFIX}"
         FLAGS=(
             -N "${JOB_NAME}"
             -pe ${PE_DIRECTIVE}
