@@ -108,21 +108,31 @@ def test_point_sources_default_empty() -> None:
 
 
 def test_detectability_scenarios_follow_source_target() -> None:
-    """Muscle gets the magnetomyography Q range; other targets keep vagal-CAP."""
+    """Each target plans against the Q range its own literature supports."""
+    from inob.physiology.profiles import SPINE_PROFILE
     from inob.viz.detectability import (
         DEFAULT_SCENARIOS,
         MUSCLE_SCENARIOS,
         scenarios_for_target,
     )
     base = "outputs/forward/duneuro_leadfield_{}.npz"
-    for target in ("vagus", "spine", "spine_vagus"):
-        cfg = load_config(DEFAULT_CFG,
-                          overrides=[f"outputs.forward_npz={base.format(target)}"])
-        assert scenarios_for_target(cfg) is DEFAULT_SCENARIOS
 
-    cfg = load_config(DEFAULT_CFG,
-                      overrides=[f"outputs.forward_npz={base.format('muscle')}"])
-    assert scenarios_for_target(cfg) is MUSCLE_SCENARIOS
+    def cfg_for(target: str):
+        return load_config(DEFAULT_CFG,
+                           overrides=[f"outputs.forward_npz={base.format(target)}"])
+
+    assert scenarios_for_target(cfg_for("vagus")) is DEFAULT_SCENARIOS
+    assert scenarios_for_target(cfg_for("muscle")) is MUSCLE_SCENARIOS
+
+    # The spine plans against magnetospinography, not the vagus's 70 nA·m
+    # full-summation figure — which is an order of magnitude above anything
+    # reported for the cord. Its ladder must contain the profile's anchor
+    # exactly, so the detectability and time-domain figures cannot disagree.
+    for target in ("spine", "spine_vagus", "spine_muscle"):
+        spine = scenarios_for_target(cfg_for(target))
+        assert spine is not DEFAULT_SCENARIOS
+        assert any(s.Q_nAm == SPINE_PROFILE.default_strength_nAm for s in spine)
+        assert max(s.Q_nAm for s in spine) < max(s.Q_nAm for s in DEFAULT_SCENARIOS)
     # Muscle sources are far stronger than vagal CAPs. The ranges overlap at the
     # bottom (a single MUAP is comparable to a modest CAP), but muscle is shifted
     # up throughout and tops out an order of magnitude higher.

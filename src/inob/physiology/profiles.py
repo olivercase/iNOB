@@ -27,9 +27,9 @@ References
 * Bu Y *et al.* 2024 *Comm Biol* 7:893 — cervical-vagus baroreceptor OPM recording.
 * Pelot NA *et al.* 2017 *Front Neurosci* 12:601 — vagal fibre populations.
 * Cruccu G *et al.* 2008 *Clin Neurophysiol* 119:1705 — SSEP recording standards
-  (stimulation rates, cervical N13 generator, montages).
+  (stimulation rates, montages).
 * Desmedt JE & Cheron G 1980 *Electroencephalogr Clin Neurophysiol* 50:382 —
-  cervical N13 and the ascending dorsal-column volley.
+  the ascending dorsal-column volley.
 * Kawabata S *et al.* 2002 *Clin Neurophysiol* 113:1874; Sasaki S *et al.* 2008
   *Spine* 33:E836 — magnetospinography of the propagating cord volley, from
   which the ~55–70 m/s conduction velocity and single-nA·m equivalent current
@@ -299,9 +299,9 @@ SPINE_PROFILE = PhysiologyProfile(
     label="spine",
     validated=True,
     fibres=dorsal_column_population(),
-    # The cervical cord evoked response (N13 and its magnetic counterpart) has
-    # a component duration around 1 ms — broader than a single peripheral-nerve
-    # AP because the ascending volley is already dispersed across CVs.
+    # The cervical cord evoked response has a component duration around 1 ms —
+    # broader than a single peripheral-nerve AP because the ascending volley is
+    # already dispersed across CVs.
     ap_width_ms=0.7,
     # Large myelinated axons; intracellular AP amplitude toward the top of the
     # 70-100 mV range rather than the 70 mV used for the finer vagal fibres.

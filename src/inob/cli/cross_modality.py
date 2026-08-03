@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Override the EEG noise floor (RMS µV) used to corrupt the EEG "
              "observation before the lstsq inversion. Default = derive from "
              "cfg.noise (HD-EMG amplifier + Johnson noise integrated over "
-             "cfg.noise.bandwidth_hz).",
+             "the cfg.noise recording band).",
     )
     p.add_argument("--noise-seed", type=int, default=0,
                    help="RNG seed for the EEG-noise sample.")

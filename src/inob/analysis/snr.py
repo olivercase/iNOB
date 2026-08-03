@@ -5,10 +5,12 @@ compute the predicted single-CAP SNR (and post-averaging SNR) per source.
 
 Noise floors (set in ``cfg.noise``):
 
-  OPM (magnetic):    σ_n_meg = opm_intrinsic_fT_sqrtHz × √bandwidth_hz   [fT]
-  HD-EMG (electric): σ_n_eeg = √(amp_noise² + Johnson²) × √bandwidth_hz  [µV]
-                     where Johnson noise from a 50 kΩ contact in a 1 kHz
-                     band is ~28 nV/√Hz × √1000 ≈ 0.9 µV.
+  OPM (magnetic):    σ_n_meg = opm_intrinsic_fT_sqrtHz × √BW   [fT]
+  HD-EMG (electric): σ_n_eeg = √(amp_noise² + Johnson²) × √BW  [µV]
+
+where BW is the recording passband (``noise.band_lo_hz``…``band_hi_hz``,
+default 30–500 Hz — what evoked-potential recording actually uses) and the
+Johnson term is the thermal noise of the electrode-skin contact impedance.
 
 The "signal" we use is the dipole-moment-norm-projected leadfield amplitude:
     |L_eff(s)| = √(L[:, 3s : 3s+3] @ q_unit · |q_unit|²)
@@ -35,9 +37,9 @@ class NoiseFloors:
 
 
 def compute_noise_floors(cfg: Config) -> NoiseFloors:
-    """Compute σ_n in fT (OPM) and µV (HD electrode) for ``cfg.noise.bandwidth_hz``."""
+    """Compute σ_n in fT (OPM) and µV (HD electrode) over the recording band."""
     n = cfg.noise
-    bw = float(n.bandwidth_hz)
+    bw = n.effective_bandwidth_hz
     meg_sigma = float(n.opm_intrinsic_fT_sqrtHz) * np.sqrt(bw)
     # Johnson voltage noise of the contact resistance:
     #   v_n = √(4 k_B T R)  in V/√Hz; with R in kΩ:
@@ -97,6 +99,42 @@ def per_source_peak(L_human_units: np.ndarray) -> np.ndarray:
         raise ValueError(f"L second dim {three_S} not divisible by 3")
     S = three_S // 3
     return np.abs(L_human_units.reshape(C, S, 3)).max(axis=(0, 2))
+
+
+def per_source_best_bipolar(L_human_units: np.ndarray) -> np.ndarray:
+    """Largest potential difference the array can form, per source — (S,).
+
+    For each source and moment direction this is ``max_c L − min_c L`` over the
+    channels: the best bipolar pair in the array. Use for EEG; meaningless for
+    MEG, where each channel is already a difference-free field measurement.
+
+    Why this and not :func:`per_source_peak`
+    ----------------------------------------
+    A surface potential is only defined up to a per-source additive constant,
+    so a single channel's value depends entirely on the reference. The saved
+    EEG leadfield is common-average referenced (see :mod:`inob.forward.eeg`),
+    which for a patch spanning a few centimetres removes most of the amplitude
+    a deep source produces — the potential is nearly flat across that
+    footprint, and the average takes the flat part away.
+
+    A *difference* between two contacts is immune to that: subtracting a common
+    constant from every channel leaves it unchanged. So this quantity is what
+    the electrode array can actually measure, independent of how it happens to
+    be referenced, and it is recoverable from an existing leadfield without
+    re-solving. On the cervical spine patch it runs ~1.7x above the referenced
+    single-channel peak; on the whole-body array, where contacts are metres
+    rather than centimetres apart, the gap is far larger — which is the point
+    the whole-body-vs-patch comparison in :mod:`inob.viz.location_optimisation`
+    exists to make.
+    """
+    C, three_S = L_human_units.shape
+    if three_S % 3 != 0:
+        raise ValueError(f"L second dim {three_S} not divisible by 3")
+    S = three_S // 3
+    L3 = L_human_units.reshape(C, S, 3)
+    # max_ij |L_i - L_j| = max_i L_i - min_i L_i, so this is O(C·S) rather than
+    # the O(C²·S) all-pairs form — which matters for the 1000-contact array.
+    return (L3.max(axis=0) - L3.min(axis=0)).max(axis=1)
 
 
 def snr_per_source(

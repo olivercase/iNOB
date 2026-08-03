@@ -51,7 +51,7 @@ class ElectrodeArrayParams:
     rows: int
     cols: int
     contact_pitch_mm: float
-    shape: str = "rectangular"           # "rectangular", "paddle32", or "whole_body"
+    shape: str = "rectangular"           # rectangular / paddle32 / whole_body
     head_offset_mm: float = 15.0         # paddle: distance from grid top to head contact
     foot_offset_mm: float = 15.0         # paddle: distance from grid bottom to foot contact
     target_tissue: str = "vagus_left"
@@ -214,7 +214,11 @@ def build_electrode_array(
     fem: FemMesh,
     params: ElectrodeArrayParams,
 ) -> SensorArray:
-    """Place an HD electrode patch (rectangular / paddle32 / whole_body) on the skin."""
+    """Place electrodes on the skin per ``params.shape``.
+
+    ``rectangular`` / ``paddle32`` are patches over the target; ``whole_body``
+    is a uniform skin-wide net.
+    """
     if params.shape == "whole_body":
         pts, normals, labels = _whole_body_electrodes(
             skin, params.n_contacts, seed=params.sample_seed,

@@ -10,6 +10,8 @@ from inob.analysis.snr import (
     array_summary,
     compute_noise_floors,
     per_source_amplitude,
+    per_source_best_bipolar,
+    per_source_peak,
     snr_per_source,
 )
 from inob.config import load_config
@@ -20,11 +22,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def test_noise_floors_have_expected_orders() -> None:
     cfg = load_config(REPO_ROOT / "configs" / "default.yaml")
     nf = compute_noise_floors(cfg)
-    # OPM 15 fT/√Hz × √1000 ≈ 474 fT
-    assert 200 < nf.meg_per_channel_fT < 1000
-    # EEG amplifier 0.5 µV/√Hz dominates over Johnson@50kΩ ≈ 0.93 µV/√Hz
-    # → ~1.06 µV/√Hz × √1000 ≈ 33 µV
-    assert 10 < nf.eeg_per_channel_uV < 80
+    # OPM 7 fT/√Hz × √470 (the 30–500 Hz recording band) ≈ 152 fT
+    assert 50 < nf.meg_per_channel_fT < 500
+    # EEG amplifier 0.1 µV/√Hz dominates over Johnson@10 kΩ ≈ 0.013 µV/√Hz
+    # → ~0.1 µV/√Hz × √470 ≈ 2.2 µV
+    assert 0.5 < nf.eeg_per_channel_uV < 10
 
 
 def test_per_source_amplitude_shape_and_units() -> None:
@@ -61,3 +63,45 @@ def test_per_source_bad_columns_raises() -> None:
     L = np.zeros((4, 7))      # not divisible by 3
     with pytest.raises(ValueError, match="not divisible"):
         per_source_amplitude(L)
+
+
+def test_best_bipolar_is_reference_invariant() -> None:
+    """The whole point of the bipolar observable: it survives re-referencing.
+
+    A surface potential is defined only up to a per-source constant, so the
+    single-channel peak moves when the reference changes and the bipolar
+    amplitude does not.
+    """
+    rng = np.random.default_rng(3)
+    L = rng.standard_normal((16, 3 * 7))
+    L_car = L - L.mean(axis=0, keepdims=True)
+    L_ref0 = L - L[0][None, :]
+
+    bipolar = per_source_best_bipolar(L)
+    assert np.allclose(per_source_best_bipolar(L_car), bipolar)
+    assert np.allclose(per_source_best_bipolar(L_ref0), bipolar)
+    # ... whereas the per-channel peak does not survive it.
+    assert not np.allclose(per_source_peak(L_car), per_source_peak(L))
+
+
+def test_best_bipolar_matches_all_pairs_brute_force() -> None:
+    """The O(C·S) max-minus-min form equals the O(C²·S) all-pairs maximum."""
+    rng = np.random.default_rng(4)
+    L = rng.standard_normal((9, 3 * 4))
+    C, three_S = L.shape
+    S = three_S // 3
+    L3 = L.reshape(C, S, 3)
+    brute = np.array([
+        max(np.abs(L3[:, s, k][:, None] - L3[:, s, k][None, :]).max()
+            for k in range(3))
+        for s in range(S)
+    ])
+    assert np.allclose(per_source_best_bipolar(L), brute)
+
+
+def test_best_bipolar_at_least_peak_for_zero_mean_array() -> None:
+    """A common-average array's bipolar span bounds its single-channel peak."""
+    rng = np.random.default_rng(5)
+    L = rng.standard_normal((12, 3 * 6))
+    L = L - L.mean(axis=0, keepdims=True)
+    assert (per_source_best_bipolar(L) >= per_source_peak(L) - 1e-12).all()

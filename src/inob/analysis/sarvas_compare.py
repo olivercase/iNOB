@@ -376,12 +376,25 @@ def compare_sarvas_vs_fem(
         float(np.median(src_axis_distances)),
         float(src_axis_distances.max()),
     )
+    # `distances` is the 3-D coil-to-sphere-centre separation, so for a tall
+    # array its median is dominated by coil/source z-offset, NOT by standoff.
+    # Report the transverse (XY) distance alongside it — that is the quantity
+    # the literature standoff refers to; comparing the 3-D median against
+    # 58.5 mm invites an apples-to-oranges reading.
+    coil_axis_xy = np.linalg.norm(coilpos[:, :2] - axis_xy[None, :], axis=1)
     logger.info(
-        "  coil–axis distance:   min=%.1f  median=%.1f  max=%.1f mm "
-        "(literature: 58.5 mm — 52 mm skin + 6.5 mm QuSpin standoff)",
+        "  coil–source 3-D separation: min=%.1f  median=%.1f  max=%.1f mm "
+        "(inflated by array z-extent; not a standoff)",
         float(distances.min()),
         float(np.median(distances)),
         float(distances.max()),
+    )
+    logger.info(
+        "  coil–axis TRANSVERSE distance: min=%.1f  median=%.1f  max=%.1f mm "
+        "(literature: 58.5 mm — 52 mm skin + 6.5 mm QuSpin standoff)",
+        float(coil_axis_xy.min()),
+        float(np.median(coil_axis_xy)),
+        float(coil_axis_xy.max()),
     )
     scale_fT = 1e15 / max(Q_per_fibre, 1e-30)
     # Literature-band restriction: only (source, coil) pairs whose geometry

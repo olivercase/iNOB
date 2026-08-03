@@ -1,16 +1,29 @@
 """Detectability analysis — given N trials and a noise floor, can we see it?
 
-Predicted signal-to-noise ratio for the cervical-vagus CAP, plotted as a
-function of:
+Predicted signal-to-noise ratio for the target's compound action potential,
+plotted as a function of:
 
-  * source dipole moment  Q  (from a single low-fibre-count event up to the
-    full A+C summation at ~70 nA·m, with fibre-population assumptions
-    discussed in Hämäläinen et al. 1993 and Bu et al. 2024);
+  * source dipole moment  Q  — each target planned against the Q range its own
+    literature supports, never another target's (see
+    :func:`scenarios_for_target`);
   * number of averaged trials  N  (white-noise SNR scales as √N);
-  * per-modality noise floor (OPM intrinsic + EEG amplifier + Johnson).
+  * per-modality noise floor (OPM intrinsic + EEG amplifier + Johnson,
+    integrated over the recording passband in ``cfg.noise``).
 
 Detection threshold convention: SNR ≥ 3 (Rose criterion / standard
 post-averaging visibility). Other thresholds are easy to read off.
+
+What counts as "signal"
+-----------------------
+MEG uses the best-channel peak: each channel measures a field directly. EEG
+uses the best *bipolar pair*, because a surface potential exists only as a
+difference between contacts — see
+:func:`inob.analysis.snr.per_source_best_bipolar` for why the single-channel
+peak understates what an electrode array measures, and by how much.
+
+For evoked targets the trials axis also carries the clinical averaging budget
+(:data:`CLINICAL_AVERAGE_BUDGET`): landing inside it means the measurement fits
+a protocol that already exists, which is the actual feasibility question.
 
 Trial-count floor: the required-trials figure is ``(SNR_target·σ/signal)²``,
 floored at 1. Strong sources (e.g. a 20–70 nA·m CAP on the best channel) can
@@ -22,14 +35,20 @@ fraction of a trial. Such sources are reported as "detectable in one trial"
 from __future__ import annotations
 
 import logging
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
+from matplotlib.lines import Line2D
 
-from inob.analysis.snr import compute_noise_floors, per_source_peak
+from inob.analysis.snr import (
+    compute_noise_floors,
+    per_source_best_bipolar,
+    per_source_peak,
+)
 from inob.config import (
     Config,
     source_region_label,
@@ -97,12 +116,52 @@ MUSCLE_SCENARIOS: tuple[DetectabilityScenario, ...] = (
 )
 
 
+# Spinal-cord source-strength range, anchored the same way the vagus range is.
+# The vagus ladder tops out at Bu et al. 2024's measured cervical-vagus figure;
+# the spine's equivalent literature anchor is the equivalent current dipole of
+# the cervical dorsal-column volley measured by magnetospinography (Kawabata
+# et al. 2002 Clin Neurophysiol 113:1874; Sasaki et al. 2008 Spine 33:E836),
+# which is the single-nA·m range. That anchor already lives in
+# :data:`inob.physiology.profiles.SPINE_PROFILE` — it is pulled from there
+# rather than restated, so the detectability figure and the time-domain
+# figures cannot drift apart on the source strength.
+#
+# Using DEFAULT_SCENARIOS for the spine (as this did) silently planned the
+# spine against the vagus's 70 nA·m full-summation figure, which is an order
+# of magnitude above anything reported for the cord.
+def spine_scenarios() -> tuple[DetectabilityScenario, ...]:
+    """Q ladder for the spinal SSEP, built around the literature anchor."""
+    from inob.physiology.profiles import SPINE_PROFILE
+    anchor = SPINE_PROFILE.default_strength_nAm
+    return (
+        DetectabilityScenario("Q = 1 nA·m  (calibration unit)", 1.0,
+                              "Reference scale; also the low end of reported "
+                              "cervical-cord equivalent dipoles."),
+        DetectabilityScenario(f"Q = {anchor:.2f} nA·m  (median-nerve SSEP)", anchor,
+                              "Magnetospinography-derived cervical volley "
+                              "(Kawabata 2002, Sasaki 2008) — the anchor."),
+        DetectabilityScenario("Q = 10 nA·m  (strong volley)", 10.0,
+                              "Upper end of the reported cord-ECD range."),
+        DetectabilityScenario("Q = 20 nA·m  (optimistic bound)", 20.0,
+                              "Above anything reported for the cord; shown as "
+                              "a bound, not an expectation."),
+    )
+
+
 def scenarios_for_target(cfg: Config) -> tuple[DetectabilityScenario, ...]:
     """Pick the source-strength scenario set matching the forward target.
 
-    Muscle uses the magnetomyography Q range (:data:`MUSCLE_SCENARIOS`); every
-    other target keeps the vagal-CAP range (:data:`DEFAULT_SCENARIOS`)."""
-    return MUSCLE_SCENARIOS if source_target_tag(cfg) == "muscle" else DEFAULT_SCENARIOS
+    Each target uses the Q range its own literature supports: muscle the
+    magnetomyography range (:data:`MUSCLE_SCENARIOS`), spine the
+    magnetospinography range (:func:`spine_scenarios`), vagus the cervical-vagus
+    range (:data:`DEFAULT_SCENARIOS`).
+    """
+    tag = source_target_tag(cfg)
+    if tag == "muscle":
+        return MUSCLE_SCENARIOS
+    if tag.startswith("spine"):
+        return spine_scenarios()
+    return DEFAULT_SCENARIOS
 
 
 # Canonical best-channel peak signal lives in inob.analysis.snr so the figure
@@ -119,6 +178,120 @@ def per_source_rms_amplitude(L: np.ndarray) -> np.ndarray:
     S = three_S // 3
     L3 = L.reshape(C, S, 3)
     return np.sqrt(np.mean(L3 ** 2, axis=(0, 2)))
+
+
+def per_source_eeg_amplitude(L: np.ndarray) -> np.ndarray:
+    """The EEG observable: best bipolar pair in the array, per source.
+
+    MEG channels measure a field directly, so the best-channel peak is the
+    signal. A surface potential is not a per-channel quantity — it is defined
+    only against a reference, and the saved leadfield's common-average
+    reference discards most of a deep source's amplitude across a patch-sized
+    footprint. What an electrode array measures is a *difference*, so that is
+    what the EEG panels use. See :func:`inob.analysis.snr.per_source_best_bipolar`.
+    """
+    return per_source_best_bipolar(L)
+
+
+#: Averages used by clinical somatosensory-evoked-potential recording
+#: (Cruccu et al. 2008). Drawn on the evoked-paradigm panels as the budget a
+#: real session actually has: a trials-to-detect figure landing inside this
+#: band means the measurement fits an existing clinical protocol.
+CLINICAL_AVERAGE_BUDGET: tuple[int, int] = (500, 2000)
+
+
+@dataclass(frozen=True)
+class PropagationCorrection:
+    """How much the propagating source model costs, per modality.
+
+    The detectability panels compute signal as leadfield × Q, which lumps the
+    whole event into one stationary dipole. For a target whose volley sweeps
+    far compared with its AP width that overestimates: contributions from
+    different arc positions partially cancel. These factors — from
+    :mod:`inob.analysis.propagation`, the same code behind
+    ``cap_compare_<target>.png`` — scale the stationary curves down to the
+    propagating case. They are measured against *this* figure's stationary
+    reference (the quoted source) on *this* figure's observable, so they are
+    numerically different from the best-radial-channel ratio cap_compare prints
+    while describing the same phenomenon through one implementation.
+
+    A single scalar per modality is correct here: the propagating model is one
+    event traversing the whole structure, so it has no per-source
+    decomposition (see that module's Scope note). Applied uniformly across the
+    source axis, and the figure says so.
+    """
+    meg: float
+    eeg: float | None
+    profile_name: str
+
+
+def propagation_correction(
+    cfg: Config, meg_lf, eeg_lf, *, source_idx: int,
+) -> PropagationCorrection | None:
+    """Propagating/stationary factors, or ``None`` where lumping is defensible.
+
+    Returns ``None`` when the target's profile has ``stationary_ok=True`` (the
+    vagus: a localised cervical generator crossed in ~1 ms against a 0.5 ms AP
+    width), because there the correction is ≈1 and a second curve family would
+    be visual noise rather than information.
+    """
+    from inob.analysis.propagation import (
+        compute_propagation_signals,
+        is_ordered_polyline,
+        peak_bipolar,
+        peak_over_channels,
+        propagation_ratio,
+    )
+    from inob.physiology.profiles import profile_for_tag
+
+    profile = profile_for_tag(source_target_tag(cfg))
+    if profile.stationary_ok:
+        return None
+    if not is_ordered_polyline(meg_lf.source_pos):
+        # A volume-fill source set has no arc length to propagate along, so the
+        # ratio would be an artefact of point ordering rather than physics.
+        # Better to show the stationary curves alone than a fabricated factor.
+        logger.warning(
+            "propagation correction skipped: this target's sources are not an "
+            "ordered path (volume fill), so arc-length propagation is "
+            "undefined. Detectability curves are the stationary upper bound "
+            "only. See PHYSIOLOGY-TODO in inob.physiology.scenarios.",
+        )
+        return None
+    # The stationary lump must sit at the source the panels quote, not at the
+    # polyline's rostral end. Otherwise the ratio compares a dipole under the
+    # array against one 73 mm away, and for the spine patch it comes out
+    # ~8x — propagation apparently *helping*, which is an artefact of the
+    # mismatched reference, not physics.
+    meg_factor = propagation_ratio(
+        compute_propagation_signals(meg_lf, profile, stationary_idx=source_idx),
+        peak_over_channels,
+    )
+    eeg_factor = None
+    if eeg_lf is not None:
+        # Measured on the bipolar observable, matching what the EEG panels
+        # plot — a ratio taken on a different quantity would not compose.
+        eeg_factor = propagation_ratio(
+            compute_propagation_signals(eeg_lf, profile, stationary_idx=source_idx),
+            peak_bipolar,
+        )
+    logger.info(
+        "propagation correction (%s profile): MEG ×%.3f, EEG ×%s",
+        profile.name, meg_factor,
+        "n/a" if eeg_factor is None else f"{eeg_factor:.3f}",
+    )
+    return PropagationCorrection(meg_factor, eeg_factor, profile.name)
+
+
+def clinical_average_budget(cfg: Config) -> tuple[int, int] | None:
+    """The clinical averaging budget, for targets whose paradigm is evoked.
+
+    Only meaningful where the activity is stimulus-locked and can be averaged
+    coherently — the spinal SSEP targets. Spontaneous vagal traffic has no
+    equivalent budget, so it gets ``None`` and no band is drawn.
+    """
+    return (CLINICAL_AVERAGE_BUDGET
+            if source_target_tag(cfg).startswith("spine") else None)
 
 
 # ── core detectability math ────────────────────────────────────────────────
@@ -158,6 +331,29 @@ def _optional_leadfield(path):
     return load_leadfield(path) if path.exists() else None
 
 
+def default_source_idx(meg_lf, eeg_lf) -> int:
+    """Which source the single-source panels (a, c, d, f) should report.
+
+    The electrode patch is deliberately sited over the target — a spine run
+    centres it on C7 (see :data:`inob.config.SOURCE_TARGETS`) — so the source
+    the figure should quote is the one it was sited over, not an arbitrary
+    index into the source list.
+
+    This used to take the midpoint of the source array. On an elongated target
+    that is simply the wrong source: the spinal source list spans the whole
+    450 mm cord, so its midpoint sits mid-thoracic, 146 mm from a cervical
+    patch instead of 57 mm, and the quoted trials-to-detect came out ~700x
+    pessimistic. Panels b and e always showed the full z-dependence, so the
+    figure was internally inconsistent rather than uniformly wrong.
+
+    Falls back to the midpoint when there is no EEG array to anchor to.
+    """
+    if eeg_lf is None:
+        return meg_lf.source_pos.shape[0] // 2
+    centre = np.asarray(eeg_lf.coil_pos).mean(axis=0)
+    return int(np.argmin(np.linalg.norm(meg_lf.source_pos - centre, axis=1)))
+
+
 def render_detectability(
     cfg: Config, *, source_idx: int = -1, out_path: Path | None = None,
     dpi: int = 300,
@@ -186,19 +382,59 @@ def render_detectability(
     eeg_lf = _optional_leadfield(cfg.outputs.forward_eeg_npz)
     has_eeg = eeg_lf is not None
     if source_idx < 0:
-        source_idx = meg_lf.source_pos.shape[0] // 2
+        source_idx = default_source_idx(meg_lf, eeg_lf)
     src = meg_lf.source_pos[source_idx]
 
-    # Best-channel peak per source (one number per Z position)
+    # One signal number per Z position. MEG: best-channel peak. EEG: best
+    # bipolar pair, since a potential is only measurable as a difference.
     meg_peak = per_source_peak_amplitude(meg_lf.L_fT_per_nAm)   # fT/nAm
-    eeg_peak = (per_source_peak_amplitude(eeg_lf.L_fT_per_nAm)  # µV/nAm
+    eeg_peak = (per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)   # µV/nAm
                 if has_eeg else None)
     z = meg_lf.source_pos[:, 2]
+    budget = clinical_average_budget(cfg)
+    # Where the stationary lump is not defensible, every panel carries a second
+    # dashed family showing what propagation costs. Solid is then an upper
+    # bound, not the expected answer.
+    prop = propagation_correction(cfg, meg_lf, eeg_lf, source_idx=source_idx)
+
+    caption = (
+        "MEG: best-channel peak |L| per source. EEG: best bipolar pair, which "
+        "is reference-independent and is what an electrode array measures "
+        "(after Hämäläinen et al. 1993; "
+        "OPM noise floor from QuSpin Gen-3 spec, "
+        "Malliaras-group PEDOT:PSS textile-electrode noise = amplifier + Johnson "
+        f"(R = {cfg.noise.eeg_electrode_skin_kohm:g} kΩ), integrated over the "
+        f"{cfg.noise.band_label} recording band). "
+        + ("Solid curves lump the event into one stationary dipole at the "
+           "quoted source — an upper bound. Dashed curves apply the "
+           "propagating-source model (inob.analysis.propagation, the same code "
+           "behind cap_compare), measured per modality on that panel's own "
+           "observable and against its own stationary reference, so the "
+           f"factors ({prop.meg:.2f} MEG"
+           + (f", {prop.eeg:.2f} EEG" if prop.eeg is not None else "")
+           + ") differ from the best-radial-channel ratio cap_compare prints. "
+           "One event sweeps the whole structure, so the correction is a "
+           "scalar with no per-source form. " if prop is not None else "")
+        + "Trial counts assume independent white noise across averages — "
+        "spatially / temporally correlated environmental MEG noise (heartbeat "
+        "artefacts, magnetic shielding residual; cf. Boto et al. 2018) inflates "
+        "the required N by a factor of 1–10× depending on shielding quality."
+    )
+    # Wrap explicitly: matplotlib does not wrap fig.text, and save_figure uses
+    # bbox_inches="tight", so one very long line silently stretches the saved
+    # PNG to that line's width — the figure came out 4:1 instead of its figsize.
+    # The wrapped height then sets the bottom margin, so a caption that grows
+    # (e.g. when the propagation correction adds its paragraph) reserves the
+    # room it needs instead of overlapping the bottom row of panels.
+    caption = textwrap.fill(caption, width=170)
+    caption_lines = caption.count("\n") + 1
 
     # ── figure (2 rows MEG+EEG, or 1 row MEG-only) ─────────────────────────
-    fig = plt.figure(figsize=(15, 11.5 if has_eeg else 6.2))
+    fig_h = 11.5 if has_eeg else 6.2
+    fig = plt.figure(figsize=(15, fig_h))
     gs = GridSpec(2 if has_eeg else 1, 3, figure=fig,
-                  left=0.06, right=0.97, top=0.93, bottom=0.07,
+                  left=0.06, right=0.97, top=0.93,
+                  bottom=0.055 + 0.115 * caption_lines / fig_h,
                   hspace=0.36, wspace=0.30)
 
     n_grid = np.logspace(0, np.log10(max_trials), 200)
@@ -208,29 +444,71 @@ def render_detectability(
         NATURE_PALETTE["orange"], NATURE_PALETTE["red"],
     ]
 
-    def _plot_snr_curves(ax, peak_one_source: float, sigma: float, ylabel: str):
+    def _model_proxies(ax, factor):
+        """Legend entries for the two source models (linestyle, not colour).
+
+        Colour already encodes Q; duplicating every scenario for both models
+        would double an already busy legend, so the models are shown once as
+        grey proxy handles.
+        """
+        if factor is None:
+            return []
+        return [
+            Line2D([], [], color=NATURE_PALETTE["axis"], lw=1.4,
+                   label="stationary (upper bound)"),
+            Line2D([], [], color=NATURE_PALETTE["axis"], lw=1.4, ls=(0, (4, 2)),
+                   label=f"propagating (×{factor:.2f})"),
+        ]
+
+    def _plot_snr_curves(ax, peak_one_source: float, sigma: float, ylabel: str,
+                         factor: float | None = None):
+        if budget is not None:
+            ax.axvspan(*budget, color=NATURE_PALETTE["axis"], alpha=0.10, lw=0,
+                       label=f"clinical SSEP averages ({budget[0]}–{budget[1]})")
         for sc, col in zip(scenarios, scenario_colors, strict=False):
             sig = peak_one_source * sc.Q_nAm
-            snrs = sig / sigma * np.sqrt(n_grid)
-            ax.plot(n_grid, snrs, color=col, lw=1.6, label=sc.label)
+            ax.plot(n_grid, sig / sigma * np.sqrt(n_grid),
+                    color=col, lw=1.6, label=sc.label)
+            if factor is not None:
+                ax.plot(n_grid, sig * factor / sigma * np.sqrt(n_grid),
+                        color=col, lw=1.3, ls=(0, (4, 2)), alpha=0.9)
         ax.axhline(snr_threshold, color=NATURE_PALETTE["axis"], lw=0.8,
                    linestyle="--", label=f"SNR = {snr_threshold:g}")
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel("Number of averaged trials")
         ax.set_ylabel(ylabel)
-        ax.legend(loc="lower right", fontsize=7, handlelength=1.4)
+        handles, labels = ax.get_legend_handles_labels()
+        proxies = _model_proxies(ax, factor)
+        ax.legend(handles + proxies, labels + [h.get_label() for h in proxies],
+                  loc="lower right", fontsize=7, handlelength=1.6)
 
     def _plot_trials_per_source(ax, peak_arr: np.ndarray, sigma: float,
-                                  *, ymax: float | None = None):
+                                  *, ymax: float | None = None,
+                                  factor: float | None = None):
         all_n = []
-        for sc, col in zip(scenarios, scenario_colors, strict=False):
-            sig = peak_arr * sc.Q_nAm
+        if budget is not None:
+            ax.axhspan(*budget, color=NATURE_PALETTE["axis"], alpha=0.10, lw=0,
+                       label=f"clinical SSEP averages ({budget[0]}–{budget[1]})")
+
+        def trials(sig):
             # Floor at 1 trial: a source already above threshold in a single
             # trial needs N = 1, not the fractional N the raw formula gives.
-            n = np.maximum(1.0, (snr_threshold * sigma / np.maximum(sig, 1e-30)) ** 2)
+            return np.maximum(
+                1.0, (snr_threshold * sigma / np.maximum(sig, 1e-30)) ** 2)
+
+        for sc, col in zip(scenarios, scenario_colors, strict=False):
+            sig = peak_arr * sc.Q_nAm
+            n = trials(sig)
             all_n.append(n)
             ax.plot(z, n, color=col, lw=1.4, label=sc.label)
+            if factor is not None:
+                # One scalar applied across the whole source axis: the
+                # propagating model is a single event sweeping the structure,
+                # so it has no per-source form to plot.
+                n_prop = trials(sig * factor)
+                all_n.append(n_prop)
+                ax.plot(z, n_prop, color=col, lw=1.2, ls=(0, (4, 2)), alpha=0.9)
         ax.set_xlabel("Source z (mm)")
         ax.set_ylabel(f"Trials needed for SNR ≥ {snr_threshold:g}")
         ax.set_yscale("log")
@@ -262,41 +540,54 @@ def render_detectability(
     rate_label = "MU firing rate" if is_muscle else "CAP rate"
     rec_rates = (8.0, 15.0, 30.0) if is_muscle else (1.0, 5.0, 20.0)
 
-    def _plot_recording_time(ax, peak_one_source: float, sigma: float, rates_hz):
-        for rate, col in zip(rates_hz, scenario_colors[:len(rates_hz)], strict=False):
-            seconds = []
+    def _plot_recording_time(ax, peak_one_source: float, sigma: float, rates_hz,
+                             factor: float | None = None):
+        def seconds_for(rate, scale):
+            out = []
             for sc in scenarios:
-                sig = peak_one_source * sc.Q_nAm
+                sig = peak_one_source * sc.Q_nAm * scale
                 if sig <= 0:
-                    seconds.append(np.inf)
+                    out.append(np.inf)
                     continue
                 # Floor at 1 trial → minimum recording is one trial period.
-                n = max(1.0, (snr_threshold * sigma / sig) ** 2)
-                seconds.append(n / rate)
-            ax.plot([sc.Q_nAm for sc in scenarios], seconds,
-                    marker="o", lw=1.4, color=col, label=f"{rate:g} Hz {rate_label}")
+                out.append(max(1.0, (snr_threshold * sigma / sig) ** 2) / rate)
+            return out
+
+        Qs = [sc.Q_nAm for sc in scenarios]
+        for rate, col in zip(rates_hz, scenario_colors[:len(rates_hz)], strict=False):
+            ax.plot(Qs, seconds_for(rate, 1.0), marker="o", lw=1.4, color=col,
+                    label=f"{rate:g} Hz {rate_label}")
+            if factor is not None:
+                ax.plot(Qs, seconds_for(rate, factor), marker="o", ms=3, lw=1.2,
+                        ls=(0, (4, 2)), color=col, alpha=0.9)
         ax.set_xlabel("Source dipole moment Q (nA·m)")
         ax.set_ylabel(f"Recording duration for SNR ≥ {snr_threshold:g} (s)")
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.legend(loc="upper right", fontsize=7, handlelength=1.4)
+        handles, labels = ax.get_legend_handles_labels()
+        proxies = _model_proxies(ax, factor)
+        ax.legend(handles + proxies, labels + [h.get_label() for h in proxies],
+                  loc="upper right", fontsize=7, handlelength=1.6)
 
     # ── MEG row ────────────────────────────────────────────────────────────
     ax_a = fig.add_subplot(gs[0, 0])
     _plot_snr_curves(ax_a, meg_peak[source_idx], sigma_meg,
-                     "MEG SNR (best-channel)")
+                     "MEG SNR (best-channel)",
+                     factor=None if prop is None else prop.meg)
     ax_a.set_title(f"MEG  ·  SNR vs N trials  ·  noise σ = {sigma_meg:.0f} fT")
     add_panel_label(ax_a, "a")
 
     ax_b = fig.add_subplot(gs[0, 1])
-    _plot_trials_per_source(ax_b, meg_peak, sigma_meg)
+    _plot_trials_per_source(ax_b, meg_peak, sigma_meg,
+                            factor=None if prop is None else prop.meg)
     ax_b.set_title(f"MEG  ·  trials-to-detect along the {region}")
     ax_b.legend(loc="upper right", fontsize=6.5, handlelength=1.4)
     add_panel_label(ax_b, "b")
 
     ax_c = fig.add_subplot(gs[0, 2])
     _plot_recording_time(ax_c, meg_peak[source_idx], sigma_meg,
-                         rates_hz=rec_rates)
+                         rates_hz=rec_rates,
+                         factor=None if prop is None else prop.meg)
     ax_c.set_title(f"MEG  ·  recording time @ source z = {src[2]:.0f} mm")
     add_panel_label(ax_c, "c")
 
@@ -304,37 +595,36 @@ def render_detectability(
     if has_eeg:
         ax_d = fig.add_subplot(gs[1, 0])
         _plot_snr_curves(ax_d, eeg_peak[source_idx], sigma_eeg,
-                         "EEG SNR (best-contact)")
+                         "EEG SNR (best bipolar pair)",
+                         factor=None if prop is None else prop.eeg)
         ax_d.set_title(f"EEG  ·  SNR vs N trials  ·  noise σ = {sigma_eeg:.1f} µV")
         add_panel_label(ax_d, "d")
 
         ax_e = fig.add_subplot(gs[1, 1])
-        _plot_trials_per_source(ax_e, eeg_peak, sigma_eeg)
+        _plot_trials_per_source(ax_e, eeg_peak, sigma_eeg,
+                                factor=None if prop is None else prop.eeg)
         ax_e.set_title(f"EEG  ·  trials-to-detect along the {region}")
         ax_e.legend(loc="upper right", fontsize=6.5, handlelength=1.4)
         add_panel_label(ax_e, "e")
 
         ax_f = fig.add_subplot(gs[1, 2])
         _plot_recording_time(ax_f, eeg_peak[source_idx], sigma_eeg,
-                             rates_hz=rec_rates)
+                             rates_hz=rec_rates,
+                             factor=None if prop is None else prop.eeg)
         ax_f.set_title(f"EEG  ·  recording time @ source z = {src[2]:.0f} mm")
         add_panel_label(ax_f, "f")
 
     fig.suptitle(
         f"Detectability — N trials × noise floor × source strength  "
-        f"(SNR threshold = {snr_threshold:g}, BW = {cfg.noise.bandwidth_hz:g} Hz)",
+        f"(SNR threshold = {snr_threshold:g}, band = {cfg.noise.band_label})",
         fontsize=12, fontweight="bold", y=0.985,
     )
+    # Wrap explicitly. Matplotlib does not wrap fig.text, and save_figure uses
+    # bbox_inches="tight", so an unwrapped caption silently stretches the saved
+    # PNG to the width of one very long line — the figure came out 4:1 instead
+    # of its 15:11.5 figsize.
     fig.text(
-        0.5, 0.005,
-        "Best-channel peak |L| per source (after Hämäläinen et al. 1993; "
-        "OPM noise floor from QuSpin Gen-3 spec, "
-        "Malliaras-group PEDOT:PSS textile-electrode noise = amplifier + Johnson "
-        f"(R = {cfg.noise.eeg_electrode_skin_kohm:g} kΩ). "
-        "Trial counts assume independent white noise across averages — "
-        "spatially / temporally correlated environmental MEG noise (heartbeat "
-        "artefacts, magnetic shielding residual; cf. Boto et al. 2018) inflates "
-        "the required N by a factor of 1–10× depending on shielding quality.",
+        0.5, 0.008, caption,
         ha="center", va="bottom", fontsize=7,
         color=NATURE_PALETTE["axis"], style="italic",
     )
@@ -353,12 +643,14 @@ def detectability_summary(cfg: Config, *, source_idx: int = -1) -> dict:
     meg_lf = load_leadfield(cfg.outputs.forward_npz)
     eeg_lf = _optional_leadfield(cfg.outputs.forward_eeg_npz)
     if source_idx < 0:
-        source_idx = meg_lf.source_pos.shape[0] // 2
+        source_idx = default_source_idx(meg_lf, eeg_lf)
 
     meg_peak = float(per_source_peak_amplitude(meg_lf.L_fT_per_nAm)[source_idx])
-    eeg_peak = (float(per_source_peak_amplitude(eeg_lf.L_fT_per_nAm)[source_idx])
+    eeg_peak = (float(per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)[source_idx])
                 if eeg_lf is not None else None)
     src = meg_lf.source_pos[source_idx]
+    budget = clinical_average_budget(cfg)
+    prop = propagation_correction(cfg, meg_lf, eeg_lf, source_idx=source_idx)
 
     rows = {}
     for sc in scenarios_for_target(cfg):
@@ -369,19 +661,43 @@ def detectability_summary(cfg: Config, *, source_idx: int = -1) -> dict:
             "MEG_single_trial_SNR": sig_meg / sigma_meg if sigma_meg else float("inf"),
             "MEG_trials_for_SNR3": required_trials(sig_meg, sigma_meg, 3.0),
         }
+        if prop is not None:
+            row["MEG_per_trial_fT_propagating"] = sig_meg * prop.meg
+            row["MEG_trials_for_SNR3_propagating"] = required_trials(
+                sig_meg * prop.meg, sigma_meg, 3.0)
         if eeg_peak is not None:
             sig_eeg = eeg_peak * sc.Q_nAm
+            n_eeg = required_trials(sig_eeg, sigma_eeg, 3.0)
             row.update({
                 "EEG_per_trial_uV": sig_eeg,
                 "EEG_single_trial_SNR": sig_eeg / sigma_eeg if sigma_eeg else float("inf"),
-                "EEG_trials_for_SNR3": required_trials(sig_eeg, sigma_eeg, 3.0),
+                "EEG_trials_for_SNR3": n_eeg,
             })
+            if prop is not None and prop.eeg is not None:
+                # The propagating source model is the honest case wherever the
+                # profile says lumping is invalid; report both so the headline
+                # number is a choice made in the open, not by default.
+                n_eeg_prop = required_trials(sig_eeg * prop.eeg, sigma_eeg, 3.0)
+                row["EEG_per_trial_uV_propagating"] = sig_eeg * prop.eeg
+                row["EEG_trials_for_SNR3_propagating"] = n_eeg_prop
+            if budget is not None:
+                # Does the answer fit the averaging budget a clinical SSEP
+                # session already spends? That, not the raw µV, is the
+                # feasibility question for an evoked paradigm.
+                row["EEG_within_clinical_budget"] = bool(n_eeg <= budget[1])
+                if prop is not None and prop.eeg is not None:
+                    row["EEG_within_clinical_budget_propagating"] = bool(
+                        n_eeg_prop <= budget[1])
         rows[sc.label] = row
     return {
         "source_idx": int(source_idx),
         "source_z_mm": float(src[2]),
         "noise_meg_fT": float(sigma_meg),
         "noise_eeg_uV": float(sigma_eeg),
-        "bandwidth_hz": float(cfg.noise.bandwidth_hz),
+        "bandwidth_hz": float(cfg.noise.effective_bandwidth_hz),
+        "band_label": cfg.noise.band_label,
+        "clinical_average_budget": list(budget) if budget else None,
+        "propagation_factor_meg": None if prop is None else prop.meg,
+        "propagation_factor_eeg": None if prop is None else prop.eeg,
         "scenarios": rows,
     }

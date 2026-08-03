@@ -56,7 +56,7 @@ def render_cross_modality(
     the lstsq inversion — this is what gives the figure pedagogical content,
     since the noise-free round trip is exact by construction. Default ``None``
     means: pull a realistic value from ``cfg.noise`` (HD-EMG amplifier +
-    Johnson noise integrated over ``cfg.noise.bandwidth_hz``).
+    Johnson noise integrated over the ``cfg.noise`` recording band).
     """
     apply_nature_style()
     meg_lf = load_leadfield(cfg.outputs.forward_npz)

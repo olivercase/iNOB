@@ -239,9 +239,37 @@ class NoiseCfg:
     # Defaults match QuSpin Gen-3 OPM and Malliaras-group PEDOT:PSS textile
     # electrode hardware. See ``configs/default.yaml`` for citations.
     opm_intrinsic_fT_sqrtHz: float = 7.0
-    eeg_amplifier_uV_sqrtHz: float = 0.5
+    eeg_amplifier_uV_sqrtHz: float = 0.1
     eeg_electrode_skin_kohm: float = 10.0
-    bandwidth_hz: float = 1000.0
+    # Recording passband. Noise integrates over ``band_hi - band_lo``, so the
+    # filter settings are part of the detectability answer rather than an
+    # afterthought: a broadband 0-1000 Hz figure overstates σ by ~1.5x against
+    # the 30-500 Hz band evoked-potential recording actually uses.
+    # ``bandwidth_hz``, when set, overrides the pair (legacy single-number
+    # form, kept so an existing config or --set keeps working).
+    band_lo_hz: float = 30.0
+    band_hi_hz: float = 500.0
+    bandwidth_hz: float | None = None
+
+    @property
+    def effective_bandwidth_hz(self) -> float:
+        """Noise-integration bandwidth in Hz."""
+        if self.bandwidth_hz is not None:
+            return float(self.bandwidth_hz)
+        bw = float(self.band_hi_hz) - float(self.band_lo_hz)
+        if bw <= 0:
+            raise ConfigError(
+                f"[noise] band_hi_hz ({self.band_hi_hz}) must exceed "
+                f"band_lo_hz ({self.band_lo_hz})"
+            )
+        return bw
+
+    @property
+    def band_label(self) -> str:
+        """Human-readable passband for figure captions."""
+        if self.bandwidth_hz is not None:
+            return f"BW {self.bandwidth_hz:g} Hz"
+        return f"{self.band_lo_hz:g}–{self.band_hi_hz:g} Hz"
 
 
 @dataclass(frozen=True)
@@ -312,7 +340,8 @@ class Config:
 #
 #   tissues    the FEM ``source_tissue`` string whose tets are sampled;
 #   label      the human-readable name used in figure titles;
-#   electrodes the tissue the HD surface-electrode patch is centred over.
+#   electrodes the tissue the HD surface-electrode patch is centred over;
+#   level      optional vertebral level to centre the patch on (e.g. "c7").
 #
 # ``electrodes`` matters because the EEG patch is small (32 contacts over a few
 # cm) and directional: a patch sited over the cervical vagus reads a spinal-cord

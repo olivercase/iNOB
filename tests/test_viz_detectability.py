@@ -5,8 +5,8 @@ import math
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
@@ -19,7 +19,6 @@ from inob.viz.detectability import (
     required_trials,
     snr_after_n_trials,
 )
-
 from tests.viz_pipeline_helpers import build_pipeline_cfg
 
 
@@ -101,8 +100,12 @@ def test_detectability_summary_structure(tmp_path: Path) -> None:
     summary = detectability_summary(cfg)
     assert set(summary) == {
         "source_idx", "source_z_mm", "noise_meg_fT", "noise_eeg_uV",
-        "bandwidth_hz", "scenarios",
+        "bandwidth_hz", "band_label", "clinical_average_budget",
+        "propagation_factor_meg", "propagation_factor_eeg", "scenarios",
     }
+    # The clinical averaging budget is an evoked-paradigm notion; this fixture
+    # is not a spine target, so it must not claim one.
+    assert summary["clinical_average_budget"] is None
     assert len(summary["scenarios"]) == 4
     for row in summary["scenarios"].values():
         assert set(row) == {
@@ -111,3 +114,54 @@ def test_detectability_summary_structure(tmp_path: Path) -> None:
             "MEG_trials_for_SNR3", "EEG_trials_for_SNR3",
         }
         assert row["MEG_trials_for_SNR3"] > 0
+
+
+def test_clinical_average_budget_only_for_evoked_targets(tmp_path: Path) -> None:
+    """500-2000 averages is an SSEP notion, so only spine targets claim it."""
+    from dataclasses import replace
+
+    from inob.viz.detectability import clinical_average_budget
+
+    cfg = build_pipeline_cfg(tmp_path)
+    fwd_dir = cfg.outputs.forward_npz.parent
+
+    def retarget(tag: str):
+        return replace(cfg, outputs=replace(
+            cfg.outputs, forward_npz=fwd_dir / f"duneuro_leadfield_{tag}.npz"))
+
+    assert clinical_average_budget(retarget("spine")) == (500, 2000)
+    assert clinical_average_budget(retarget("spine_muscle")) == (500, 2000)
+    assert clinical_average_budget(retarget("vagus")) is None
+    assert clinical_average_budget(retarget("muscle")) is None
+
+
+def test_propagation_correction_skipped_where_lumping_is_valid(tmp_path: Path) -> None:
+    """No second curve family for a target whose stationary model holds.
+
+    The vagus profile has ``stationary_ok=True``, so the correction is ~1 and
+    drawing it would be visual noise. Anything else must get a real factor.
+    """
+    from dataclasses import replace
+
+    from inob.io.npz import load_leadfield
+    from inob.viz.detectability import propagation_correction
+
+    cfg = build_pipeline_cfg(tmp_path)
+    meg_lf = load_leadfield(cfg.outputs.forward_npz)
+    eeg_lf = load_leadfield(cfg.outputs.forward_eeg_npz)
+    fwd_dir = cfg.outputs.forward_npz.parent
+
+    def retarget(tag: str):
+        return replace(cfg, outputs=replace(
+            cfg.outputs, forward_npz=fwd_dir / f"duneuro_leadfield_{tag}.npz"))
+
+    assert propagation_correction(
+        retarget("vagus"), meg_lf, eeg_lf, source_idx=0) is None
+
+    spine = propagation_correction(
+        retarget("spine"), meg_lf, eeg_lf, source_idx=0)
+    assert spine is not None
+    assert spine.profile_name == "spine"
+    # Both modalities measured, both a genuine attenuation.
+    assert 0.0 < spine.meg <= 1.0
+    assert spine.eeg is not None and 0.0 < spine.eeg <= 1.0

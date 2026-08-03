@@ -72,6 +72,8 @@ COMMANDS: tuple[Command, ...] = (
             "Simulate moving-dipole physiological activity"),
     Command("cap-compare", "inob.cli.cap_compare", "Analyse",
             "Propagating action potential vs stationary dipole"),
+    Command("source-models", "inob.cli.source_models", "Analyse",
+            "OPM vs electrodes on stationary and ascending cord activity"),
 
     # --- Validate ---------------------------------------------------------
     Command("ladder", "inob.cli.ladder", "Validate",

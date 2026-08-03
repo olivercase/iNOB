@@ -26,14 +26,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
+from inob.analysis.propagation import compute_propagation_signals
 from inob.config import Config, source_region_label, source_target_tag, target_output
 from inob.io.npz import load_leadfield
 from inob.physiology.profiles import profile_for_tag
-from inob.sources.cap import (
-    biphasic_waveform,
-    conduction_velocity_m_per_s,
-    longitudinal_leadfield,
-)
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -121,132 +117,25 @@ def render_cap_compare(
     logger.info("[cap-compare] physiology profile:\n%s", profile.describe())
 
     lf = load_leadfield(cfg.outputs.forward_npz)
-    L_long, arc_mm, _ = longitudinal_leadfield(lf.L, lf.source_pos)
-    arc_m = arc_mm * 1e-3                                  # (S,)
-
-    # Rostral end of the polyline: the reference point for the stationary
-    # lump and the end point of the ascending wave.
-    hot_idx = int(np.argmax(lf.source_pos[:, 2]))
-
-    fibres = profile.fibres
-    cv_per_d = conduction_velocity_m_per_s(
-        fibres.diameters_um, **(profile.cv_kwargs or {}),
+    # The source-model simulation itself lives in inob.analysis.propagation so
+    # that inob.viz.detectability measures the same ratio this figure prints —
+    # the two used to disagree by the full propagation factor.
+    sig = compute_propagation_signals(
+        lf, profile,
+        n_fibres=n_fibres, ap_amplitude_mV=ap_amplitude_mV,
+        sigma_in_Sm=sigma_in_Sm, ap_width_ms=ap_width_ms,
+        fs_hz=fs_hz, duration_ms=duration_ms, segment_mm=segment_mm,
     )
-    cv_mean = float(np.sum(cv_per_d * fibres.weights))     # m/s
-    # Per-fibre dipole moment, A·m, as a function of diameter d (Hämäläinen)
-    Q_per_fibre_Am = (
-        np.pi * (fibres.diameters_um * 1e-6) ** 2
-        * sigma_in_Sm * (ap_amplitude_mV * 1e-3) / 4.0
-    )
-
-    # How far one event's activity travels. None = the whole polyline.
-    total_span_mm = float(arc_mm[-1] - arc_mm[0])
-    if segment_mm is None:
-        segment_mm = (
-            total_span_mm if profile.propagation_span_mm is None
-            else profile.propagation_span_mm
-        )
-
-    # The window must cover the transit or the propagating trace is cut off
-    # mid-flight. Sized from the segment the event actually crosses, floored at
-    # the historical 30 ms so targets with a short transit (vagus: 50 mm at
-    # 47 m/s ≈ 1 ms) keep exactly the window they have always used.
-    if duration_ms is None:
-        transit_ms = profile.transit_ms(segment_mm)
-        duration_ms = max(30.0, 2.5 * transit_ms + 10.0 * ap_width_ms)
-        logger.info("[cap-compare] window %.0f ms (transit %.2f ms over %.0f mm)",
-                    duration_ms, transit_ms, segment_mm)
-
-    n = round(duration_ms * fs_hz / 1000.0)
-    t_ms = np.arange(n) / fs_hz * 1000.0
-    centre_ms = duration_ms * 0.4
-    arc_total_m = float(arc_m[-1] - arc_m[0])
-
-    # The active segment: the rostral-most `segment_mm` of the
-    # polyline, measured back from the hot-spot. For a profile with no
-    # localised generator (spine) this is the whole polyline.
-    seg_m = segment_mm * 1e-3
-    seg_mask = arc_m >= (arc_m[hot_idx] - seg_m)
-    seg_idx = np.where(seg_mask)[0]
-    seg_len_m = float(arc_m[seg_idx[-1]] - arc_m[seg_idx[0]])
-
-    def stationary_signal() -> np.ndarray:
-        """Lumped approximation: all N fibres at a single point.
-
-        Σ_d w(d) Q(d) is the population-mean per-fibre moment <Q>_w; multiplied
-        by N gives the total event moment. Signal = L_long[hot] × Q_total × shape(t).
-        """
-        Q_total_Am = n_fibres * float(np.sum(fibres.weights * Q_per_fibre_Am))
-        shape = biphasic_waveform(t_ms - centre_ms, ap_width_ms=ap_width_ms)
-        return L_long[:, hot_idx][:, None] * Q_total_Am * shape[None, :]
-
-    def moving_wavelet(
-        x_start_idx: int, x_end_idx: int, *,
-        time_peak_at_hotspot: bool = True,
-    ) -> np.ndarray:
-        """Physically correct: a single AP wavelet of total moment N×<Q>_w
-        starts at ``arc_m[x_start_idx]`` and propagates rostrally at fibre-CV.
-
-        At each instant t and each diameter d, the wave is at position
-        ``x_d(t) = x_start + CV(d)·(t − t_fire)``. The contribution at sensor
-        c is N · w(d) · Q(d) · L_long[c, x_d(t)] · shape(t − t_fire), summed
-        over fibre diameter d.
-
-        If ``time_peak_at_hotspot`` is true, ``t_fire`` is chosen so the
-        mean-CV wavelet's peak coincides with the wave passing through the
-        rostral end of the polyline — the most generous (highest-amplitude)
-        timing for the propagating model.
-        """
-        # Snap a target arc-length to the closest source index.
-        x_start_m = arc_m[x_start_idx]
-        x_hot_m = arc_m[hot_idx]
-        if time_peak_at_hotspot:
-            t_fire_ms = centre_ms - (x_hot_m - x_start_m) / cv_mean * 1000.0
-        else:
-            t_fire_ms = centre_ms
-
-        shape_t = biphasic_waveform(t_ms - centre_ms, ap_width_ms=ap_width_ms)
-
-        x_lo = arc_m[min(x_start_idx, x_end_idx)]
-        x_hi = arc_m[max(x_start_idx, x_end_idx)]
-        margin_m = 0.005     # 5 mm slop so AP envelope decays smoothly off-segment
-
-        # Wavelet position per (diameter, sample), snapped to the nearest source.
-        # arc_m is a cumulative arc length and therefore sorted, so searchsorted
-        # + a neighbour comparison gives the same index as an argmin over |Δ|.
-        x_dt = x_start_m + cv_per_d[:, None] * (t_ms - t_fire_ms)[None, :] * 1e-3
-        right = np.searchsorted(arc_m, x_dt).clip(1, len(arc_m) - 1)
-        left = right - 1
-        nearest = np.where(
-            np.abs(x_dt - arc_m[left]) <= np.abs(arc_m[right] - x_dt), left, right,
-        )
-
-        # Weight of each (diameter, sample) contribution, zero off-segment.
-        on_seg = (x_dt >= x_lo - margin_m) & (x_dt <= x_hi + margin_m)
-        w_dt = (n_fibres * (fibres.weights * Q_per_fibre_Am)[:, None]
-                * shape_t[None, :] * on_seg)
-
-        # Accumulate into a (source × sample) moment map, then project through
-        # the leadfield once: same arithmetic as the per-sample loop, one matmul.
-        moments = np.zeros((len(arc_m), n), dtype=np.float64)
-        t_idx = np.broadcast_to(np.arange(n), nearest.shape)
-        np.add.at(moments, (nearest.ravel(), t_idx.ravel()), w_dt.ravel())
-        return L_long @ moments
-
-    sig_stat = stationary_signal()
-    # Propagating over the active segment: wave starts at the caudal end of
-    # the segment, ends at the rostral end, timed so the mean-CV wavelet peaks
-    # there. For a profile with no localised generator this spans the whole
-    # polyline and coincides with sig_whole below.
-    sig_seg = moving_wavelet(
-        x_start_idx=seg_idx[0], x_end_idx=hot_idx, time_peak_at_hotspot=True,
-    )
-    # Propagating over the whole polyline: for the vagus this is the
-    # pulmonary/abdominal-afferent case; for a whole-span profile it is the
-    # same model as sig_seg and the figure collapses the two.
-    sig_whole = moving_wavelet(
-        x_start_idx=0, x_end_idx=hot_idx, time_peak_at_hotspot=True,
-    )
+    t_ms = sig.t_ms
+    sig_stat, sig_seg, sig_whole = sig.stationary, sig.segment, sig.whole
+    cv_mean = sig.cv_mean_m_per_s
+    seg_len_m = sig.segment_mm * 1e-3
+    arc_total_m = sig.total_span_mm * 1e-3
+    segment_mm = sig.segment_mm
+    transit_seg_ms = sig.transit_segment_ms
+    transit_whole_ms = sig.transit_whole_ms
+    Q_total_nAm = sig.Q_total_nAm
+    mean_diameter_um = float(np.sum(profile.fibres.diameters_um * profile.fibres.weights))
 
     # Pick the best radial MEG channel for the *stationary* signal — this is
     # the channel `simulate_train` would report and the SNR pipeline uses, so
@@ -268,8 +157,6 @@ def render_cap_compare(
     peak_whole = float(np.abs(p_whole).max())
     fwhm_stat = _fwhm_ms(p_stat, t_ms)
     fwhm_seg = _fwhm_ms(p_seg, t_ms)
-    transit_seg_ms = seg_len_m / cv_mean * 1000.0
-    transit_whole_ms = arc_total_m / cv_mean * 1000.0
     rms_residual = float(np.sqrt(np.mean(residual ** 2)))
     rms_stat = float(np.sqrt(np.mean(p_stat ** 2)))
 
@@ -357,9 +244,6 @@ def render_cap_compare(
 
     ax2 = fig.add_subplot(gs[2])
     ax2.axis("off")
-    Q_total_nAm = float(
-        n_fibres * np.sum(fibres.weights * Q_per_fibre_Am) * 1e9
-    )
     verdict_line = (
         "Stationary approximation VALID\n  (transit ≈ AP width)"
         if profile.stationary_ok else
@@ -368,7 +252,7 @@ def render_cap_compare(
     summary = (
         f"{profile.paradigm}\n"
         f"Generator: {profile.generator}\n\n"
-        f"Event: {n_fibres} fibres, mean d={np.sum(fibres.diameters_um * fibres.weights):.1f} µm\n"
+        f"Event: {n_fibres} fibres, mean d={mean_diameter_um:.1f} µm\n"
         f"Total moment Q_total: {Q_total_nAm:.2f} nA·m\n"
         f"Active segment: {seg_len_m * 1000:.0f} mm\n"
         f"Whole {region} polyline: {arc_total_m * 1000:.0f} mm\n"

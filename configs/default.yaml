@@ -106,7 +106,8 @@ forward:
 
 electrodes:
   # Real PEDOT:PSS hardware: 32-channel paddle layout (1 head + 5×6 body + 1 foot).
-  shape: paddle32                 # "rectangular" / "paddle32" / "whole_body"
+  # "rectangular" / "paddle32" / "whole_body".
+  shape: paddle32
   rows: 6                         # body grid rows (paddle) or N rows (rectangular)
   cols: 5                         # body grid cols (paddle) or N cols (rectangular)
   contact_pitch_mm: 5.0
@@ -125,14 +126,25 @@ noise:
   # Gen-2 baseline was 15 fT/√Hz; pass --set noise.opm_intrinsic_fT_sqrtHz=15
   # to recover the older Gen-2 prediction.
   opm_intrinsic_fT_sqrtHz: 7.0
-  # PEDOT:PSS HD-EMG-style: amplifier ~0.3-1 µV/√Hz; electrode-skin
-  # interface contributes Johnson noise from contact impedance.
+  # PEDOT:PSS HD-EMG-style front end. A low-noise biopotential amplifier
+  # (e.g. TI ADS129x class, or the discrete front ends used in the OPM-MEG
+  # literature) reaches ~0.05-0.1 µV/√Hz referred to input; the 0.3-1 µV/√Hz
+  # figure sometimes quoted for HD-EMG hardware is a system-level number that
+  # already includes interface and environmental contributions counted
+  # separately below, so using it here double-counts and inflates σ ~5-10×.
+  # Electrode-skin interface contributes Johnson noise from contact impedance.
   # Malliaras-group flexible-textile PEDOT:PSS contact impedance is ≈ 5-20
   # kΩ at 1 kHz (Inal/Rivnay/Malliaras 2018; Pas et al. 2018), much lower
   # than dry Ag/AgCl (≥ 100 kΩ). Use 10 kΩ as the typical operating value.
-  eeg_amplifier_uV_sqrtHz: 0.5
+  eeg_amplifier_uV_sqrtHz: 0.1
   eeg_electrode_skin_kohm: 10.0
-  bandwidth_hz: 1000.0            # CAP-relevant band
+  # Recording passband. Noise integrates over (band_hi - band_lo), so the
+  # filter settings are part of the detectability answer. 30-500 Hz is the
+  # evoked-potential / CAP band used clinically (Cruccu et al. 2008); the
+  # previous broadband 1000 Hz figure overstated σ by ~1.5×. Set the legacy
+  # single-number `bandwidth_hz` instead to override the pair.
+  band_lo_hz: 30.0
+  band_hi_hz: 500.0
 
 cluster:
   n_chunks: 32

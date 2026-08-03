@@ -10,6 +10,12 @@ is subtracted from each leadfield column. This matches the behaviour of an
 HD-EMG-style PEDOT:PSS array with a wire-shorted reference contact, and
 side-steps the ill-defined choice of a single reference electrode.
 
+Note that this choice is invisible to any *differential* readout: a potential
+difference between two contacts is unchanged by subtracting a common per-source
+constant from every channel. So the bipolar amplitudes reported by
+:func:`inob.analysis.snr.per_source_best_bipolar` are reference-free, and can
+be read off an existing leadfield without re-solving.
+
 Outputs ``cfg.outputs.forward_eeg_npz``, schema-identical to the MEG NPZ
 produced by :func:`inob.forward.solve.run_forward` with the magnetic
 fields replaced by surface potentials (units V/(A·m), µV/(nA·m) for the

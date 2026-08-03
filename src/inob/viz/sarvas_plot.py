@@ -84,9 +84,15 @@ def render_sarvas_vs_fem(
         s=24, edgecolor=NATURE_PALETTE["axis"], linewidths=0.2,
     )
     ax_b.axhline(0, lw=0.6, color=NATURE_PALETTE["axis"], linestyle="--")
-    ax_b.axvline(58.5, lw=0.6, color=NATURE_PALETTE["red"], linestyle=":",
-                 label="58.5 mm (literature sensor-axis)")
-    ax_b.set_xlabel("Coil distance to cervical axis  ·  mm")
+    # NB `distance_to_axis_mm` holds the full 3-D coil-to-sphere-centre
+    # separation (see sarvas_compare: centre = [axis_x, axis_y, source_z]),
+    # NOT a transverse axis distance — for a tall array most of it is the
+    # coil/source z-offset. Label it as such so it is not read against the
+    # literature transverse standoff (`geometry.sensor_axis_mm`).
+    dist_median = float(np.median(dist))
+    ax_b.axvline(dist_median, lw=0.6, color=NATURE_PALETTE["red"], linestyle=":",
+                 label=f"{dist_median:.0f} mm (median, this source)")
+    ax_b.set_xlabel("Coil distance to source (3-D)  ·  mm")
     ax_b.set_ylabel(f"FEM − Sarvas residual  ·  {unit_label}")
     ax_b.set_title("Residual vs sensor distance")
     ax_b.legend(loc="upper right", fontsize=7, handlelength=1.0)
@@ -133,9 +139,26 @@ def render_sarvas_vs_fem(
     ax_d.legend(loc="upper right", handlelength=1.2)
     add_panel_label(ax_d, "d")
 
+    # Real computed geometry (median over all sources/coils), not the
+    # vagus-literature config nominal (result.geometry.source_axis_mm /
+    # sensor_axis_mm) — those only gate the in-band mask for the summary
+    # JSON and can differ from the actual anatomy by an order of magnitude
+    # for a target the config hasn't been tuned for (e.g. spine).
+    src_axis_dist_all = np.linalg.norm(
+        result.source_pos_mm[:, :2] - result.geometry.axis_xy_mm[None, :], axis=1,
+    )
+    src_axis_med = float(np.median(src_axis_dist_all))
+    # Transverse (XY) coil-to-axis distance — the quantity comparable to the
+    # literature standoff. Deliberately NOT median(distance_to_axis_mm), which
+    # is a 3-D separation inflated by the array's z-extent.
+    coil_axis_xy = np.linalg.norm(
+        result.coil_pos_mm[:, :2] - result.geometry.axis_xy_mm[None, :], axis=1,
+    )
     fig.suptitle(
         f"Analytic Sarvas (single-sphere) vs full multi-tissue FEM forward  "
-        f"·  source–axis 40 mm, sensor–axis 58.5 mm  "
+        f"·  median source–axis {src_axis_med:.0f} mm, "
+        f"coil–axis (transverse) {coil_axis_xy.min():.0f}–"
+        f"{np.median(coil_axis_xy):.0f} mm (min–median)  "
         f"·  Q = {result.Q_nAm:g} nA·m",
         fontsize=11, fontweight="bold", y=0.985,
     )

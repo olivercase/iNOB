@@ -53,6 +53,28 @@ def _column_for_source_norm(L: np.ndarray, source_idx: int) -> np.ndarray:
     return np.linalg.norm(block, axis=1)
 
 
+def _bootstrap_median_ratio_ci(
+    ratio_all: np.ndarray, *, n_boot: int = 2000, seed: int = 0, ci: float = 0.95,
+) -> tuple[float, float, float]:
+    """Bootstrap CI on the median whole-body/paddle ratio across sources.
+
+    Same non-parametric resampling-with-replacement approach as
+    ``sarvas_compare._bootstrap_ratio_ci`` (resample the per-source ratios,
+    take the median each draw). Deterministic given ``seed``.
+    """
+    rng = np.random.default_rng(int(seed))
+    n = ratio_all.size
+    if n == 0:
+        return float("nan"), float("nan"), float("nan")
+    idx = rng.integers(0, n, size=(n_boot, n))
+    medians = np.median(ratio_all[idx], axis=1)
+    alpha = (1.0 - ci) / 2.0
+    lo = float(np.percentile(medians, 100 * alpha))
+    hi = float(np.percentile(medians, 100 * (1.0 - alpha)))
+    med = float(np.median(medians))
+    return lo, med, hi
+
+
 def render_location_optimisation(
     cfg: Config,
     *,
@@ -85,7 +107,13 @@ def render_location_optimisation(
     skin = trimesh.Trimesh(skin_comp.vertices, skin_comp.faces, process=False)
 
     if source_idx < 0:
-        source_idx = paddle_lf.source_pos.shape[0] // 2
+        # Nearest source to the paddle, not the source list's midpoint — on an
+        # elongated target (spine) the midpoint sits far from the paddle,
+        # which previously made the propagation correction below look like it
+        # *amplifies* the signal (an artefact of the mismatched reference; see
+        # inob.viz.detectability.default_source_idx, which this mirrors).
+        from inob.viz.detectability import default_source_idx
+        source_idx = default_source_idx(paddle_lf, paddle_lf)
     src = paddle_lf.source_pos[source_idx]
 
     # ── per-source data ───────────────────────────────────────────────────
@@ -193,9 +221,42 @@ def render_location_optimisation(
     ax_c = fig.add_subplot(gs[0, 2])
     floors = compute_noise_floors(cfg)
     sigma = floors.eeg_per_channel_uV
-    Q_ref = 70.0
-    snr_paddle = paddle_peak * Q_ref / sigma
-    snr_wb = wb_peak * Q_ref / sigma
+    from inob.config import source_target_tag
+    from inob.physiology.profiles import profile_for_tag
+    profile = profile_for_tag(source_target_tag(cfg))
+    Q_ref = profile.default_strength_nAm
+
+    # Propagating-volley correction: `peak |L| x Q` alone is the stationary
+    # model (all moment lumped at one point), an upper bound the same way the
+    # synchronous whole-cord model is. Where the profile says lumping is not
+    # defensible (spine: stationary_ok=False) and the source list is an
+    # ordered path (not a volume fill), apply the same event-level scalar
+    # correction inob.viz.detectability / inob.analysis.source_models use, so
+    # this figure's trial counts do not silently assume the naive model.
+    from inob.analysis.propagation import (
+        compute_propagation_signals,
+        is_ordered_polyline,
+        peak_over_channels,
+        propagation_ratio,
+    )
+    paddle_prop_factor = 1.0
+    wb_prop_factor = 1.0
+    if not profile.stationary_ok and is_ordered_polyline(paddle_lf.source_pos):
+        paddle_prop_factor = propagation_ratio(
+            compute_propagation_signals(paddle_lf, profile, stationary_idx=source_idx),
+            peak_over_channels,
+        )
+        wb_prop_factor = propagation_ratio(
+            compute_propagation_signals(wb_lf, profile, stationary_idx=source_idx),
+            peak_over_channels,
+        )
+        logger.info(
+            "location-optimisation propagation correction (%s): paddle x%.3f, whole-body x%.3f",
+            profile.name, paddle_prop_factor, wb_prop_factor,
+        )
+
+    snr_paddle = paddle_peak * Q_ref * paddle_prop_factor / sigma
+    snr_wb = wb_peak * Q_ref * wb_prop_factor / sigma
     ax_c.plot(z, snr_paddle, color=NATURE_PALETTE["blue"], lw=1.6,
               label=f"32-ch cervical paddle  (peak {paddle_peak.max():.2e} µV/nAm)")
     ax_c.plot(z, snr_wb, color=NATURE_PALETTE["red"], lw=1.6,
@@ -205,7 +266,11 @@ def render_location_optimisation(
     ax_c.set_xlabel(f"Source z along {region} (mm)")
     ax_c.set_ylabel(f"Single-trial SNR  ·  Q = {Q_ref:g} nA·m, σ = {sigma:.1f} µV")
     ax_c.set_yscale("log")
-    ax_c.set_title("Single-trial SNR  ·  paddle vs whole-body")
+    prop_note = (
+        f"  ·  propagating volley applied (paddle ×{paddle_prop_factor:.2f}, "
+        f"whole-body ×{wb_prop_factor:.2f})" if paddle_prop_factor != 1.0 else ""
+    )
+    ax_c.set_title("Single-trial SNR  ·  paddle vs whole-body" + prop_note, fontsize=9)
     ax_c.legend(loc="lower center", fontsize=7, handlelength=1.4)
     add_panel_label(ax_c, "c")
 
@@ -242,20 +307,41 @@ def render_location_optimisation(
     add_panel_label(ax_e, "e")
 
     # ── panel f: headline numbers ──────────────────────────────────────────
+    # Two verdicts, not one: the highlighted source alone can be misleading
+    # when the source region is longer than the paddle footprint (e.g. a
+    # paddle centred on one vertebral level looks "optimal" only for sources
+    # near that level) — so report the single-source number *and* the
+    # full-region sweep (panels c/d already compute per-source peaks for
+    # every source; this just summarises that array instead of discarding it).
     ax_f = fig.add_subplot(gs[1, 2])
     ax_f.axis("off")
     ratio = wb_best_val / max(paddle_best_val, 1e-30)
     paddle_argmax_dist = float(np.linalg.norm(paddle_best_pos - src))
     wb_argmax_dist = float(np.linalg.norm(wb_best_pos - src))
-    snr_paddle_now = paddle_best_val * Q_ref / sigma
-    snr_wb_now = wb_best_val * Q_ref / sigma
-    trials_paddle = (3.0 * sigma / max(paddle_best_val * Q_ref, 1e-30)) ** 2
-    trials_wb = (3.0 * sigma / max(wb_best_val * Q_ref, 1e-30)) ** 2
+    snr_paddle_now = paddle_best_val * Q_ref * paddle_prop_factor / sigma
+    snr_wb_now = wb_best_val * Q_ref * wb_prop_factor / sigma
+    trials_paddle = (3.0 * sigma / max(paddle_best_val * Q_ref * paddle_prop_factor, 1e-30)) ** 2
+    trials_wb = (3.0 * sigma / max(wb_best_val * Q_ref * wb_prop_factor, 1e-30)) ** 2
+
+    ratio_all = wb_peak / np.maximum(paddle_peak, 1e-30)
+    ratio_median = float(np.median(ratio_all))
+    ratio_min = float(ratio_all.min())
+    ratio_max = float(ratio_all.max())
+    frac_paddle_ok = float(np.mean(ratio_all < 1.5))
+    ratio_ci_lo, _ratio_ci_med, ratio_ci_hi = _bootstrap_median_ratio_ci(
+        ratio_all, seed=int(cfg.reproducibility.seed),
+    )
+
     headline = (
         "Question: is the cervical paddle in the wrong place,\n"
         "or is EEG fundamentally limited by bone shielding?\n\n"
-        f"Source: {region} #{source_idx}  z = {src[2]:.0f} mm\n"
-        f"Q = {Q_ref:g} nA·m, σ_EEG = {sigma:.1f} µV (1 kHz BW)\n\n"
+        f"At highlighted source:  {region} #{source_idx}  z = {src[2]:.0f} mm\n"
+        f"Q = {Q_ref:g} nA·m, σ_EEG = {sigma:.1f} µV (1 kHz BW)\n"
+        + (
+            f"Propagating-volley correction: paddle ×{paddle_prop_factor:.2f}, "
+            f"whole-body ×{wb_prop_factor:.2f}\n\n"
+            if paddle_prop_factor != 1.0 else "\n"
+        ) +
         f"Cervical paddle (32 ch):\n"
         f"   peak |L|  = {paddle_best_val:.3e} µV / nA·m\n"
         f"   argmax–source dist = {paddle_argmax_dist:.0f} mm\n"
@@ -266,39 +352,52 @@ def render_location_optimisation(
         f"   argmax–source dist = {wb_argmax_dist:.0f} mm\n"
         f"   single-trial SNR  = {snr_wb_now:.2e}\n"
         f"   trials → SNR=3    = {trials_wb:.2e}\n\n"
-        f"Whole-body / paddle peak ratio: {ratio:.2f}×\n"
+        f"Whole-body / paddle ratio here: {ratio:.2f}×\n\n"
+        f"Across full {region} (N={len(z)}, z={z.min():.0f}–{z.max():.0f} mm):\n"
+        f"   ratio  median={ratio_median:.1f}×  "
+        f"range={ratio_min:.2f}–{ratio_max:.1f}×\n"
+        f"   median ratio 95% CI = {ratio_ci_lo:.1f}–{ratio_ci_hi:.1f}×  "
+        f"(B=2000 bootstrap)\n"
+        f"   paddle within 1.5× of whole-body at "
+        f"{100 * frac_paddle_ok:.0f}% of sources\n"
     )
-    if ratio < 1.5:
+    if ratio_median < 1.5:
         verdict = (
-            "Verdict: paddle is at the optimal location.\n"
-            "Moving electrodes does NOT solve the EEG problem —\n"
+            "Verdict: paddle tracks whole-body across the region —\n"
+            "moving electrodes does NOT solve the EEG problem;\n"
             "bone shielding is the dominant attenuator."
         )
-    elif ratio < 5.0:
+    elif frac_paddle_ok > 0.5:
         verdict = (
-            "Verdict: location matters somewhat — whole-body\n"
-            "is "
-            f"{ratio:.1f}× better. But still ≪ MEG sensitivity."
+            "Verdict: paddle is optimal near its own level, but the\n"
+            "region extends beyond the paddle footprint — location\n"
+            f"matters away from it (up to {ratio_max:.0f}× at the far end)."
         )
     else:
         verdict = (
-            "Verdict: paddle is poorly sited — whole-body sees\n"
-            f"{ratio:.1f}× more signal. Worth re-siting hardware."
+            "Verdict: paddle is a single-level snapshot, not a fair\n"
+            f"stand-in for the whole {region} — whole-body sees\n"
+            f"{ratio_median:.0f}× more signal at a typical source.\n"
+            "A fixed cervical paddle under-covers this region."
         )
     ax_f.text(0.02, 0.98, headline, transform=ax_f.transAxes,
-              va="top", ha="left", fontsize=9,
+              va="top", ha="left", fontsize=8.3,
               fontfamily="monospace", color=NATURE_PALETTE["axis"])
-    ax_f.text(0.02, 0.20, verdict, transform=ax_f.transAxes,
+    ax_f.text(0.02, 0.14, verdict, transform=ax_f.transAxes,
               va="top", ha="left", fontsize=10, fontweight="bold",
-              color=NATURE_PALETTE["red"] if ratio >= 1.5 else NATURE_PALETTE["axis"])
+              color=NATURE_PALETTE["red"] if ratio_median >= 1.5 else NATURE_PALETTE["axis"])
     add_panel_label(ax_f, "f")
 
     fig.suptitle(
         f"Is location the problem?  Whole-body EEG vs cervical paddle  "
-        f"·  source z = {src[2]:.0f} mm",
+        f"·  highlighted source z = {src[2]:.0f} mm",
         fontsize=12, fontweight="bold", y=0.985,
     )
 
-    logger.info("location-optimisation paddle peak %.3e  whole-body peak %.3e  ratio %.2f×",
-                paddle_best_val, wb_best_val, ratio)
+    logger.info(
+        "location-optimisation @source: paddle peak %.3e  whole-body peak %.3e  ratio %.2f×  "
+        "| full-region ratio median=%.2f (95%% CI %.2f-%.2f) min=%.2f max=%.2f",
+        paddle_best_val, wb_best_val, ratio, ratio_median, ratio_ci_lo, ratio_ci_hi,
+        ratio_min, ratio_max,
+    )
     return save_figure(fig, out_path or target_output(cfg, "location_optimisation.png"), dpi=dpi)

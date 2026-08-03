@@ -393,8 +393,8 @@ def median_nerve_ssep_scenario(
     The 4.7 Hz default is the usual non-integer clinical stimulation rate
     (Cruccu et al. 2008): it avoids locking to 50/60 Hz mains harmonics, so
     line noise averages out across trials instead of summing coherently.
-    The evoked volley enters at C6-T1 and generates the cervical N13 before
-    ascending — the response that dominates cervical magnetospinography.
+    The evoked volley enters at C6-T1 and ascends the dorsal columns — the
+    response that dominates cervical magnetospinography.
     """
     return _ssep_scenario(
         name="ssep_median", nerve="Median nerve", entry_z_mm=entry_z_mm,
