@@ -704,11 +704,78 @@ async def run_ws(ws: WebSocket) -> None:
     error: dict[str, Any] = {}
     done = threading.Event()
     cancel = threading.Event()
+    # The running child, so a cancel can stop it rather than only asking the
+    # next stage boundary not to start.
+    child: dict[str, Any] = {"proc": None}
+
+    # A run happens in a child process, not on a thread here.
+    #
+    # The viz stage draws with PyVista, which builds a VTK render window; on
+    # macOS that is Cocoa, and Cocoa raises an uncatchable NSException when it
+    # is touched from any thread but the main one. Running the pipeline on a
+    # worker thread therefore killed the whole backend process partway through
+    # "viz" — the API server included — while the identical CLI run succeeded.
+    # A child process gets its own main thread, so the same code that works in
+    # the CLI works here, and a crash costs us the run rather than the server.
+    def _pipeline(stages: list[str], force_run: bool) -> dict[str, str]:
+        """Run one pipeline invocation as a child, streaming its log lines.
+
+        Returns the per-stage statuses parsed from the markers the CLI already
+        prints ([run]/[ok]/[skip]/[FAIL]), so the client sees exactly what the
+        CLI reports.
+        """
+        argv = [
+            sys.executable, "-u", "-m", "inob.cli.pipeline",
+            "--config", str(_active_config_path()),
+            "--project-root", str(PROJECT_ROOT),
+            "--stages", ",".join(stages),
+        ]
+        if force_run:
+            argv.append("--force")
+        for override in overrides:
+            argv += ["--set", override]
+
+        env = dict(os.environ)
+        env["MPLBACKEND"] = "Agg"          # matplotlib stays off any GUI path
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(None, [str(PROJECT_ROOT / "src"), env.get("PYTHONPATH", "")])
+        )
+
+        statuses: dict[str, str] = {}
+        proc = subprocess.Popen(
+            argv, cwd=str(PROJECT_ROOT), env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+        )
+        child["proc"] = proc
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            log_q.put(line)
+            m = re.search(r"\[(ok|skip|FAIL)]\s+(\w+)", line)
+            if m:
+                statuses[m.group(2)] = {
+                    "ok": "ran", "skip": "skipped", "FAIL": "failed",
+                }[m.group(1)]
+        code = proc.wait()
+        child["proc"] = None
+        if cancel.is_set():
+            for name in stages:
+                statuses.setdefault(name, "cancelled")
+            return statuses
+        if code != 0:
+            failed = [k for k, v in statuses.items() if v == "failed"]
+            raise RuntimeError(
+                f"the pipeline exited with code {code}"
+                + (f" while running {failed[0]!r}" if failed else "")
+                + " — see the run log for the traceback"
+            )
+        return statuses
 
     def _work() -> None:
         try:
-            cfg = load_config(_active_config_path(), overrides=overrides,
-                              project_root=PROJECT_ROOT)
             if stages_in == "all" or not stages_in:
                 stages = list(ALL_STAGES)
             else:
@@ -716,29 +783,27 @@ async def run_ws(ws: WebSocket) -> None:
 
             if resolve_sources:
                 # Two passes so "reuse the model, re-solve the sources" is
-                # expressible with run_pipeline's single force flag: build any
+                # expressible with the CLI's single force flag: build any
                 # missing upstream stages (skipped when already present), then
                 # force the forward solve for the new dipole positions.
                 upstream = [s for s in stages if s != "forward"]
                 statuses: dict[str, str] = {}
                 if upstream:
-                    statuses.update(run_pipeline(cfg, stages=upstream,
-                                                 force=False,
-                                                 should_cancel=cancel.is_set))
-                if not cancel.is_set():
-                    statuses.update(run_pipeline(cfg, stages=["forward"],
-                                                 force=True,
-                                                 should_cancel=cancel.is_set))
+                    statuses.update(_pipeline(upstream, False))
+                if not cancel.is_set() and "forward" in stages:
+                    statuses.update(_pipeline(["forward"], True))
             else:
-                statuses = run_pipeline(cfg, stages=stages, force=force,
-                                        should_cancel=cancel.is_set)
+                statuses = _pipeline(stages, force)
+
             result["statuses"] = statuses
             if cancel.is_set():
                 result["cancelled"] = True
                 return
-            # Turn the solved leadfield into the planning answer. If the
-            # leadfield is missing we report *why* rather than returning
-            # nothing — the client shows the reason instead of guessing.
+
+            # Turn the solved leadfield into the planning answer. This is numpy
+            # and h5py only — no rendering — so it is safe on this thread.
+            cfg = load_config(_active_config_path(), overrides=overrides,
+                              project_root=PROJECT_ROOT)
             try:
                 result["detect"] = compute_detectability(
                     cfg, strengths_nAm=strengths or None,

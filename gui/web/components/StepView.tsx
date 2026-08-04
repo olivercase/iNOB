@@ -304,7 +304,12 @@ export default function StepView(p: Props) {
                 set the volume-conductor the solver sees — the field at the
                 sensors depends on them as much as on the source.
               </p>
-              {!config && <span className="jempty">Waiting for the backend config.</span>}
+              {!config && (
+                <Note tone="warn" title="No config loaded">
+                  The backend hasn’t sent its config yet. It’s retried
+                  automatically — start it on :8000 and this fills in.
+                </Note>
+              )}
               {config &&
                 Object.keys(conductivities).length === 0 && (
                   <Note tone="warn">No conductivities are defined in this config.</Note>
@@ -695,7 +700,10 @@ export default function StepView(p: Props) {
                   />
                 </div>
               ) : (
-                <span className="jempty">Waiting for the backend config.</span>
+                <Note tone="warn" title="No config loaded">
+                  The backend hasn’t sent its config yet. It’s retried
+                  automatically — start it on :8000 and this fills in.
+                </Note>
               )}
               <Button variant="ghost" icon="cog" onClick={p.onOpenAdvanced}>
                 Solver engine and cluster

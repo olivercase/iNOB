@@ -134,7 +134,11 @@ export default function Page() {
     setRestored(true);
   }, []);
 
-  useEffect(() => {
+  // Load everything the canvas needs from the backend. Kept as a callback,
+  // not a bare mount effect, because the backend can be started after the page
+  // (or restart under it): a one-shot fetch left the whole app stuck on
+  // "Waiting for the backend config" until a manual reload.
+  const loadBackend = useCallback(() => {
     getConfig()
       .then((r) => setConfig(r.config))
       .catch(() => setHealthy(false));
@@ -155,8 +159,19 @@ export default function Page() {
           return t ? t.name : null;
         });
       })
+      .then(() => setMeshError(false))
       .catch(() => setMeshError(true));
   }, []);
+
+  useEffect(() => {
+    loadBackend();
+  }, [loadBackend]);
+
+  // Self-heal: the moment the backend answers again, pick up whatever we
+  // failed to load while it was away.
+  useEffect(() => {
+    if (healthy && (config === null || meshes.length === 0)) loadBackend();
+  }, [healthy, config, meshes.length, loadBackend]);
 
   const refreshFigures = useCallback(() => {
     getFigures().then(setFigures);
@@ -582,13 +597,15 @@ export default function Page() {
           <Button icon="cog" disabled={!config} onClick={() => setAdvancedOpen(true)}>
             Advanced
           </Button>
-          <span
+          <button
+            type="button"
             className={`jhealth${healthy ? " jhealth--up" : healthy === false ? " jhealth--down" : ""}`}
-            title={healthy ? "backend online" : "backend offline"}
+            title="Backend status — click to reconnect"
+            onClick={loadBackend}
           >
             <span className="jhealth-dot" aria-hidden />
             {healthy == null ? "connecting" : healthy ? "online" : "offline"}
-          </span>
+          </button>
         </div>
 
         {/* The 3-D well: where anatomy is chosen and sources are placed. */}
@@ -883,9 +900,10 @@ export default function Page() {
               </div>
             </>
           ) : (
-            <span className="ui-dim">
-              Waiting for the backend config (start the FastAPI backend on :8000).
-            </span>
+            <Note tone="warn" title="No config loaded">
+              Start the FastAPI backend on :8000. The page reconnects on its
+              own, or click the status chip to try now.
+            </Note>
           )}
         </div>
       </Sheet>

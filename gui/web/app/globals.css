@@ -955,6 +955,8 @@ body {
 }
 
 .jhealth {
+  font: inherit;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -2345,4 +2347,34 @@ body {
 /* The hint steps aside for the run HUD. */
 .jrun ~ .jhint {
   display: none;
+}
+
+/* Run just this stage, without touching the rest of the journey. */
+.jnode-run {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(62, 224, 122, 0.45);
+  background: var(--void-2);
+  color: var(--signal);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.jnode-wrap:hover .jnode-run,
+.jnode-run:focus-visible {
+  opacity: 1;
+}
+.jnode-run:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow: 0 0 16px var(--signal-glow);
+}
+.jnode-run:disabled {
+  opacity: 0;
+  cursor: not-allowed;
 }
