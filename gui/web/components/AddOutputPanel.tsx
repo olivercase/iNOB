@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Icon from "@/components/ui/Icon";
 import type { FigureInfo } from "@/lib/api";
-import { ADDABLE, type AddableSpec } from "@/lib/journey";
+import { ADDABLE, BASE_NODES, type AddableSpec } from "@/lib/journey";
 
 const STAGE_LABEL: Record<string, string> = {
   geom: "Anatomy figures",
@@ -16,6 +16,8 @@ const STAGE_LABEL: Record<string, string> = {
 const GROUP_LABEL: Record<AddableSpec["group"], string> = {
   sensing: "Sensing",
   model: "Forward models",
+  physics: "Physics",
+  compute: "Where it runs",
 };
 
 interface Props {
@@ -97,6 +99,24 @@ export default function AddOutputPanel({
       <div className="jpanel-scroll">
         {nothing && <p className="jempty">Nothing matches “{query}”.</p>}
 
+        {!q && (
+          <section className="jgroup">
+            <h3 className="jgroup-head">Already in the journey · core</h3>
+            <p className="jgroup-note">
+              Every run is made of these seven steps, so they can’t be removed.
+              Open one from the canvas to set it.
+            </p>
+            <div className="jcorelist">
+              {BASE_NODES.map((n) => (
+                <span key={n.id} className="jcorechip">
+                  <Icon name={n.icon} size={12} />
+                  {n.title}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
         {specGroups.map(([group, list]) => (
           <section key={group} className="jgroup">
             <h3 className="jgroup-head">{GROUP_LABEL[group]}</h3>
@@ -161,7 +181,7 @@ export default function AddOutputPanel({
       </div>
 
       <footer className="jpanel-foot">
-        Added nodes can be dragged anywhere, and removed with their ✕ or the
+        Anything you add can be dragged anywhere, and removed with its ✕ or the
         Delete key.
       </footer>
     </aside>

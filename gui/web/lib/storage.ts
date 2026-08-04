@@ -16,6 +16,10 @@ export interface Session {
   outputs: string[];
   /** Where the user dragged each node, by node id. */
   positions: Record<string, { x: number; y: number }>;
+  /** Optional nodes on the canvas (EEG, analytic rungs), by spec id. */
+  extras: string[];
+  /** Which physics the next run reports. */
+  modality: "meg" | "eeg";
 }
 
 export function loadSession(): Partial<Session> {
@@ -43,6 +47,13 @@ export function loadSession(): Partial<Session> {
       positions:
         parsed.positions && typeof parsed.positions === "object"
           ? (parsed.positions as Record<string, { x: number; y: number }>)
+          : undefined,
+      extras: Array.isArray(parsed.extras)
+        ? parsed.extras.filter((k): k is string => typeof k === "string")
+        : undefined,
+      modality:
+        parsed.modality === "eeg" || parsed.modality === "meg"
+          ? parsed.modality
           : undefined,
     };
   } catch {

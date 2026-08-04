@@ -14,6 +14,8 @@ import type {
 } from "@/lib/api";
 import type { JourneyNode, NodeState } from "@/lib/journey";
 import SourceList from "@/components/SourceList";
+import ClusterPanel from "@/components/ClusterPanel";
+import DuneuroSetup from "@/components/DuneuroSetup";
 import ResultsPanel from "@/components/ResultsPanel";
 import ComputePanel from "@/components/ComputePanel";
 
@@ -86,6 +88,10 @@ interface Props {
   result: DetectResult | null;
   unavailable: DetectUnavailable | null;
 
+  /** True while any run is in flight, so a step can't start a second one. */
+  running: boolean;
+  /** Run only these stages and return to the canvas to watch them. */
+  onRunStage: (stages: string[]) => void;
   onOpenAdvanced: () => void;
   /** Persist the config and return to the journey. Resolves to any errors. */
   onSave: () => Promise<string[]>;
@@ -188,6 +194,17 @@ export default function StepView(p: Props) {
         <span className={`jstate jstate--${p.state}`}>{STATE_WORD[p.state]}</span>
 
         <span className="jstep-spacer" />
+        {node.stage && (
+          <button
+            type="button"
+            className="jbtn"
+            disabled={p.running}
+            title={`Run only this step (${node.stage})`}
+            onClick={() => p.onRunStage([node.stage as string])}
+          >
+            <Icon name="play" size={13} /> Run this step
+          </button>
+        )}
         <button type="button" className="jbtn jbtn--go" onClick={save} disabled={saving}>
           <Icon name="check" size={14} /> {saving ? "Saving…" : "Save and return"}
         </button>
@@ -544,6 +561,112 @@ export default function StepView(p: Props) {
                 onChange={p.onConfigChange}
                 help="Centre-to-centre spacing within the paddle."
               />
+            </>
+          )}
+
+          {/* ── noise floor (optional node) ────────────────────────────── */}
+          {node.kind === "noise" && config && (
+            <>
+              <p className="jlead">
+                Detection is a ratio, and this is its denominator: how much noise
+                the sensors contribute over the band you record in.
+              </p>
+              <NumField
+                label="OPM intrinsic noise"
+                unit="fT/√Hz"
+                path="noise.opm_intrinsic_fT_sqrtHz"
+                config={config}
+                onChange={p.onConfigChange}
+                help="Sensor noise density quoted by the magnetometer's maker."
+              />
+              <NumField
+                label="EEG amplifier noise"
+                unit="µV/√Hz"
+                path="noise.eeg_amplifier_uV_sqrtHz"
+                config={config}
+                onChange={p.onConfigChange}
+                help="Used instead of the OPM figure when solving EEG."
+              />
+              <NumField
+                label="Band low"
+                unit="Hz"
+                path="noise.band_lo_hz"
+                config={config}
+                onChange={p.onConfigChange}
+                help="Bottom of the recording band. A wider band collects more noise."
+              />
+              <NumField
+                label="Band high"
+                unit="Hz"
+                path="noise.band_hi_hz"
+                config={config}
+                onChange={p.onConfigChange}
+                help="Top of the recording band. Nerve signal is fast, so this stays high."
+              />
+            </>
+          )}
+
+          {/* ── muscle anisotropy (optional node) ──────────────────────── */}
+          {node.kind === "anisotropy" && config && (
+            <>
+              <p className="jlead">
+                Muscle carries current better along its fibres than across them.
+                This only affects runs whose source tissue includes muscle.
+              </p>
+              <label className="jfield">
+                <span>Mode</span>
+                <Select
+                  value={getPath<string>(config, "forward.muscle_anisotropy.mode", "auto")}
+                  ariaLabel="Anisotropy mode"
+                  onChange={(v) =>
+                    p.onConfigChange(setPath(config, "forward.muscle_anisotropy.mode", v))
+                  }
+                  options={[
+                    { value: "auto", label: "Auto — on for muscle runs" },
+                    { value: "on", label: "Always on" },
+                    { value: "off", label: "Off — muscle stays isotropic" },
+                  ]}
+                />
+              </label>
+              <NumField
+                label="Along the fibres"
+                unit="S/m"
+                path="forward.muscle_anisotropy.sigma_long_sm"
+                config={config}
+                onChange={p.onConfigChange}
+                help="Conductivity parallel to the fibre direction."
+              />
+              <NumField
+                label="Across the fibres"
+                unit="S/m"
+                path="forward.muscle_anisotropy.sigma_trans_sm"
+                config={config}
+                onChange={p.onConfigChange}
+                help="Conductivity perpendicular to the fibres — always the smaller of the two."
+              />
+            </>
+          )}
+
+          {/* ── solver engine (optional node) ──────────────────────────── */}
+          {node.kind === "engine" && (
+            <>
+              <p className="jlead">
+                The forward solve needs a compiled DUNEuro. Point it at one here
+                and see, honestly, whether this backend can load it.
+              </p>
+              <DuneuroSetup />
+            </>
+          )}
+
+          {/* ── cluster (optional node) ────────────────────────────────── */}
+          {node.kind === "cluster" && (
+            <>
+              <p className="jlead">
+                Send the forward solve to UCL Myriad or Kathleen instead of this
+                machine. Only the solve runs there; the leadfield comes back and
+                is analysed locally.
+              </p>
+              <ClusterPanel sources={p.sources} modality={p.modality} />
             </>
           )}
 

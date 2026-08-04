@@ -22,7 +22,11 @@ export type NodeKind =
   // analytic forward models the FEM solve is checked against.
   | "eeg"
   | "biot"
-  | "sarvas";
+  | "sarvas"
+  | "noise"
+  | "anisotropy"
+  | "engine"
+  | "cluster";
 
 // What a node is doing right now. Drives every visual cue on the canvas.
 export type NodeState =
@@ -212,7 +216,7 @@ export function wirePath(a: JourneyNode, b: JourneyNode): string {
 export interface AddableSpec {
   /** Node id once added. */
   id: string;
-  group: "sensing" | "model";
+  group: "sensing" | "model" | "physics" | "compute";
   kind: NodeKind;
   title: string;
   caption: string;
@@ -265,7 +269,64 @@ export const ADDABLE: AddableSpec[] = [
     x: COL * 5,
     y: -ROW,
   },
+  {
+    id: "noise",
+    group: "physics",
+    kind: "noise",
+    title: "Noise floor",
+    caption: "What the sensor hears",
+    blurb: "Sensor noise and bandwidth — the denominator of every SNR",
+    icon: "pulse",
+    from: "sensors",
+    to: "detect",
+    x: COL * 4,
+    y: ROW,
+  },
+  {
+    id: "anisotropy",
+    group: "physics",
+    kind: "anisotropy",
+    title: "Muscle anisotropy",
+    caption: "Direction-dependent sigma",
+    blurb: "Muscle conducts better along its fibres than across them",
+    icon: "mesh",
+    from: "conductivity",
+    x: COL,
+    y: ROW,
+  },
+  {
+    id: "engine",
+    group: "compute",
+    kind: "engine",
+    title: "Solver engine",
+    caption: "DUNEuro build",
+    blurb: "Point the forward solve at a compiled DUNEuro, and check it loads",
+    icon: "cog",
+    from: "solve",
+    x: COL * 5,
+    y: ROW,
+  },
+  {
+    id: "cluster",
+    group: "compute",
+    kind: "cluster",
+    title: "Cluster solve",
+    caption: "Myriad / Kathleen",
+    blurb: "Send the forward solve to UCL's cluster instead of this machine",
+    icon: "cloud",
+    from: "solve",
+    x: COL * 6,
+    y: ROW,
+  },
 ];
+
+// The core spine: every stage a FEM run is made of. These can be moved and
+// opened, never removed — deleting one would leave a journey that cannot run.
+export const CORE_IDS = new Set(BASE_NODES.map((n) => n.id));
+
+export function isCore(id: string): boolean {
+  return CORE_IDS.has(id);
+}
 
 export function addableById(id: string): AddableSpec | undefined {
   return ADDABLE.find((a) => a.id === id);

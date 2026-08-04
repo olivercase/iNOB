@@ -23,8 +23,10 @@ import { loadSession, saveSession } from "@/lib/storage";
 import {
   BASE_EDGES,
   BASE_NODES,
+  addableById,
   figureParent,
   figurePosition,
+  type AddableSpec,
   type JourneyEdge,
   type JourneyNode,
   type NodeState,
@@ -62,9 +64,14 @@ export default function Page() {
   const [selectedSource, setSelectedSource] = useState<number | null>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(3);
+  // Which physics the run reports. The sensor-array step owns this; the EEG
+  // node is a shortcut to it, so the two can never disagree.
+  const [modality, setModality] = useState<"meg" | "eeg">("meg");
 
   const [figures, setFigures] = useState<FigureInfo[]>([]);
   const [outputs, setOutputs] = useState<string[]>([]);
+  // Optional nodes the user added (EEG, the analytic rungs), by spec id.
+  const [extras, setExtras] = useState<string[]>([]);
   // Where the user dragged each card. Empty means "use the authored layout".
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>(
     {},
@@ -91,6 +98,10 @@ export default function Page() {
   const [configErrors, setConfigErrors] = useState<string[]>([]);
   const [cancelling, setCancelling] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  // Which stages this run was asked for — the HUD narrates only those.
+  const [runningStages, setRunningStages] = useState<string[]>(ALL_STAGES);
+  const [elapsed, setElapsed] = useState(0);
   const runRef = useRef<RunHandle | null>(null);
 
   // The 3-D well is expensive to build (tens of MB of STL), so it is mounted on
@@ -117,6 +128,8 @@ export default function Page() {
     if (s.target) setTarget(s.target);
     if (s.visible) setVisible(s.visible);
     if (s.outputs) setOutputs(s.outputs);
+    if (s.extras) setExtras(s.extras);
+    if (s.modality === "eeg" || s.modality === "meg") setModality(s.modality);
     if (s.positions) setPositions(s.positions);
     setRestored(true);
   }, []);
@@ -153,6 +166,15 @@ export default function Page() {
     refreshFigures();
   }, [refreshFigures]);
 
+  // A run's own clock, so "still going" always has a number attached.
+  useEffect(() => {
+    if (!running || startedAt === null) return;
+    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [running, startedAt]);
+
   // While a run is in flight, figures land on disk one stage at a time — poll
   // so an output node fills in the moment its PNG is written, not at the end.
   useEffect(() => {
@@ -178,8 +200,27 @@ export default function Page() {
 
   useEffect(() => {
     if (!restored) return;
-    saveSession({ sources, threshold, target, visible, outputs, positions });
-  }, [restored, sources, threshold, target, visible, outputs, positions]);
+    saveSession({
+      sources,
+      threshold,
+      target,
+      visible,
+      outputs,
+      positions,
+      extras,
+      modality,
+    });
+  }, [
+    restored,
+    sources,
+    threshold,
+    target,
+    visible,
+    outputs,
+    positions,
+    extras,
+    modality,
+  ]);
 
   // ── the graph ──────────────────────────────────────────────────────────────
 
@@ -190,6 +231,21 @@ export default function Page() {
 
   const nodes: JourneyNode[] = useMemo(() => {
     const list = [...BASE_NODES];
+
+    for (const id of extras) {
+      const spec = addableById(id);
+      if (!spec) continue;
+      list.push({
+        id: spec.id,
+        kind: spec.kind,
+        title: spec.title,
+        caption: spec.caption,
+        icon: spec.icon,
+        x: spec.x,
+        y: spec.y,
+      });
+    }
+
     const perParent = new Map<string, number>();
     for (const key of outputs) {
       const fig = figureByKey.get(key);
@@ -217,16 +273,22 @@ export default function Page() {
       const at = positions[n.id];
       return at ? { ...n, x: at.x, y: at.y } : n;
     });
-  }, [outputs, figureByKey, positions]);
+  }, [outputs, extras, figureByKey, positions]);
 
   const edges: JourneyEdge[] = useMemo(() => {
     const list = [...BASE_EDGES];
+    for (const id of extras) {
+      const spec = addableById(id);
+      if (!spec) continue;
+      list.push({ from: spec.from, to: spec.id });
+      if (spec.to) list.push({ from: spec.id, to: spec.to });
+    }
     for (const n of nodes) {
       if (n.kind !== "figure" || !n.stage) continue;
       list.push({ from: figureParent(n.stage), to: n.id });
     }
     return list;
-  }, [nodes]);
+  }, [nodes, extras]);
 
   const stageState = useCallback(
     (name: string, fallback: NodeState): NodeState => {
@@ -244,6 +306,9 @@ export default function Page() {
   const states: Record<string, NodeState> = useMemo(() => {
     const s: Record<string, NodeState> = {
       anatomy: stageState("geom", meshes.length ? "ready" : "idle"),
+      // Conductivities aren't a pipeline stage — they're settings the solve
+      // reads — so the node is "ready" as soon as the config has values.
+      conductivity: config ? "ready" : "idle",
       mesh: stageState("fem", "idle"),
       sensors: stageState("sensors", "idle"),
       sources: sources.length ? "done" : "ready",
@@ -256,6 +321,12 @@ export default function Page() {
             ? "ready"
             : "idle",
     };
+    // The optional nodes: EEG follows the chosen modality; the analytic rungs
+    // are always available, since neither needs a leadfield.
+    if (extras.includes("eeg")) s.eeg = modality === "eeg" ? "done" : "ready";
+    if (extras.includes("biot")) s.biot = "ready";
+    if (extras.includes("sarvas")) s.sarvas = "ready";
+
     for (const n of nodes) {
       if (n.kind !== "figure") continue;
       const fig = n.figureKey ? figureByKey.get(n.figureKey) : undefined;
@@ -265,6 +336,9 @@ export default function Page() {
     return s;
   }, [
     stageState,
+    config,
+    extras,
+    modality,
     meshes.length,
     sources.length,
     result,
@@ -277,19 +351,26 @@ export default function Page() {
 
   const badges: Record<string, string | undefined> = useMemo(() => {
     const workers = config ? getPath<number>(config, "forward.local_workers", 0) : 0;
+    const tissues = config ? getPath<string[]>(config, "fem.tissues", []) : [];
+    const pitch = config ? getPath<number>(config, "fem.pitch_mm", 0) : 0;
     const b: Record<string, string | undefined> = {
       anatomy: target ? target.replace(/_/g, " ") : undefined,
+      conductivity: tissues.length ? `${tissues.length} tissues` : undefined,
+      mesh: pitch ? `${pitch} mm pitch` : undefined,
+      eeg: modality === "eeg" ? "solving EEG" : "not selected",
       sources: sources.length
         ? `${sources.length} placed`
         : undefined,
-      sensors: result ? `${result.array.n_sensors}` : undefined,
+      sensors: result
+        ? `${result.array.n_sensors} ${modality.toUpperCase()} sensors`
+        : modality.toUpperCase(),
       solve: workers === 0 ? "all cores" : `${workers}×`,
       detect: result
         ? bestTrials(result)
         : undefined,
     };
     return b;
-  }, [config, target, sources.length, result]);
+  }, [config, target, sources.length, result, modality]);
 
   const previews: Record<string, string | undefined> = useMemo(() => {
     const p: Record<string, string | undefined> = {};
@@ -307,13 +388,22 @@ export default function Page() {
 
   function selectedKind(id: string): string {
     if (id.startsWith("fig:")) return "figure";
-    return BASE_NODES.find((n) => n.id === id)?.kind ?? "";
+    return (
+      BASE_NODES.find((n) => n.id === id)?.kind ?? addableById(id)?.kind ?? ""
+    );
   }
 
   // ── running ────────────────────────────────────────────────────────────────
 
-  const onRun = async () => {
-    if (!config || sources.length === 0) return;
+  // One run path for everything. `stages` is what the backend is asked to do,
+  // so the same code covers "run the whole journey" and "just re-mesh" — the
+  // stages a step doesn't ask for are never touched, and the ones it does ask
+  // for skip themselves when their outputs are already on disk.
+  const runStages = async (stages: string[]) => {
+    if (!config || running) return;
+    // Only a solve needs dipoles; rebuilding geometry or the mesh does not.
+    const needsSources = stages.includes("forward");
+    if (needsSources && sources.length === 0) return;
     setLogs([]);
     setStatuses({});
     setResult(null);
@@ -331,8 +421,11 @@ export default function Page() {
 
     setRunning(true);
     setCancelling(false);
+    setStartedAt(Date.now());
+    setElapsed(0);
+    setRunningStages(stages);
     runRef.current = runSimulation(
-      ALL_STAGES,
+      stages,
       false,
       {
         onLog: (line) => {
@@ -372,9 +465,15 @@ export default function Page() {
           runRef.current = null;
         },
       },
-      { sources, threshold_snr: threshold },
+      // Sources are only sent when this run actually solves; sending them
+      // otherwise would force a re-solve the user didn't ask for.
+      needsSources
+        ? { sources, threshold_snr: threshold, modality }
+        : { threshold_snr: threshold, modality },
     );
   };
+
+  const onRun = () => runStages(ALL_STAGES);
 
   const onCancel = () => {
     if (!runRef.current) return;
@@ -396,9 +495,17 @@ export default function Page() {
   // Only pinned output figures can be removed; the five core stages are what
   // the FEM run is made of, so the canvas never offers to delete them.
   const removeNode = useCallback((id: string) => {
-    if (!id.startsWith("fig:")) return;
-    const key = id.slice(4);
-    setOutputs((o) => o.filter((k) => k !== key));
+    if (id.startsWith("fig:")) {
+      const key = id.slice(4);
+      setOutputs((o) => o.filter((k) => k !== key));
+    } else if (addableById(id)) {
+      setExtras((e) => e.filter((k) => k !== id));
+      // Removing the EEG node hands the run back to the OPM array, so the
+      // canvas and the next run can never disagree about what is being solved.
+      if (id === "eeg") setModality("meg");
+    } else {
+      return; // a core stage: the run is made of exactly these
+    }
     setPositions((p) => {
       const next = { ...p };
       delete next[id];
@@ -419,7 +526,8 @@ export default function Page() {
     return w === 0 ? "all cores" : `${w} core${w === 1 ? "" : "s"}`;
   }, [config]);
 
-  const doneCount = ALL_STAGES.filter(
+  const hudStages = running || Object.keys(statuses).length ? runningStages : ALL_STAGES;
+  const doneCount = hudStages.filter(
     (s) => statuses[s] === "ran" || statuses[s] === "skipped",
   ).length;
 
@@ -443,6 +551,7 @@ export default function Page() {
             setPositions((p) => ({ ...p, [id]: { x: Math.round(x), y: Math.round(y) } }))
           }
           onRemove={removeNode}
+          onRunNode={(stages) => runStages(stages)}
           running={running}
         />
 
@@ -547,8 +656,16 @@ export default function Page() {
         {addOpen && !selectedNode && (
           <AddOutputPanel
             figures={figures}
-            added={new Set(outputs)}
-            onAdd={(f) => setOutputs((o) => (o.includes(f.key) ? o : [...o, f.key]))}
+            added={
+              new Set([...outputs.map((k) => `fig:${k}`), ...extras])
+            }
+            onAddFigure={(f) =>
+              setOutputs((o) => (o.includes(f.key) ? o : [...o, f.key]))
+            }
+            onAddNode={(spec: AddableSpec) => {
+              setExtras((e) => (e.includes(spec.id) ? e : [...e, spec.id]));
+              if (spec.id === "eeg") setModality("eeg");
+            }}
             onClose={() => setAddOpen(false)}
           />
         )}
@@ -572,8 +689,15 @@ export default function Page() {
             onSelectSource={setSelectedSource}
             threshold={threshold}
             onThresholdChange={setThreshold}
+            modality={modality}
+            onModalityChange={setModality}
             result={result}
             unavailable={unavailable}
+            running={running}
+            onRunStage={(stages) => {
+              setSelected(null);
+              runStages(stages);
+            }}
             onOpenAdvanced={() => setAdvancedOpen(true)}
             onSave={onSaveStep}
             onBack={() => setSelected(null)}
@@ -599,43 +723,49 @@ export default function Page() {
           </section>
         )}
 
-        {/* Live progress, bottom right — the one place that says what is happening. */}
-        <div className="jprogress" aria-live="polite">
+        {/* The run, narrated. Bottom centre, because during a run this is
+            the only thing anyone is looking at. */}
+        <div className="jrun" aria-live="polite">
           {configErrors.length > 0 && !running && (
-            <Note tone="danger" title="Nothing was run">
-              <ul className="ui-errlist">
-                {configErrors.map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-              </ul>
-            </Note>
+            <div className="jrun-card jrun-card--bad">
+              <Note tone="danger" title="Nothing was run">
+                <ul className="ui-errlist">
+                  {configErrors.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              </Note>
+            </div>
           )}
-          {(running || doneCount > 0) && (
-            <div className="jprogress-card">
-              <div className="jprogress-top">
-                <span className="jprogress-step mono">
-                  Step {Math.min(doneCount + (running ? 1 : 0), ALL_STAGES.length)}/
-                  {ALL_STAGES.length}
+
+          {(running || doneCount > 0) && configErrors.length === 0 && (
+            <div className={`jrun-card${running ? " jrun-card--live" : ""}`}>
+              <div className="jrun-top">
+                <span className="jrun-badge mono">
+                  {running
+                    ? `${Math.min(doneCount + 1, hudStages.length)} / ${hudStages.length}`
+                    : "done"}
                 </span>
-                <span className="jprogress-name">
+                <span className="jrun-name">
                   {cancelling
                     ? "Stopping after this stage"
                     : running
                       ? (STAGE_LABEL[stage ?? ""] ?? "Starting the pipeline")
-                      : "Journey complete"}
+                      : unavailable
+                        ? "Finished — no result"
+                        : "Journey complete"}
+                </span>
+                <span className="jrun-clock mono">
+                  {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
+                  {String(elapsed % 60).padStart(2, "0")}
                 </span>
               </div>
-              <div className="jprogress-track" aria-hidden>
-                <span
-                  className="jprogress-fill"
-                  style={{ width: `${(doneCount / ALL_STAGES.length) * 100}%` }}
-                />
-              </div>
-              <ol className="jprogress-pips">
-                {ALL_STAGES.map((s) => {
-                  const st = statuses[s];
+
+              <ol className="jrun-steps">
+                {hudStages.map((sname) => {
+                  const st = statuses[sname];
                   const cls =
-                    running && stage === s
+                    running && stage === sname
                       ? "active"
                       : st === "ran"
                         ? "done"
@@ -644,9 +774,32 @@ export default function Page() {
                           : st === "failed"
                             ? "failed"
                             : "todo";
-                  return <li key={s} className={`jpip jpip--${cls}`} title={STAGE_LABEL[s]} />;
+                  return (
+                    <li key={sname} className={`jrun-step jrun-step--${cls}`}>
+                      <span className="jrun-step-mark" aria-hidden>
+                        {cls === "done" || cls === "skipped" ? (
+                          <Icon name="check" size={11} />
+                        ) : cls === "failed" ? (
+                          <Icon name="alert" size={11} />
+                        ) : cls === "active" ? (
+                          <span className="jrun-step-spin" />
+                        ) : null}
+                      </span>
+                      <span className="jrun-step-label">{STAGE_LABEL[sname]}</span>
+                      {st === "skipped" && (
+                        <span className="jrun-step-note">reused</span>
+                      )}
+                    </li>
+                  );
                 })}
               </ol>
+
+              <div className="jrun-track" aria-hidden>
+                <span
+                  className="jrun-fill"
+                  style={{ width: `${(doneCount / hudStages.length) * 100}%` }}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -665,8 +818,8 @@ export default function Page() {
 
         {sources.length === 0 && !running && !selectedNode && (
           <p className="jhint">
-            Start at <b>Current sources</b> — open it, then click the target in the
-            3-D view to drop a source.
+            Open <b>Sources</b>, then click the target in the 3-D view to drop
+            one. Drag any card to rearrange the journey.
           </p>
         )}
       </main>
@@ -725,7 +878,7 @@ export default function Page() {
                     "result is fetched back and analysed locally."
                   }
                 >
-                  <ClusterPanel sources={sources} modality="meg" />
+                  <ClusterPanel sources={sources} modality={modality} />
                 </Disclosure>
               </div>
             </>

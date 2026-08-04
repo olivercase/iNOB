@@ -5,6 +5,7 @@ import Icon, { type IconName } from "@/components/ui/Icon";
 import {
   NODE_H,
   NODE_W,
+  isCore,
   bounds,
   nodeCentre,
   wirePath,
@@ -35,6 +36,8 @@ interface Props {
   onMove: (id: string, x: number, y: number) => void;
   /** Remove a node. Only offered for nodes that are deletable. */
   onRemove: (id: string) => void;
+  /** Run just this node's stage(s), leaving the rest of the journey alone. */
+  onRunNode: (stages: string[]) => void;
   /** True while the pipeline runs — live wires carry a travelling pulse. */
   running: boolean;
   /**
@@ -56,10 +59,10 @@ const MAX_SCALE = 1.8;
 // Pointer travel (screen px) past which a press counts as a drag, not a click.
 const DRAG_SLOP = 4;
 
-// Core pipeline stages cannot be deleted — the FEM run needs every one of
-// them. Only output figures the user pinned are removable.
+// Core pipeline stages cannot be deleted — a FEM run is made of exactly
+// those. Everything else on the canvas the user added, so it can go.
 export function isDeletable(n: JourneyNode): boolean {
-  return n.kind === "figure";
+  return !isCore(n.id);
 }
 
 export default function JourneyCanvas({
@@ -73,6 +76,7 @@ export default function JourneyCanvas({
   onOpen,
   onMove,
   onRemove,
+  onRunNode,
   running,
   next = null,
   fitSignal = 0,
@@ -97,6 +101,32 @@ export default function JourneyCanvas({
     null,
   );
   const fitted = useRef(false);
+
+  // Nodes that just finished, so the canvas can mark the moment rather than
+  // silently swapping a spinner for a tick.
+  const prevStates = useRef<Record<string, NodeState>>({});
+  const [justDone, setJustDone] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const finished: string[] = [];
+    for (const [id, st] of Object.entries(states)) {
+      const before = prevStates.current[id];
+      if ((st === "done" || st === "skipped") && before && before !== st) {
+        finished.push(id);
+      }
+    }
+    prevStates.current = { ...states };
+    if (finished.length === 0) return;
+    setJustDone((cur) => new Set([...cur, ...finished]));
+    const timer = window.setTimeout(() => {
+      setJustDone((cur) => {
+        const next = new Set(cur);
+        for (const id of finished) next.delete(id);
+        return next;
+      });
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [states]);
 
   const fit = useCallback(() => {
     const el = wrapRef.current;
@@ -264,7 +294,7 @@ export default function JourneyCanvas({
     <div
       className={`jcanvas${panning ? " jcanvas--panning" : ""}${
         dragging ? " jcanvas--dragging" : ""
-      }`}
+      }${running ? " jcanvas--running" : ""}`}
       ref={wrapRef}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -292,6 +322,7 @@ export default function JourneyCanvas({
             const settled = (id: string) =>
               states[id] === "done" || states[id] === "skipped";
             const live = settled(e.from) && (settled(e.to) || states[e.to] === "active");
+            const charging = settled(e.from) && states[e.to] === "active";
             const mid = {
               x: (nodeCentre(a).x + nodeCentre(b).x) / 2,
               y: (nodeCentre(a).y + nodeCentre(b).y) / 2,
@@ -299,7 +330,9 @@ export default function JourneyCanvas({
             return (
               <g
                 key={`${e.from}-${e.to}`}
-                className={`jwire ${live ? "jwire--live" : "jwire--idle"}`}
+                className={`jwire ${live ? "jwire--live" : "jwire--idle"}${
+                  charging ? " jwire--charging" : ""
+                }`}
               >
                 <path className="jwire-glow" d={d} />
                 <path className="jwire-line" d={d} />
@@ -337,7 +370,9 @@ export default function JourneyCanvas({
                 tabIndex={0}
                 className={`jnode jnode--${state}${
                   selected === n.id ? " jnode--selected" : ""
-                }${isFigure ? " jnode--figure" : ""}`}
+                }${isFigure ? " jnode--figure" : ""}${
+                  justDone.has(n.id) ? " jnode--justdone" : ""
+                }`}
                 style={{ height: NODE_H }}
                 aria-label={`${n.title}, ${state}. Enter opens this step; arrow keys move it.`}
                 onPointerDown={(e) => startDrag(e, n)}
@@ -369,6 +404,8 @@ export default function JourneyCanvas({
               >
                 <span className="jnode-bloom jnode-bloom--in" aria-hidden />
                 <span className="jnode-bloom jnode-bloom--out" aria-hidden />
+                {justDone.has(n.id) && <span className="jnode-ring" aria-hidden />}
+                {state === "active" && <span className="jnode-sweep" aria-hidden />}
 
                 {isFigure && preview ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -412,6 +449,23 @@ export default function JourneyCanvas({
                 </div>
               )}
 
+              {n.stage && (
+                <button
+                  type="button"
+                  className="jnode-run"
+                  title={`Run just this step (${n.stage})`}
+                  aria-label={`Run just the ${n.title} step`}
+                  disabled={running}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRunNode([n.stage as string]);
+                  }}
+                >
+                  <Icon name="play" size={10} />
+                </button>
+              )}
+
               {removable && (
                 <button
                   type="button"
@@ -427,8 +481,10 @@ export default function JourneyCanvas({
                   <Icon name="close" size={11} />
                 </button>
               )}
-              {!removable && selected === n.id && (
-                <span className="jnode-locked">core stage</span>
+              {!removable && (
+                <span className="jnode-core" title="Core stage — every run needs it">
+                  core
+                </span>
               )}
             </div>
           );
