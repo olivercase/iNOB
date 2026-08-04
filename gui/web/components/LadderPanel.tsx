@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Callout, Checkbox, HTMLTable } from "@blueprintjs/core";
+import { Button, Checkbox, Note } from "@/components/ui";
 import { runLadder, type LadderRung, type LadderResult } from "@/lib/api";
 
 // The three rungs, in ladder order. Analytic rungs are instant and need no
@@ -46,7 +46,7 @@ export default function LadderPanel() {
 
   return (
     <div className="ladder">
-      <p className="adv-blurb">
+      <p className="ui-lead">
         Compare the same source through three forward models of rising fidelity.
         Biot–Savart and Sarvas are analytic and run in seconds; FEM needs the
         DUNEuro solve. Pick any combination.
@@ -54,47 +54,46 @@ export default function LadderPanel() {
 
       <div className="ladder-rungs">
         {RUNGS.map((r) => (
-          <label
+          <div
             key={r.key}
             className={`ladder-rung${picked[r.key] ? " ladder-rung--on" : ""}`}
           >
             <Checkbox
               checked={picked[r.key]}
               onChange={() => toggle(r.key)}
-              style={{ margin: 0 }}
+              label={<span className="ladder-rung-name">{r.name}</span>}
             />
-            <span className="ladder-rung-name">{r.name}</span>
             <span className="ladder-rung-blurb">{r.blurb}</span>
             {r.needsSolve && <span className="ladder-tag">needs solve</span>}
-          </label>
+          </div>
         ))}
       </div>
 
       <Button
-        intent="primary"
-        icon="chart"
+        variant="primary"
+        icon="compare"
         loading={running}
         disabled={chosen.length === 0}
         onClick={run}
-        style={{ marginTop: 10 }}
+        className="ladder-run"
       >
         Run {chosen.length} rung{chosen.length === 1 ? "" : "s"}
       </Button>
 
       {error && (
-        <Callout intent="warning" style={{ marginTop: 12 }} title="Could not run">
+        <Note tone="warn" title="Could not run">
           <p>{error.msg}</p>
-          {error.hint && <p className="bp6-text-muted">{error.hint}</p>}
-        </Callout>
+          {error.hint && <p className="ui-dim">{error.hint}</p>}
+        </Note>
       )}
 
       {result && (
         <div className="ladder-result">
-          <div className="bp6-text-muted" style={{ margin: "10px 0 6px" }}>
+          <div className="ladder-meta ui-dim">
             source #{result.source_index + 1} of {result.n_sources} ·{" "}
             {result.n_radial_coils} radial coils · peak field in fT per nA·m
           </div>
-          <HTMLTable compact striped className="mono" style={{ width: "100%" }}>
+          <table className="ui-table mono">
             <thead>
               <tr>
                 <th>rung</th>
@@ -111,7 +110,7 @@ export default function LadderPanel() {
                 </tr>
               ))}
             </tbody>
-          </HTMLTable>
+          </table>
 
           {Object.keys(result.ratios).length > 0 && (
             <div className="ladder-ratios">

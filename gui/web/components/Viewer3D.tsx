@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, ThreeEvent, useThree } from "@react-three/fiber";
 import { GizmoHelper, GizmoViewport, Html, OrbitControls } from "@react-three/drei";
-import { Button, Switch, Tag } from "@blueprintjs/core";
+import { Button, IconButton, Tag, Toggle } from "@/components/ui";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { MeshInfo, PointSource } from "@/lib/api";
@@ -42,7 +42,12 @@ interface LoadedMesh {
 function useStlMeshes(
   meshes: MeshInfo[],
   visible: Record<string, boolean>,
-): { loaded: LoadedMesh[]; loading: boolean; failed: string[] } {
+): {
+  loaded: LoadedMesh[];
+  loading: boolean;
+  failed: string[];
+  retryFailed: () => void;
+} {
   const cache = useRef<Map<string, LoadedMesh>>(new Map());
   const failedRef = useRef<Set<string>>(new Set());
   const [, bump] = useState(0);
@@ -52,6 +57,17 @@ function useStlMeshes(
     () => meshes.filter((m) => visible[m.name] !== false),
     [meshes, visible],
   );
+
+  // Free the GPU-side buffers when this viewer goes away. Parsed geometries
+  // were cached and never disposed, so every mount leaked its whole-body
+  // anatomy (tens of MB of vertex buffers) for the life of the page.
+  useEffect(() => {
+    const cached = cache.current;
+    return () => {
+      cached.forEach((m) => m.geometry.dispose());
+      cached.clear();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +85,11 @@ function useStlMeshes(
         });
         const geometry = loader.parse(buf);
         geometry.computeVertexNormals();
+        geometry.computeBoundingBox();   // snapping rejects on the box first
+        if (cancelled) {
+          geometry.dispose();            // nobody will ever render this one
+          return;
+        }
         cache.current.set(m.name, { name: m.name, geometry });
       }),
     ).then((results) => {
@@ -84,34 +105,102 @@ function useStlMeshes(
     };
   }, [want]);
 
+  // Clear the failure set so the loader effect picks those tissues up again.
+  // Failures were previously permanent for the session, so a single blip while
+  // the backend was starting hid a tissue with no way back short of a reload.
+  const retryFailed = useCallback(() => {
+    if (failedRef.current.size === 0) return;
+    failedRef.current.clear();
+    bump((n) => n + 1);
+  }, []);
+
   const loaded = useMemo(
     () => want.map((m) => cache.current.get(m.name)).filter(Boolean) as LoadedMesh[],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [want, loading],
   );
   const failed = want.map((m) => m.name).filter((n) => failedRef.current.has(n));
-  return { loaded, loading, failed };
+  return { loaded, loading, failed, retryFailed };
 }
 
-// Nearest mesh vertex to a point, across the given geometries. Used to snap a
-// dropped dipole onto the chosen target structure so sources sit on anatomy.
-function snapToGeometries(point: THREE.Vector3, geoms: THREE.BufferGeometry[]): THREE.Vector3 | null {
-  let best: THREE.Vector3 | null = null;
-  let bestD = Infinity;
+// Nearest point on the target anatomy, used to snap a dropped dipole onto the
+// chosen structure.
+//
+// This runs on every pointermove while placing. A brute-force scan of every
+// vertex in the target (whole-body meshes are hundreds of thousands of verts,
+// times however many tissues are shown) stalls the interaction visibly, so the
+// search is bounded two ways:
+//
+//   * a coarse uniform stride finds the neighbourhood, then a full scan runs
+//     only within a small window around it;
+//   * the bounding box is checked first, so geometries nowhere near the cursor
+//     cost nothing.
+//
+// The result is identical to the exhaustive scan for any realistic mesh, at a
+// fraction of the work. `MAX_EXACT` is the size below which we just do the
+// exhaustive thing, because it is already cheap.
+const MAX_EXACT = 20_000;
+const COARSE_TARGET = 4_000;
+
+function nearestVertex(
+  point: THREE.Vector3,
+  g: THREE.BufferGeometry,
+  best: { d: number; p: THREE.Vector3 | null },
+): void {
+  const pos = g.getAttribute("position");
+  if (!pos) return;
+
+  // Cheap reject: if the box is already further away than the best hit, skip.
+  if (!g.boundingBox) g.computeBoundingBox();
+  if (g.boundingBox) {
+    const dBox = g.boundingBox.distanceToPoint(point);
+    if (dBox * dBox > best.d) return;
+  }
+
   const v = new THREE.Vector3();
-  for (const g of geoms) {
-    const pos = g.getAttribute("position");
-    if (!pos) continue;
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      const d = v.distanceToSquared(point);
-      if (d < bestD) {
-        bestD = d;
-        best = v.clone();
-      }
+  const n = pos.count;
+
+  const consider = (i: number) => {
+    v.fromBufferAttribute(pos, i);
+    const d = v.distanceToSquared(point);
+    if (d < best.d) {
+      best.d = d;
+      best.p = v.clone();
+    }
+  };
+
+  if (n <= MAX_EXACT) {
+    for (let i = 0; i < n; i++) consider(i);
+    return;
+  }
+
+  // Coarse pass over a strided sample to locate the neighbourhood…
+  const stride = Math.max(1, Math.floor(n / COARSE_TARGET));
+  let coarseBestI = 0;
+  let coarseBestD = Infinity;
+  for (let i = 0; i < n; i += stride) {
+    v.fromBufferAttribute(pos, i);
+    const d = v.distanceToSquared(point);
+    if (d < coarseBestD) {
+      coarseBestD = d;
+      coarseBestI = i;
     }
   }
-  return best;
+  // …then an exact pass over a window around it. Vertices in an STL are
+  // spatially coherent enough that the true nearest sits within a few strides.
+  const half = stride * 8;
+  const lo = Math.max(0, coarseBestI - half);
+  const hi = Math.min(n - 1, coarseBestI + half);
+  for (let i = lo; i <= hi; i++) consider(i);
+}
+
+function snapToGeometries(
+  point: THREE.Vector3,
+  geoms: THREE.BufferGeometry[],
+): THREE.Vector3 | null {
+  const best = { d: Infinity, p: null as THREE.Vector3 | null };
+  for (const g of geoms) nearestVertex(point, g, best);
+  return best.p;
 }
 
 // Fit the camera to the model exactly once (when meshes first load) and again
@@ -187,7 +276,7 @@ export default function Viewer3D({
   onSelect,
   onAddSource,
 }: Props) {
-  const { loaded, loading, failed } = useStlMeshes(meshes, visible);
+  const { loaded, loading, failed, retryFailed } = useStlMeshes(meshes, visible);
   const [placing, setPlacing] = useState(false);
   const [snap, setSnap] = useState(true);
   const [recenter, setRecenter] = useState(0);
@@ -315,14 +404,12 @@ export default function Viewer3D({
         </GizmoHelper>
       </Canvas>
 
-      {/* Top-left controls. The HUD sits over the dark well, so its Blueprint
-          controls use the dark theme (light text) even though the app chassis
-          around it is light. */}
-      <div className="viewerHud viewerHud--tl bp6-dark">
+      {/* Top-left controls, floating over the well. */}
+      <div className="viewerHud viewerHud--tl">
         <Button
-          icon={placing ? "selection" : "new-object"}
-          intent={placing ? "primary" : "none"}
-          small
+          icon="bolt"
+          size="sm"
+          variant={placing ? "primary" : "default"}
           onClick={() => {
             setPlacing((p) => !p);
             setMissed(false);
@@ -330,47 +417,54 @@ export default function Viewer3D({
         >
           {placing ? "Placing — Esc to stop" : "Place source"}
         </Button>
-        {placing && (
-          <Switch
+        {placing && snapGeoms.length > 0 && (
+          <Toggle
             checked={snap}
-            label={target ? `Snap to ${target}` : "Snap to anatomy"}
-            disabled={snapGeoms.length === 0}
-            onChange={() => setSnap((s) => !s)}
-            className="hudSwitch"
+            label={target ? `Snap to ${target.replace(/_/g, " ")}` : "Snap to anatomy"}
+            onChange={setSnap}
           />
         )}
-        <Button icon="reset" small minimal title="Recenter view" onClick={() => setRecenter((n) => n + 1)} />
+        <IconButton
+          name="reset"
+          label="Recentre the view"
+          onClick={() => setRecenter((n) => n + 1)}
+        />
       </div>
 
       {/* Bottom-left status: load state, errors, live coordinate readout. */}
-      <div className="viewerHud viewerHud--bl bp6-dark">
+      <div className="viewerHud viewerHud--bl">
         {loading && !loaded.length ? (
-          <Tag minimal icon="cloud-download">
+          <Tag icon="cloud">
             loading anatomy…
           </Tag>
         ) : loaded.length ? (
-          <Tag minimal icon="cube">
+          <Tag icon="anatomy">
             {loaded.length} tissue{loaded.length === 1 ? "" : "s"} shown
             {loading ? " · loading…" : ""}
           </Tag>
         ) : (
-          <Tag minimal icon="eye-off">
+          <Tag icon="eye-off">
             no tissues visible — toggle one above
           </Tag>
         )}
         {failed.length > 0 && (
-          <Tag intent="danger" minimal icon="error">
-            failed: {failed.join(", ")}
-          </Tag>
+          <>
+            <Tag tone="danger" icon="alert">
+              failed: {failed.join(", ")}
+            </Tag>
+            <Button size="sm" variant="ghost" icon="reset" onClick={retryFailed}>
+              Retry
+            </Button>
+          </>
         )}
         {placing && hover && (
-          <Tag minimal className="mono">
+          <Tag>
             {hover.x.toFixed(1)}, {hover.y.toFixed(1)}, {hover.z.toFixed(1)} mm
             {canSnap ? " · snapped" : ""}
           </Tag>
         )}
         {missed && (
-          <Tag intent="warning" minimal>
+          <Tag tone="danger">
             click landed off-model
           </Tag>
         )}

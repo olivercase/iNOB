@@ -12,6 +12,10 @@ export interface Session {
   threshold: number;
   target: string | null;
   visible: Record<string, boolean>;
+  /** Figure keys the user pinned to the journey canvas as output nodes. */
+  outputs: string[];
+  /** Where the user dragged each node, by node id. */
+  positions: Record<string, { x: number; y: number }>;
 }
 
 export function loadSession(): Partial<Session> {
@@ -32,6 +36,13 @@ export function loadSession(): Partial<Session> {
       visible:
         parsed.visible && typeof parsed.visible === "object"
           ? (parsed.visible as Record<string, boolean>)
+          : undefined,
+      outputs: Array.isArray(parsed.outputs)
+        ? parsed.outputs.filter((k): k is string => typeof k === "string")
+        : undefined,
+      positions:
+        parsed.positions && typeof parsed.positions === "object"
+          ? (parsed.positions as Record<string, { x: number; y: number }>)
           : undefined,
     };
   } catch {

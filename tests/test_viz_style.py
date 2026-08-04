@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pytest
 from matplotlib.colors import LinearSegmentedColormap
 
 from inob.viz.style import (

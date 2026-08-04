@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from inob.analysis.sarvas_compare import SarvasGeometry, SarvasVsFemResult
 from inob.viz.sarvas_plot import render_sarvas_vs_fem

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Callout, HTMLSelect, InputGroup } from "@blueprintjs/core";
+import { Button, Note, Select, TextInput } from "@/components/ui";
 import {
   getDuneuro,
   setDuneuroPath,
@@ -69,22 +69,12 @@ export default function DuneuroSetup() {
       </div>
 
       {status && (
-        <Callout
-          compact
-          intent={ready ? "success" : "warning"}
-          style={{ margin: "10px 0" }}
-        >
-          {status.hint}
-        </Callout>
+        <Note tone={ready ? "ok" : "warn"}>{status.hint}</Note>
       )}
 
       <label className="dun-field">
         <span>DUNEuro build</span>
-        <HTMLSelect
-          value={choice}
-          disabled={busy}
-          onChange={(e) => onSelect(e.currentTarget.value)}
-        >
+        <Select value={choice} disabled={busy} onChange={onSelect}>
           <option value={NONE}>Use the interpreter&apos;s own duneuropy</option>
           {status?.candidates.map((c) => (
             <option key={c.path} value={c.path}>
@@ -93,18 +83,18 @@ export default function DuneuroSetup() {
             </option>
           ))}
           <option value={CUSTOM}>Custom path…</option>
-        </HTMLSelect>
+        </Select>
       </label>
 
       {choice === CUSTOM && (
         <div className="dun-custom">
-          <InputGroup
+          <TextInput
             placeholder="/path/to/dir/containing/duneuropy"
             value={custom}
-            onValueChange={setCustom}
+            onChange={setCustom}
             disabled={busy}
           />
-          <Button intent="primary" disabled={busy || !custom} onClick={() => apply(custom)}>
+          <Button variant="primary" disabled={busy || !custom} onClick={() => apply(custom)}>
             Apply
           </Button>
         </div>

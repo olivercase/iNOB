@@ -7,7 +7,6 @@ import pytest
 
 from inob.paths import find_project_root, resolve_path, resolve_project_root
 
-
 # ── find_project_root ───────────────────────────────────────────────────
 
 def test_find_project_root_finds_pyproject_toml(tmp_path: Path) -> None:

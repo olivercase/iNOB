@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
-import "@blueprintjs/core/lib/css/blueprint.css";
-import "@blueprintjs/icons/lib/css/blueprint-icons.css";
+import { Urbanist, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-// Display + UI: an engineered grotesque with just enough character to feel like
-// instrument lettering. Data + the readout: IBM Plex Mono, whose tabular
-// figures read like a measurement display.
-const display = Space_Grotesk({
+// UI: Urbanist — a geometric sans whose round, even shapes stay legible at the
+// small sizes a node card needs. Data + the readout: IBM Plex Mono, whose
+// tabular figures read like a measurement display.
+const display = Urbanist({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-display",
@@ -20,7 +18,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "iNOB — trials-to-detect planner",
+  title: "iNOB — trials-to-detect journey",
   description:
     "Place a nerve source on the anatomy, run the forward model, and read how " +
     "many averaged trials it takes to detect it.",
@@ -33,7 +31,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      {/* Grammarly and friends inject attributes into <body> before React
+          hydrates, which React reports as a hydration mismatch. The markup we
+          render is identical either way, so ignore attribute drift here. */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

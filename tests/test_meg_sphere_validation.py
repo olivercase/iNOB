@@ -11,7 +11,6 @@ real-DUNEuro tests).
 """
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 pytest.importorskip("duneuropy", reason="duneuropy not built locally")

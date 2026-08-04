@@ -9,9 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@blueprintjs/core": "^6.16.0",
-    "@blueprintjs/icons": "^6.11.0",
-    "@blueprintjs/select": "^6.3.0",
     "@react-three/drei": "10.0.0",
     "@react-three/fiber": "9.0.0",
     "next": "15.1.12",

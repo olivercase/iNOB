@@ -97,16 +97,28 @@ def _failed_marker(cfg: Config, stage: Stage) -> Path:
 
 def run_pipeline(
     cfg: Config, *, stages: list[str], force: bool = False,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> dict[str, str]:
     """Run the requested stages in dependency order.
 
-    Returns a per-stage status map (``"skipped"`` / ``"ran"`` / ``"failed"``).
-    Stages whose primary outputs already exist are skipped unless ``force``.
+    Returns a per-stage status map (``"skipped"`` / ``"ran"`` / ``"failed"`` /
+    ``"cancelled"``). Stages whose primary outputs already exist are skipped
+    unless ``force``.
+
+    ``should_cancel``, when given, is polled between stages and stops the run
+    at the next stage boundary. It deliberately cannot interrupt a stage that
+    is already executing — a DUNEuro solve is opaque C++ — so a cancel takes
+    effect once the current stage finishes. Callers that need the distinction
+    should look for ``"cancelled"`` in the returned map.
     """
     statuses: dict[str, str] = {}
     for name in ALL_STAGES:
         if name not in stages:
             continue
+        if should_cancel is not None and should_cancel():
+            logger.info("[stop] cancelled before %s", name)
+            statuses[name] = "cancelled"
+            break
         stage = STAGES[name]
         marker = _failed_marker(cfg, stage)
 

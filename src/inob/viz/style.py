@@ -21,6 +21,7 @@ Design principles (from the Nature Reviews "Guide to designing figures"):
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,11 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
 logger = logging.getLogger(__name__)
+
+# Backends that can render without a window server, so are safe on any thread.
+_NON_INTERACTIVE_BACKENDS = frozenset({
+    "agg", "cairo", "pdf", "pgf", "ps", "svg", "template",
+})
 
 NATURE_PALETTE: dict[str, str] = {
     # neutral context
@@ -68,8 +74,31 @@ def sequential_cmap() -> LinearSegmentedColormap:
     )
 
 
+def ensure_headless_backend() -> None:
+    """Force a non-interactive backend when rendering off the main thread.
+
+    Every figure this package produces is written straight to a PNG, so a GUI
+    backend is never needed. It is actively harmful off-thread: macOS' default
+    backend raises "Cannot create a GUI FigureManager outside the main thread",
+    which broke the visualisation stage of every run driven from the browser
+    GUI (which solves on a worker thread) while the identical CLI run passed.
+
+    Only switches when both conditions hold — an interactive backend AND a
+    non-main thread — so an interactive session keeps whatever it chose.
+    """
+    if threading.current_thread() is threading.main_thread():
+        return
+    backend = mpl.get_backend().lower()
+    if backend in _NON_INTERACTIVE_BACKENDS:
+        return
+    logger.debug("switching matplotlib backend %s → Agg (off-main-thread render)",
+                 backend)
+    mpl.use("Agg", force=True)
+
+
 def apply_nature_style() -> None:
     """Install Nature-leaning matplotlib rcParams. Idempotent."""
+    ensure_headless_backend()
     mpl.rcParams.update({
         "font.family":     "sans-serif",
         "font.sans-serif": ["Helvetica", "Arial", "DejaVu Sans"],

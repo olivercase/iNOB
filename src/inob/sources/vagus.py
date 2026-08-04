@@ -85,6 +85,78 @@ def sample_source_tissues(
     return pos
 
 
+def _tets_containing(points: np.ndarray, fem: FemMesh, *, k: int = 64) -> np.ndarray:
+    """Boolean mask: is each point inside some tetrahedron of ``fem``?
+
+    Exact barycentric containment, restricted to the ``k`` tets whose centroids
+    are nearest each point — an element that contains the point is necessarily
+    among its nearest neighbours, so this is exact for any sane mesh while
+    staying cheap enough to run per clicked source.
+    """
+    from scipy.spatial import cKDTree
+
+    verts = fem.nodes[fem.tets]                     # (T, 4, 3)
+    centroids = verts.mean(axis=1)
+    tree = cKDTree(centroids)
+    _, idx = tree.query(points, k=min(k, len(centroids)))
+    # query returns (n_points,) when k == 1 and (n_points, k) otherwise; reshape
+    # explicitly rather than atleast_2d, which would turn the k == 1 case into a
+    # single row of n_points candidates and silently skip every point but one.
+    idx = np.asarray(idx).reshape(len(points), -1)
+
+    inside = np.zeros(len(points), dtype=bool)
+    for i, cand in enumerate(idx):
+        v = verts[cand]                             # (k, 4, 3)
+        d = v[:, 3, :]
+        # Columns a-d, b-d, c-d; barycentric coords of p relative to that basis.
+        t = np.stack([v[:, 0] - d, v[:, 1] - d, v[:, 2] - d], axis=-1)  # (k,3,3)
+        rhs = points[i] - d                                             # (k,3)
+        try:
+            lam = np.linalg.solve(t, rhs[..., None])[..., 0]             # (k,3)
+        except np.linalg.LinAlgError:
+            continue                                # degenerate tets → not inside
+        full = np.concatenate([lam, 1.0 - lam.sum(axis=1, keepdims=True)], axis=1)
+        # A small negative tolerance keeps points exactly on a face/edge inside.
+        inside[i] = bool((full >= -1e-9).all(axis=1).any())
+    return inside
+
+
+def assert_sources_in_mesh(pos: np.ndarray, fem: FemMesh) -> None:
+    """Raise a readable error for any source outside the FEM volume.
+
+    DUNEuro's own failure for this is a bare C++ exception —
+    ``Dune::Exception [findEntity:...kdtree.hh]: position ... not contained in
+    mesh`` — which surfaces in the GUI as an opaque wall of text several minutes
+    into a solve. A clicked point just off the anatomy is an ordinary mistake,
+    so it deserves an ordinary message, raised before the solver starts.
+    """
+    inside = _tets_containing(pos, fem)
+    if inside.all():
+        return
+
+    from scipy.spatial import cKDTree
+
+    tree = cKDTree(fem.nodes)
+    bad = np.flatnonzero(~inside)
+    lines = []
+    for i in bad:
+        dist, j = tree.query(pos[i])
+        near = fem.nodes[j]
+        lines.append(
+            f"  source {i + 1} at ({pos[i][0]:.1f}, {pos[i][1]:.1f}, "
+            f"{pos[i][2]:.1f}) mm — {dist:.1f} mm outside; nearest point in the "
+            f"model is ({near[0]:.1f}, {near[1]:.1f}, {near[2]:.1f})"
+        )
+    lo, hi = fem.nodes.min(axis=0), fem.nodes.max(axis=0)
+    raise ValueError(
+        f"{len(bad)} of {len(pos)} source(s) lie outside the FEM model, so the "
+        "forward solve cannot evaluate them:\n" + "\n".join(lines) +
+        f"\nThe model spans ({lo[0]:.0f}, {lo[1]:.0f}, {lo[2]:.0f}) to "
+        f"({hi[0]:.0f}, {hi[1]:.0f}, {hi[2]:.0f}) mm. Move the source onto the "
+        "target structure, or rebuild the mesh with that region included."
+    )
+
+
 def resolve_source_positions(cfg, fem: FemMesh) -> np.ndarray:
     """Dipole positions for the forward solve, ``(S, 3)`` mm.
 
@@ -97,6 +169,8 @@ def resolve_source_positions(cfg, fem: FemMesh) -> np.ndarray:
         pos = np.asarray(cfg.forward.point_sources, dtype=np.float64)
         if pos.ndim != 2 or pos.shape[1] != 3:
             raise ValueError(f"point_sources must be (S, 3); got {pos.shape}")
+        # Only explicit sources need this: sampled ones come from the mesh.
+        assert_sources_in_mesh(pos, fem)
         logger.info("%d explicit point sources (overriding vagus sampling)", len(pos))
         return pos
     return sample_source_tissues(

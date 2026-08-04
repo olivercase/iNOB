@@ -42,8 +42,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from inob.analysis.analytic_sphere import sarvas_meg_field
 from inob.io.hdf5 import load_geometry
-from inob.viz.style import apply_nature_style, divergent_cmap, NATURE_PALETTE
-
+from inob.viz.style import NATURE_PALETTE, apply_nature_style, divergent_cmap
 from inob.viz.surface_topoplot import (
     _crop_skin_to_band,
     _cylindrical_unroll,
@@ -418,9 +417,9 @@ def _make_distance_figure(
     # Per-muscle distance × field scatter (one panel per component).
     # Also accumulate per-muscle summary stats for the 4th panel.
     summary: list[dict] = []
-    for ax, (label, basis) in zip(scatter_axes, components):
+    for ax, (label, basis) in zip(scatter_axes, components, strict=True):
         all_dists, all_vals = [], []
-        for mi, (nm, col) in enumerate(zip(names, muscle_colors)):
+        for mi, (nm, col) in enumerate(zip(names, muscle_colors, strict=True)):
             dists = np.linalg.norm(band_v - srcs[mi], axis=1)
             vals = np.abs(np.einsum("ij,ij->i", B_per[mi], basis)) * scale
             ax.scatter(dists, vals, s=3, alpha=0.30, color=col,
@@ -544,7 +543,7 @@ def main() -> int:
 
     # Full B field per source (n_srcs, M, 3), converted to fT/nA·m.
     B_per = []
-    for src, ax in zip(srcs, axes):
+    for src, ax in zip(srcs, axes, strict=True):
         centre = np.array([*body_axis_xy(skin.vertices, src[2]), src[2]])
         B = sarvas_field_on_surface(src, ax, band_v, centre) * 1e15 / Q_NAM
         B_per.append(B)
@@ -574,7 +573,7 @@ def main() -> int:
                           srcs, names, Q_phys_nAm=args.Q_nAm)
 
     stats = []
-    for nm, src, r, g1, g2 in zip(names, srcs, per_radial, per_tang1, per_tang2):
+    for nm, src, r, g1, g2 in zip(names, srcs, per_radial, per_tang1, per_tang2, strict=True):
         entry: dict = {
             "muscle": nm, "source_mm": src.tolist(),
             "peak_abs_fT_per_nAm": {
@@ -595,7 +594,7 @@ def main() -> int:
         "Q_nAm": Q_NAM,
         "z_band_mm": {"lo": z_band_lo, "hi": z_band_hi,
                       "skin_margin": SKIN_MARGIN_MM},
-        "n_skin_vertices": int(len(band_v)),
+        "n_skin_vertices": len(band_v),
         "per_muscle": stats,
         "combined_peak_fT_per_nAm": {
             "radial": float(np.max(np.abs(combined_radial))),
@@ -615,7 +614,7 @@ def main() -> int:
     print(f"figures: {OUT_PNG.name}  {OUT_PNG_TANG1.name}  "
           f"{OUT_PNG_TANG2.name}  {OUT_PNG_VECTORS.name}  {OUT_PNG_DIST.name}")
     print(f"  band z: {z_band_lo:.0f} → {z_band_hi:.0f} mm  "
-          f"({int(len(band_v))} skin vertices)")
+          f"({len(band_v)} skin vertices)")
     header = f"  {'muscle':<28} {'radial':>10} {'tang1':>10} {'tang2':>10}  fT/nA·m"
     print(header)
     for s in stats:

@@ -169,7 +169,7 @@ class _Panel:
     (Z, Y), a 90°-CCW rotation of the naive Z/Y projection, so the body's
     long axis (Z) runs vertically instead of the view looking "on its side".
     """
-    __slots__ = ("title", "xi", "sx", "xlabel", "yi", "sy", "ylabel")
+    __slots__ = ("sx", "sy", "title", "xi", "xlabel", "yi", "ylabel")
 
     def __init__(self, title, xi, sx, xlabel, yi, sy, ylabel):
         self.title, self.xlabel, self.ylabel = title, xlabel, ylabel
@@ -266,12 +266,18 @@ def _set_limits(axes, all_pts: np.ndarray, *, margin: float = 0.05) -> None:
     ax_axial, ax_lateral, ax_coronal, ax_3d = axes
     lo, hi = all_pts.min(0), all_pts.max(0)
     span = hi - lo
-    lo, hi = lo - margin * span, hi + margin * span
+    # A degenerate axis (every source sharing one coordinate — a single source,
+    # or a planar arrangement) gives span 0, and matplotlib cannot build a
+    # transform from identical limits. Fall back to a unit pad on those axes.
+    pad = np.where(span > 0, margin * span, 1.0)
+    lo, hi = lo - pad, hi + pad
     for ax, key in ((ax_axial, "axial"), (ax_lateral, "lateral"), (ax_coronal, "coronal")):
         x0, x1, y0, y1 = _PANELS[key].lims(lo, hi)
         ax.set_xlim(x0, x1)
         ax.set_ylim(y0, y1)
-    ax_3d.set_xlim(lo[0], hi[0]); ax_3d.set_ylim(lo[1], hi[1]); ax_3d.set_zlim(lo[2], hi[2])
+    ax_3d.set_xlim(lo[0], hi[0])
+    ax_3d.set_ylim(lo[1], hi[1])
+    ax_3d.set_zlim(lo[2], hi[2])
 
 
 # Fixed hue order over canonical pair names (assigned once below, sorted by
@@ -364,7 +370,7 @@ def render_muscle_source_orientations(
     apply_nature_style()
     rng = np.random.default_rng(cfg.reproducibility.seed)
 
-    fem, positions, orientations = _load_muscle_sources(cfg, spacing_mm=spacing_mm)
+    _fem, positions, orientations = _load_muscle_sources(cfg, spacing_mm=spacing_mm)
 
     # Arrow length: a visible fraction of the sampling spacing so neighbouring
     # arrows don't overlap into an unreadable mass.

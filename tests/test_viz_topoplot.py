@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,9 +21,7 @@ from inob.viz.topoplot import (
     render_meg_montage,
     render_meg_topoplot,
 )
-
 from tests.viz_pipeline_helpers import build_pipeline_cfg
-
 
 # ── _column_for_source ──────────────────────────────────────────────────────
 

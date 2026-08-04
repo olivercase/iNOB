@@ -4,10 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 from inob.viz.cross_modality_plot import render_cross_modality
-
 from tests.viz_pipeline_helpers import build_pipeline_cfg
 
 

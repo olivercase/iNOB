@@ -95,7 +95,6 @@ def test_muscle_source_orientations_follow_each_muscles_own_axis(
     orient = muscle_source_orientations(fem, pos, muscle_dir=two_muscle_stls)
     for p, o in zip(pos, orient, strict=True):
         dominant_axis = int(np.argmax(np.abs(o)))
-        expected_axis = 2 if p[2] != 0.0 or abs(p[0]) < 100.0 else 0
         # Sources sit either near (0,0,±30) -> Z-axis muscle, or near
         # (470/530, 0, 0) -> X-axis muscle.
         if abs(p[0]) < 100.0:

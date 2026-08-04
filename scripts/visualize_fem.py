@@ -113,23 +113,31 @@ def render(mesh, out: Path, size: int):
         cam = ren.GetActiveCamera()
         cam.ParallelProjectionOn()
         ren.ResetCamera()
-        fp = cam.GetFocalPoint(); dist = cam.GetDistance()
+        fp = cam.GetFocalPoint()
+        dist = cam.GetDistance()
         cam.SetViewUp(0, 0, 1)
         cam.SetPosition(fp[0], fp[1] - dist, fp[2])  # anterior view
         ren.ResetCamera()
         win.Render()
-        w2i = vtk.vtkWindowToImageFilter(); w2i.SetInput(win); w2i.Update()
+        w2i = vtk.vtkWindowToImageFilter()
+        w2i.SetInput(win)
+        w2i.Update()
         png = out / f"fem_{name}.png"
-        wr = vtk.vtkPNGWriter(); wr.SetFileName(str(png))
-        wr.SetInputConnection(w2i.GetOutputPort()); wr.Write()
+        wr = vtk.vtkPNGWriter()
+        wr.SetFileName(str(png))
+        wr.SetInputConnection(w2i.GetOutputPort())
+        wr.Write()
         pngs[name] = png
         logger.info("rendered %s -> %s", name, png.name)
 
     # neck-zoom anterior view (skin translucent, no clip) — shows carotid sheath
     ren = make_renderer(False)
-    win = vtk.vtkRenderWindow(); win.SetOffScreenRendering(1); win.AddRenderer(ren)
+    win = vtk.vtkRenderWindow()
+    win.SetOffScreenRendering(1)
+    win.AddRenderer(ren)
     win.SetSize(size, size)
-    cam = ren.GetActiveCamera(); cam.ParallelProjectionOn()
+    cam = ren.GetActiveCamera()
+    cam.ParallelProjectionOn()
     ren.ResetCamera()
     # zoom to upper body (vagus/neck region): focus near top quartile in z
     # focus on the neck: vagus nodes mark the carotid-sheath level
@@ -143,16 +151,22 @@ def render(mesh, out: Path, size: int):
         cx = fc[0]
     else:
         zlo, zhi = nodes[:, 2].min(), nodes[:, 2].max()
-        fz = zlo + 0.80 * (zhi - zlo); cx = center[0]
+        fz = zlo + 0.80 * (zhi - zlo)
+        cx = center[0]
     cam.SetFocalPoint(cx, center[1], fz)
     cam.SetViewUp(0, 0, 1)
     cam.SetPosition(cx, center[1] - 1000, fz)
     cam.SetParallelScale(90.0)
     ren.ResetCameraClippingRange()
     win.Render()
-    w2i = vtk.vtkWindowToImageFilter(); w2i.SetInput(win); w2i.Update()
+    w2i = vtk.vtkWindowToImageFilter()
+    w2i.SetInput(win)
+    w2i.Update()
     png = out / "fem_neck.png"
-    wr = vtk.vtkPNGWriter(); wr.SetFileName(str(png)); wr.SetInputConnection(w2i.GetOutputPort()); wr.Write()
+    wr = vtk.vtkPNGWriter()
+    wr.SetFileName(str(png))
+    wr.SetInputConnection(w2i.GetOutputPort())
+    wr.Write()
     pngs["neck"] = png
     logger.info("rendered neck zoom -> %s", png.name)
 

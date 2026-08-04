@@ -1,6 +1,6 @@
 "use client";
 
-import { NumericInput, Callout } from "@blueprintjs/core";
+import { Disclosure, TextInput } from "@/components/ui";
 import { Cfg, getPath, setPath } from "@/lib/config";
 import {
   PARAM_GROUPS,
@@ -30,15 +30,17 @@ function Field({
           {param.label}
           {param.unit && <span className="adv-unit"> ({param.unit})</span>}
         </label>
-        <NumericInput
-          value={Number.isFinite(value) ? value : 0}
-          onValueChange={(n) => onChange(setPath(config, param.path, n))}
-          buttonPosition="none"
-          style={{ width: 96 }}
-          minorStepSize={null}
-          stepSize={param.step ?? 1}
-          min={param.min}
-          max={param.max}
+        <TextInput
+          mono
+          width={92}
+          value={String(Number.isFinite(value) ? value : 0)}
+          ariaLabel={param.label}
+          onChange={(v) => {
+            const n = Number(v);
+            if (v.trim() !== "" && Number.isFinite(n)) {
+              onChange(setPath(config, param.path, n));
+            }
+          }}
         />
       </div>
       <p className="adv-help">{param.help}</p>
@@ -48,29 +50,31 @@ function Field({
 
 export default function ParamPanels({ config, onChange }: Props) {
   const cond = getPath<Record<string, number>>(config, CONDUCTIVITY_ROOT, {});
+  const nTissues = Object.keys(cond).length;
 
   return (
     <div className="adv">
-      <Callout icon="info-sign" className="bp6-text-muted" style={{ marginBottom: 16 }}>
-        Every setting here already has a sensible default. You only need to touch
-        these to explore a different sensor, a different noise floor, or to check
-        that your result is mesh-converged.
-      </Callout>
-
       {PARAM_GROUPS.map((group) => (
-        <section className="adv-group" key={group.title}>
-          <h3 className="adv-title">{group.title}</h3>
-          <p className="adv-blurb">{group.blurb}</p>
+        <Disclosure
+          key={group.title}
+          title={group.title}
+          blurb={group.blurb}
+          icon={group.icon}
+          summary={group.summary?.(config)}
+        >
           {group.params.map((param) => (
             <Field key={param.path} config={config} onChange={onChange} param={param} />
           ))}
-        </section>
+        </Disclosure>
       ))}
 
-      <section className="adv-group">
-        <h3 className="adv-title">Tissue conductivities</h3>
-        <p className="adv-blurb">{CONDUCTIVITY_BLURB}</p>
-        {Object.entries(cond).map(([tissue, v]) => (
+      <Disclosure
+        title="Tissue conductivities"
+        blurb={CONDUCTIVITY_BLURB}
+        icon="mesh"
+        summary={nTissues ? `${nTissues} tissues` : undefined}
+      >
+        {Object.entries(cond).map(([tissue]) => (
           <Field
             key={tissue}
             config={config}
@@ -85,10 +89,10 @@ export default function ParamPanels({ config, onChange }: Props) {
             }}
           />
         ))}
-        {Object.keys(cond).length === 0 && (
-          <span className="bp6-text-muted">no config loaded</span>
+        {nTissues === 0 && (
+          <span className="ui-dim">no config loaded</span>
         )}
-      </section>
+      </Disclosure>
     </div>
   );
 }

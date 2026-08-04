@@ -1,0 +1,62 @@
+name: duneuro-validation
+
+# The five real-DUNEuro tests — including the MEG-vs-Sarvas sphere validation
+# that exists specifically to stop the missing-primary-field and 10x-scale bugs
+# recurring — are gated behind `pytest.importorskip("duneuropy")`. The main CI
+# job has no duneuropy, so those tests silently skip there and the project's
+# only physics-magnitude check never actually runs.
+#
+# This workflow builds the Dockerfile (which compiles DUNE 2.10 + duneuro from
+# source) and runs them for real. It is slow — hence a schedule rather than a
+# per-PR gate — but it means a physics regression is caught within a day rather
+# than at the next manual run in the local venv.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"      # 03:00 UTC every Monday
+  workflow_dispatch:          # and on demand, e.g. before a release/tag
+  push:
+    branches: [main]
+    paths:
+      # Anything that can move a leadfield magnitude.
+      - "src/inob/forward/**"
+      - "src/inob/analysis/sphere_calibration.py"
+      - "src/inob/analysis/analytic_sphere.py"
+      - "src/inob/analysis/sarvas_compare.py"
+      - "tests/test_meg_sphere_validation.py"
+      - "Dockerfile"
+      - "requirements-docker.txt"
+
+jobs:
+  duneuro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false          # the sphere validation is synthetic; no meshes needed
+
+      - name: Build the DUNEuro image
+        run: docker build -t inob:duneuro .
+
+      - name: Confirm duneuropy actually loaded
+        # If this ever silently fails, the tests below would "pass" by skipping,
+        # which is exactly the failure mode this workflow exists to prevent.
+        run: |
+          docker run --rm inob:duneuro \
+            python -c "import duneuropy; print('duneuropy OK')"
+
+      - name: Run the real-DUNEuro tests
+        # A skip here is a failure, not a pass: it would mean duneuropy didn't
+        # load and the validation quietly did nothing. `-rs` reports skip
+        # reasons; the grep turns any skip into a hard error.
+        run: |
+          set -o pipefail
+          docker run --rm inob:duneuro pytest -q -m duneuro -rs | tee /tmp/duneuro.txt
+          if grep -qE "[0-9]+ skipped" /tmp/duneuro.txt; then
+            echo "::error::real-DUNEuro tests SKIPPED — duneuropy did not load"
+            exit 1
+          fi
+
+      - name: Run the full suite against the real solver
+        run: docker run --rm inob:duneuro pytest -q

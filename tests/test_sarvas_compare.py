@@ -157,7 +157,7 @@ def test_radial_coil_mask_triaxial_layout() -> None:
     )
     mask = _radial_coil_mask(labels)
     assert mask.sum() == 4
-    for lab, keep in zip(labels, mask):
+    for lab, keep in zip(labels, mask, strict=True):
         assert keep == lab.endswith("-R")
 
 

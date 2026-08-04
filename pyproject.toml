@@ -42,6 +42,10 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.4",
     "h5py>=3.10",
+    # GUI backend tests drive the FastAPI app through starlette's TestClient,
+    # which needs httpx (and fastapi itself, from the [gui] extra).
+    "fastapi>=0.110",
+    "httpx>=0.27",
 ]
 # GUI backend (gui/backend/app.py). `pip install inob[gui]` is self-contained.
 gui = [

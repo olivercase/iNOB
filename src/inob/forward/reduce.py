@@ -14,7 +14,7 @@ from inob.config import Config
 from inob.forward.duneuro_driver import build_conductivity_vector
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
 from inob.io.npz import Leadfield, save_leadfield, validate_leadfield
-from inob.sources.vagus import sample_source_tissues
+from inob.sources.vagus import resolve_source_positions
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,10 @@ def reduce_chunks(cfg: Config) -> Path:
             f"missing rows: {len(missing)} channels (e.g. {missing[:5].tolist()})"
         )
 
-    src_pos = sample_source_tissues(
-        fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
-    )
+    # Must resolve sources exactly as the chunk workers did, or the stitched
+    # leadfield's columns get labelled with the wrong positions. Both sides use
+    # resolve_source_positions so explicit point sources are honoured here too.
+    src_pos = resolve_source_positions(cfg, fem)
     if 3 * len(src_pos) != n_cols:
         raise RuntimeError(
             f"source count mismatch: 3 * {len(src_pos)} != {n_cols} (chunks contain "

@@ -5,6 +5,9 @@
 // and which way the answer moves when you change it — the help text is the
 // point, not decoration.
 
+import type { IconName } from "@/components/ui/Icon";
+import { getPath, type Cfg } from "./config";
+
 export interface Param {
   path: string; // dotted path into the config, e.g. "sensors.resolution_mm"
   label: string;
@@ -18,13 +21,28 @@ export interface Param {
 export interface ParamGroup {
   title: string;
   blurb: string;
+  icon?: IconName;
+  /** One-line state shown on the collapsed header, so a folded layer still
+   *  tells you what it is currently set to. */
+  summary?: (cfg: Cfg) => string | undefined;
   params: Param[];
 }
+
+const num = (cfg: Cfg, path: string): number | undefined => {
+  const v = getPath<number>(cfg, path, NaN);
+  return Number.isFinite(v) ? v : undefined;
+};
 
 export const PARAM_GROUPS: ParamGroup[] = [
   {
     title: "Sensor array",
     blurb: "Where the OPM sensors sit and how many of them there are.",
+    icon: "sensor",
+    summary: (c) => {
+      const r = num(c, "sensors.resolution_mm");
+      const d = num(c, "sensors.depth_mm");
+      return r === undefined ? undefined : `${r} mm spacing · ${d ?? "?"} mm stand-off`;
+    },
     params: [
       {
         path: "sensors.resolution_mm",
@@ -67,6 +85,11 @@ export const PARAM_GROUPS: ParamGroup[] = [
     blurb:
       "The sensor noise you are competing against. This sets the scale of the " +
       "trials-to-detect answer more than anything else here.",
+    icon: "pulse",
+    summary: (c) => {
+      const n = num(c, "noise.opm_intrinsic_fT_sqrtHz");
+      return n === undefined ? undefined : `${n} fT/√Hz`;
+    },
     params: [
       {
         path: "noise.opm_intrinsic_fT_sqrtHz",
@@ -117,6 +140,11 @@ export const PARAM_GROUPS: ParamGroup[] = [
     blurb:
       "Finer meshes are more faithful but cost a lot of solve time. Change " +
       "these only if you are checking that your result is mesh-converged.",
+    icon: "anatomy",
+    summary: (c) => {
+      const p = num(c, "fem.pitch_mm");
+      return p === undefined ? undefined : `${p} mm voxels`;
+    },
     params: [
       {
         path: "fem.pitch_mm",

@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import numpy as np
 import pytest
@@ -15,7 +16,6 @@ from inob.viz.surface_topoplot import (
     gaussian_interpolate_surface,
     render_surface_topoplots,
 )
-
 from tests.viz_pipeline_helpers import build_pipeline_cfg
 
 

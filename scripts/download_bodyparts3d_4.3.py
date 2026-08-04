@@ -117,7 +117,8 @@ def fetch_fma2obj(meta_dir: Path, cookies: Path) -> Path:
     if dst.exists() and dst.stat().st_size > 0:
         return dst
     logger.info("fetching 4.3 manifest (concept-objfiles-list)")
-    blob = _curl(_base_curl(cookies) + [f"{INFO_CGI}?version={VERSION}&cmd=concept-objfiles-list"])
+    blob = _curl([*_base_curl(cookies),
+                  f"{INFO_CGI}?version={VERSION}&cmd=concept-objfiles-list"])
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
         name = next(n for n in z.namelist() if n.endswith(".txt"))
         dst.write_bytes(z.read(name))
@@ -129,7 +130,8 @@ def fetch_obj2fma(meta_dir: Path, cookies: Path) -> Path:
     if dst.exists() and dst.stat().st_size > 0:
         return dst
     logger.info("fetching FJ<->BP map (obj2FMA upload-all-list)")
-    blob = _curl(_base_curl(cookies) + [
+    blob = _curl([
+        *_base_curl(cookies),
         "-X", "POST",
         "--data-urlencode", "cmd=upload-all-list",
         "--data-urlencode", "load=1",
@@ -174,7 +176,8 @@ def parse_fj2bp(obj2fma_html: Path) -> dict[str, str]:
 
 # -- download -----------------------------------------------------------------
 def download_zip(fj_ids: list[str], bp_ids: list[str], dst: Path, cookies: Path) -> None:
-    args = _base_curl(cookies) + [
+    args = [
+        *_base_curl(cookies),
         "-o", str(dst),
         "--data-urlencode", f"ids={json.dumps(fj_ids)}",
         "--data-urlencode", f"rep_id={json.dumps(bp_ids)}",

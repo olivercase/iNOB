@@ -1,4 +1,4 @@
-"""FastAPI backend for the Vagus-FM GUI.
+"""FastAPI backend for the iNOB GUI.
 
 Wraps the existing ``inob`` Python pipeline so a browser front-end
 (React + Blueprint + react-three-fiber) can:
@@ -15,7 +15,9 @@ Run with::
 
     uvicorn gui.backend.app:app --reload --port 8000
 
-The frontend dev server (Vite, port 5173) proxies ``/api`` here.
+The frontend (Next.js, ``gui/web``, port 3000) proxies ``/api`` here via the
+rewrites in ``gui/web/next.config.mjs``; the ``/api/run`` WebSocket connects
+straight to this port.
 """
 from __future__ import annotations
 
@@ -23,18 +25,37 @@ import asyncio
 import glob
 import json
 import logging
+import os
 import queue
+import re
+import subprocess
 import tempfile
 import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+# The pipeline runs on a worker thread here (the request thread streams its log
+# over the WebSocket). matplotlib's default macOS backend refuses to build a
+# figure off the main thread — "Cannot create a GUI FigureManager outside the
+# main thread" — which killed the viz stage of every GUI run on a Mac while the
+# identical CLI run succeeded on the main thread. The pipeline only ever writes
+# PNGs to disk, so pin the non-interactive backend before anything imports
+# matplotlib. Must precede the inob imports below.
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 import yaml
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from gui.backend import cluster, duneuro_setup
+from inob import __version__ as _inob_version
 from inob.analysis.detect import compute_detectability
 from inob.cli.pipeline import ALL_STAGES, run_pipeline
 from inob.config import ConfigError, load_config
@@ -93,14 +114,13 @@ def _validate_raw(raw: dict[str, Any]) -> list[str]:
             return [f"{type(e).__name__}: {e}"]
         return []
     finally:
-        import os
         os.close(fd)
         tmp_path.unlink(missing_ok=True)
 
 
 # ── app ──────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Vagus-FM GUI backend", version="0.1.0")
+app = FastAPI(title="iNOB GUI backend", version=_inob_version)
 
 # In dev the React app runs on a different origin (Vite :5173); allow it.
 app.add_middleware(
@@ -108,10 +128,63 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173", "http://127.0.0.1:5173",  # legacy Vite frontend
         "http://localhost:3000", "http://127.0.0.1:3000",  # Next.js frontend (gui/web)
+        # …and the port Next falls back to when 3000 is taken by something else.
+        "http://localhost:3001", "http://127.0.0.1:3001",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/system")
+def system_info() -> dict[str, Any]:
+    """What this machine can bring to a local solve.
+
+    The forward stage splits the sensor array into ``forward.local_workers``
+    process-parallel chunks (0 == every core, see ``inob.forward.local``). The
+    GUI needs the real core count to show what "all cores" actually means here
+    and to bound the chooser, rather than asking the user to guess.
+    """
+    import platform
+
+    logical = os.cpu_count() or 1
+    physical = logical
+    performance: int | None = None
+    if platform.system() == "Darwin":
+        # Apple silicon is heterogeneous: perflevel0 is the performance core
+        # cluster. Solving on those alone is often faster than oversubscribing
+        # across the efficiency cores too, so offer it as a choice.
+        for key, target in (("hw.physicalcpu", "physical"),
+                            ("hw.perflevel0.logicalcpu", "performance")):
+            try:
+                out = subprocess.run(["sysctl", "-n", key], capture_output=True,
+                                     text=True, timeout=5)
+                if out.returncode == 0 and out.stdout.strip().isdigit():
+                    value = int(out.stdout.strip())
+                    if target == "physical":
+                        physical = value
+                    else:
+                        performance = value
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+    configured = None
+    try:
+        raw, _ = _read_raw_safe(_active_config_path())
+        configured = (raw.get("forward") or {}).get("local_workers")
+    except Exception:  # a broken config must not break the capability report
+        pass
+
+    return {
+        "platform": platform.system(),
+        "machine": platform.machine(),
+        "cpu_logical": logical,
+        "cpu_physical": physical,
+        "cpu_performance": performance,
+        "configured_workers": configured,
+        # What `local_workers: 0` resolves to right now.
+        "all_cores": logical,
+    }
 
 
 @app.get("/api/health")
@@ -350,16 +423,38 @@ def _merged_stl(name: str, paths: list[Path]) -> Path | None:
         return None
 
 
+# In-process memo of the last built index, keyed by the config's mtime and the
+# tissue source signature. Serving one mesh used to rebuild (and re-stat) the
+# merge for all seven tissues, so a viewer loading the anatomy did that work
+# once per tissue fetched.
+_MESH_INDEX_MEMO: dict[str, Any] = {"key": None, "index": {}}
+
+
 def _mesh_index() -> dict[str, tuple[Path, int]]:
     """Build (and cache-back) the merged STL for every tissue category.
 
     Returns ``name -> (merged_path, n_source_parts)``.
     """
+    sources = _tissue_sources()
+    # Same key discipline as the on-disk merge cache: paths plus mtimes, so an
+    # edited/added/removed STL still invalidates immediately.
+    try:
+        key = "|".join(
+            f"{n}:{p}:{p.stat().st_mtime_ns}" for n, ps in sources.items() for p in ps
+        )
+    except OSError:
+        key = None          # a source vanished mid-scan; rebuild rather than memo
+    if key is not None and _MESH_INDEX_MEMO["key"] == key:
+        return _MESH_INDEX_MEMO["index"]
+
     out: dict[str, tuple[Path, int]] = {}
-    for name, paths in _tissue_sources().items():
+    for name, paths in sources.items():
         merged = _merged_stl(name, paths)
         if merged:
             out[name] = (merged, len(paths))
+    if key is not None:
+        _MESH_INDEX_MEMO["key"] = key
+        _MESH_INDEX_MEMO["index"] = out
     return out
 
 
@@ -388,6 +483,114 @@ def get_mesh(name: str) -> FileResponse:
     return FileResponse(index[name][0], media_type="model/stl", filename=f"{name}.stl")
 
 
+# ── figures ─────────────────────────────────────────────────────────────────
+#
+# Every stage that draws something writes a PNG somewhere under the config's
+# output paths. The GUI shows those as nodes on the journey canvas, so it needs
+# (a) a list of what a run can produce — including figures that do not exist
+# yet, which is how the canvas can offer them — and (b) a way to fetch the
+# bytes. Files are only ever served out of the index built here, so a key from
+# the client can never address a path of its own choosing.
+
+# Config keys under ``outputs:`` that name a figure, with the stage that draws
+# it and the words a planner would use for it.
+_FIGURE_KEYS: tuple[tuple[str, str, str, str], ...] = (
+    ("geometry_png", "geom", "Geometry", "Tissue surfaces after shrinkwrap and repair"),
+    ("fem_png", "fem", "FEM mesh", "Multi-tissue tetrahedral mesh, cut through"),
+    ("sensors_png", "sensors", "Sensor array", "OPM positions and orientations on the body"),
+    ("electrodes_png", "sensors", "Electrode array", "EEG electrode positions, when solved"),
+)
+
+# Directories under ``outputs:`` whose PNGs are all figures of one stage.
+_FIGURE_DIRS: tuple[tuple[str, str, str], ...] = (
+    ("sensitivity_dir", "forward", "Sensitivity"),
+)
+
+_FIGURE_SCAN_LIMIT = 60
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+def _figure_index() -> "OrderedDict[str, dict[str, Any]]":
+    """Map figure key → metadata, in journey order (declared first, found after).
+
+    Built fresh per request: figures appear mid-run, and the whole point of the
+    canvas is that a node lights up the moment its PNG lands.
+    """
+    raw, _ = _read_raw_safe(_active_config_path())
+    outputs = raw.get("outputs") or {}
+    index: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    def add(key: str, path: Path, stage: str, label: str, blurb: str = "") -> None:
+        if key in index:
+            return
+        try:
+            st = path.stat()
+            exists, size, mtime = True, st.st_size, st.st_mtime
+        except OSError:
+            exists, size, mtime = False, 0, 0.0
+        index[key] = {
+            "key": key,
+            "label": label,
+            "blurb": blurb,
+            "stage": stage,
+            "path": path,
+            "url": f"/api/figures/{key}",
+            "exists": exists,
+            "bytes": size,
+            "mtime": mtime,
+        }
+
+    for key, stage, label, blurb in _FIGURE_KEYS:
+        value = outputs.get(key)
+        if value:
+            add(key, Path(str(value)), stage, label, blurb)
+
+    for dir_key, stage, label in _FIGURE_DIRS:
+        value = outputs.get(dir_key)
+        if not value:
+            continue
+        directory = Path(str(value))
+        if not directory.is_dir():
+            continue
+        for png in sorted(directory.glob("*.png"))[:_FIGURE_SCAN_LIMIT]:
+            add(_slug(f"{dir_key}_{png.stem}"), png, stage,
+                f"{label} — {png.stem.replace('_', ' ')}")
+
+    # Anything else a run dropped under the output base: viz figures the config
+    # does not name individually (topoplots, comparisons, physiology panels).
+    base = outputs.get("base")
+    if base:
+        base_path = Path(str(base))
+        if base_path.is_dir():
+            for png in sorted(base_path.rglob("*.png"))[:_FIGURE_SCAN_LIMIT]:
+                rel = png.relative_to(base_path)
+                add(_slug(str(rel.with_suffix(""))), png, "viz",
+                    png.stem.replace("_", " "))
+
+    return index
+
+
+@app.get("/api/figures")
+def list_figures() -> dict[str, Any]:
+    return {
+        "figures": [
+            {k: v for k, v in meta.items() if k != "path"}
+            for meta in _figure_index().values()
+        ]
+    }
+
+
+@app.get("/api/figures/{key}")
+def get_figure(key: str) -> FileResponse:
+    meta = _figure_index().get(key)
+    if meta is None or not meta["exists"]:
+        raise HTTPException(status_code=404, detail=f"no figure named {key!r}")
+    return FileResponse(meta["path"], media_type="image/png")
+
+
 # ── cluster submission ──────────────────────────────────────────────────────────
 
 @app.get("/api/cluster/profiles")
@@ -397,13 +600,14 @@ def cluster_profiles() -> dict[str, Any]:
 
 @app.post("/api/cluster/submit")
 def cluster_submit(payload: dict[str, Any]) -> dict[str, Any]:
+    # `stages` / `threshold_snr` are intentionally not forwarded: the cluster
+    # only runs the forward solve, and both are local post-processing applied
+    # after the leadfield is fetched back. See cluster.submit.
     try:
         return cluster.submit(
             payload.get("profile"),
-            stages=payload.get("stages"),
             sources=payload.get("sources"),
-            threshold_snr=float(payload.get("threshold_snr", 3.0)),
-            modality=str(payload.get("modality", "meg")),
+            modality=payload.get("modality", "meg"),
         )
     except cluster.ClusterError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
@@ -420,7 +624,10 @@ def cluster_status(profile: str, job_id: str) -> dict[str, Any]:
 @app.post("/api/cluster/fetch")
 def cluster_fetch(payload: dict[str, Any]) -> dict[str, Any]:
     try:
-        return cluster.fetch(payload.get("profile"), payload.get("job_id"))
+        return cluster.fetch(
+            payload.get("profile"), payload.get("job_id"),
+            modality=payload.get("modality", "meg"),
+        )
     except cluster.ClusterError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
@@ -471,18 +678,20 @@ async def run_ws(ws: WebSocket) -> None:
     modality = str(req.get("modality", "meg")).lower()
 
     # Clicked sources reach the solver as a config override. They only change
-    # the dipole positions, so re-running geom/fem/sensors is both wasteful and
-    # would rebuild the (cached) geometry unnecessarily — restrict the run to
-    # the forward solve and force only that.
+    # the dipole positions, so geom/fem/sensors do not need rebuilding — but
+    # they DO need to exist. Restricting the run to ["forward"] outright (what
+    # this used to do) meant that on a machine without those artefacts already
+    # on disk the run died with a bare "sensor file not found" instead of just
+    # building them. So: run every stage, but only *force* the forward solve —
+    # the upstream stages skip themselves when their outputs are already there.
     overrides: list[str] = []
     strengths: list[float] = []
-    sources_only_forward = False
+    resolve_sources = False
     if sources:
         positions = [[float(s["x"]), float(s["y"]), float(s["z"])] for s in sources]
         strengths = [float(s.get("strength_nAm", 70.0)) for s in sources]
         overrides.append(f"forward.point_sources={json.dumps(positions)}")
-        force = True
-        sources_only_forward = True
+        resolve_sources = True
 
     log_q: queue.Queue[str] = queue.Queue()
     handler = _QueueLogHandler(log_q)
@@ -494,19 +703,39 @@ async def run_ws(ws: WebSocket) -> None:
     result: dict[str, Any] = {}
     error: dict[str, Any] = {}
     done = threading.Event()
+    cancel = threading.Event()
 
     def _work() -> None:
         try:
             cfg = load_config(_active_config_path(), overrides=overrides,
                               project_root=PROJECT_ROOT)
-            if sources_only_forward:
-                stages = ["forward"]      # explicit sources → re-solve only
-            elif stages_in == "all" or not stages_in:
+            if stages_in == "all" or not stages_in:
                 stages = list(ALL_STAGES)
             else:
                 stages = [s for s in stages_in if s in ALL_STAGES]
-            statuses = run_pipeline(cfg, stages=stages, force=force)
+
+            if resolve_sources:
+                # Two passes so "reuse the model, re-solve the sources" is
+                # expressible with run_pipeline's single force flag: build any
+                # missing upstream stages (skipped when already present), then
+                # force the forward solve for the new dipole positions.
+                upstream = [s for s in stages if s != "forward"]
+                statuses: dict[str, str] = {}
+                if upstream:
+                    statuses.update(run_pipeline(cfg, stages=upstream,
+                                                 force=False,
+                                                 should_cancel=cancel.is_set))
+                if not cancel.is_set():
+                    statuses.update(run_pipeline(cfg, stages=["forward"],
+                                                 force=True,
+                                                 should_cancel=cancel.is_set))
+            else:
+                statuses = run_pipeline(cfg, stages=stages, force=force,
+                                        should_cancel=cancel.is_set)
             result["statuses"] = statuses
+            if cancel.is_set():
+                result["cancelled"] = True
+                return
             # Turn the solved leadfield into the planning answer. If the
             # leadfield is missing we report *why* rather than returning
             # nothing — the client shows the reason instead of guessing.
@@ -528,11 +757,48 @@ async def run_ws(ws: WebSocket) -> None:
         except Exception as e:  # surfaced to the client, not swallowed
             error["message"] = f"{type(e).__name__}: {e}"
         finally:
+            # Detach the log handler and drop the single-flight lock HERE, on
+            # the worker itself, rather than in the socket handler's `finally`.
+            # The pipeline outlives the socket (a browser disconnect does not
+            # stop it), so releasing on disconnect let a second run start while
+            # the first was still writing the same outputs/ artefacts.
+            vagus_logger.removeHandler(handler)
+            vagus_logger.setLevel(prev_level)
             done.set()
+            _RUN_LOCK.release()
 
-    worker = threading.Thread(target=_work, daemon=True)
-    worker.start()
+    worker = threading.Thread(target=_work, name="inob-run", daemon=True)
+    try:
+        worker.start()
+    except BaseException:
+        vagus_logger.removeHandler(handler)
+        vagus_logger.setLevel(prev_level)
+        _RUN_LOCK.release()
+        raise
 
+    async def _watch_for_cancel() -> None:
+        """A client message during a run is a cancel request.
+
+        Cancellation is cooperative and lands at the next stage boundary — a
+        DUNEuro solve already in flight cannot be interrupted — so we tell the
+        client that plainly rather than pretending the run stopped at once.
+        """
+        try:
+            while not done.is_set():
+                msg = await ws.receive_json()
+                if isinstance(msg, dict) and msg.get("type") == "cancel":
+                    cancel.set()
+                    await ws.send_json({
+                        "type": "log",
+                        "line": "— cancel requested; stopping after the "
+                                "current stage finishes —",
+                    })
+        except (WebSocketDisconnect, RuntimeError, ValueError):
+            # Client vanished or sent junk. The run continues (it holds the
+            # lock and owns the artefacts); we simply stop listening.
+            pass
+
+    watcher = asyncio.create_task(_watch_for_cancel())
     try:
         # Drain the log queue to the socket until the worker finishes.
         while not (done.is_set() and log_q.empty()):
@@ -543,6 +809,11 @@ async def run_ws(ws: WebSocket) -> None:
                 await asyncio.sleep(0.1)
         if error:
             await ws.send_json({"type": "error", **error})
+        elif result.get("cancelled"):
+            await ws.send_json({
+                "type": "done", "cancelled": True,
+                "statuses": result.get("statuses", {}),
+            })
         else:
             if "detect" in result:
                 await ws.send_json({"type": "result", "detect": result["detect"]})
@@ -554,9 +825,7 @@ async def run_ws(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        vagus_logger.removeHandler(handler)
-        vagus_logger.setLevel(prev_level)
-        _RUN_LOCK.release()
+        watcher.cancel()
         try:
             await ws.close()
         except Exception:

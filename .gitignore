@@ -49,6 +49,7 @@ data/bodyparts3d/raw_4.3/_quarantine_*/
 
 # GUI working config (generated)
 configs/gui_working.yaml
+configs/gui_submit.yaml
 
 # Raw BodyParts3D atlas + intermediates (regenerable; not needed by the pipeline)
 data/bodyparts3d/

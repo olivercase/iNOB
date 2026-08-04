@@ -4,13 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import numpy as np
 import pytest
 
 from inob.physiology.scenarios import CapEvent, Scenario, a_fibre_population
 from inob.viz.physiology_plot import _to_human_units, render_physiology
-
 from tests.viz_pipeline_helpers import build_pipeline_cfg
 
 

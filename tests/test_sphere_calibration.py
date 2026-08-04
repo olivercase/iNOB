@@ -8,7 +8,6 @@ environment. We cover the pure geometry and analytic-potential helpers.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from inob.analysis.sphere_calibration import (
     _per_dipole_analytic,

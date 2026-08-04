@@ -38,6 +38,13 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
              "Mirrors the cluster SOURCE_TARGET.",
     )
     p.add_argument(
+        "--workers", type=int, default=None, metavar="N",
+        help="CPU workers for the local forward solve (0 = every core, the "
+             "default). The sensor array is split into N chunks solved in "
+             "parallel, one process each. Same control the GUI's Compute "
+             "panel offers; equivalent to --set forward.local_workers=N.",
+    )
+    p.add_argument(
         "--project-root", type=Path, default=None,
         help="Override the project root used to resolve relative paths.",
     )
@@ -59,8 +66,17 @@ def setup(
     Picks a default log file under ``cfg.outputs.logs_dir`` if the user did
     not pass ``--log-file``. Seeds numpy + random with ``cfg.reproducibility.seed``.
     """
+    # --workers is sugar for the config field, applied as an override so it
+    # follows exactly the same validation path as --set.
+    overrides = list(args.overrides or [])
+    workers = getattr(args, "workers", None)
+    if workers is not None:
+        if workers < 0:
+            raise SystemExit("--workers must be 0 (all cores) or a positive count")
+        overrides.append(f"forward.local_workers={workers}")
+
     cfg = load_config(
-        args.config, overrides=args.overrides, project_root=args.project_root,
+        args.config, overrides=overrides, project_root=args.project_root,
     )
     target = getattr(args, "source_target", None)
     if target:

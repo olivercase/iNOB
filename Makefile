@@ -1,6 +1,6 @@
 .PHONY: install install-dev lint test doctor status pipeline geom fem sensors forward viz clean clean-outputs
 
-PYTHON ?= python
+PYTHON ?= python3
 CONFIG ?= configs/default.yaml
 INOB = $(PYTHON) -m inob.cli.main
 
@@ -11,7 +11,7 @@ install-dev:
 	$(PYTHON) -m pip install -e .[dev]
 
 lint:
-	$(PYTHON) -m ruff check src tests
+	$(PYTHON) -m ruff check .
 
 test:
 	$(PYTHON) -m pytest -q

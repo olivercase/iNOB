@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import numpy as np
 
@@ -14,7 +15,6 @@ from inob.viz.location_optimisation import (
     _per_source_peak,
     render_location_optimisation,
 )
-
 from tests.viz_pipeline_helpers import (
     _build_electrodes,
     _build_leadfield,

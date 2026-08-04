@@ -63,7 +63,7 @@ from inob.forward.duneuro_driver import (
     import_duneuro,
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
-from inob.sources.vagus import sample_source_tissues
+from inob.sources.vagus import resolve_source_positions
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +85,13 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
     sensors = load_sensors(cfg.outputs.sensors_mat)
     validate_sensors(sensors)
 
-    src_pos_mm = sample_source_tissues(
-        fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
-    )
+    # resolve_source_positions, NOT sample_source_tissues: the former honours
+    # cfg.forward.point_sources (explicit dipoles, e.g. clicked in the GUI) and
+    # falls back to tissue sampling only when none are set. Calling the sampler
+    # directly here silently ignored explicit sources on the chunked path —
+    # which is the default local multi-core path — so the GUI's clicked sources
+    # never reached the solver while the serial path honoured them.
+    src_pos_mm = resolve_source_positions(cfg, fem)
     n_src = len(src_pos_mm)
     logger.info("FEM=%dt sensors=%d sources=%d", len(fem.tets), len(sensors.coilpos), n_src)
 

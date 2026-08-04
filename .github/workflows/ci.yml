@@ -26,8 +26,38 @@ jobs:
           pip install -e .[dev]
 
       - name: Ruff lint
-        run: ruff check src tests
+        # Whole repo, not just src/tests — scripts/ and gui/ are shipped code
+        # too, and lint drift there used to go unnoticed.
+        run: ruff check .
 
       - name: Pytest
-        # DUNEuro smoke tests auto-skip when duneuropy is unavailable.
+        # DUNEuro smoke tests auto-skip when duneuropy is unavailable; the
+        # duneuro-validation workflow is what actually exercises them.
         run: pytest -q
+
+  gui:
+    # The browser GUI is the primary interface for non-CLI users, so a type
+    # error or a broken production build must fail the PR like any other.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gui/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: gui/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build

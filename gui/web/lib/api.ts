@@ -4,8 +4,19 @@
 
 import type { Cfg } from "./config";
 
-const WS_BASE =
-  process.env.NEXT_PUBLIC_INOB_WS || "ws://127.0.0.1:8000";
+// The run socket connects straight to FastAPI (Next rewrites proxy HTTP only).
+// Derive it from wherever the page is actually served so the GUI keeps working
+// when it isn't on localhost — a hardcoded 127.0.0.1 meant HTTP went through
+// the rewrite and the WebSocket silently pointed at the viewer's own machine.
+const DEFAULT_BACKEND_PORT = "8000";
+
+function defaultWsBase(): string {
+  if (typeof window === "undefined") return `ws://127.0.0.1:${DEFAULT_BACKEND_PORT}`;
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.hostname}:${DEFAULT_BACKEND_PORT}`;
+}
+
+const WS_BASE = process.env.NEXT_PUBLIC_INOB_WS || defaultWsBase();
 
 export interface MeshInfo {
   name: string;
@@ -64,6 +75,28 @@ export async function getHealth(): Promise<{ status: string } | null> {
   }
 }
 
+// What the local machine can bring to a solve. Drives the compute-resources
+// chooser, so the user picks from their real core count rather than guessing.
+export interface SystemInfo {
+  platform: string;
+  machine: string;
+  cpu_logical: number;
+  cpu_physical: number;
+  cpu_performance: number | null;
+  configured_workers: number | null;
+  all_cores: number;
+}
+
+export async function getSystem(): Promise<SystemInfo | null> {
+  try {
+    const r = await fetch("/api/system", { cache: "no-store" });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function getConfig(): Promise<{ config: Cfg; errors: string[] }> {
   const r = await fetch("/api/config", { cache: "no-store" });
   if (!r.ok) throw new Error(`GET /api/config failed: ${r.status}`);
@@ -79,7 +112,12 @@ export async function putConfig(
     body: JSON.stringify({ config }),
   });
   const body = await r.json().catch(() => ({}));
-  return { ok: r.ok, errors: body.errors ?? (r.ok ? [] : [`PUT failed: ${r.status}`]) };
+  // FastAPI wraps a rejected payload's detail, so the real validation
+  // messages arrive as body.detail.errors. Reading only body.errors turned
+  // every invalid config into an opaque "PUT failed: 422".
+  const errors: string[] =
+    body.detail?.errors ?? body.errors ?? (r.ok ? [] : [`PUT failed: ${r.status}`]);
+  return { ok: r.ok, errors };
 }
 
 export async function validateConfig(config: Cfg): Promise<string[]> {
@@ -89,7 +127,7 @@ export async function validateConfig(config: Cfg): Promise<string[]> {
     body: JSON.stringify({ config }),
   });
   const body = await r.json().catch(() => ({}));
-  return body.errors ?? [];
+  return body.detail?.errors ?? body.errors ?? [];
 }
 
 export async function getMeshes(): Promise<MeshInfo[]> {
@@ -99,6 +137,30 @@ export async function getMeshes(): Promise<MeshInfo[]> {
   return body.meshes ?? body ?? [];
 }
 
+// A figure a stage draws. `exists` is false for figures a run can produce but
+// hasn't yet — the canvas offers those as nodes you can add ahead of the run.
+export interface FigureInfo {
+  key: string;
+  label: string;
+  blurb?: string;
+  stage: string;
+  url: string;
+  exists: boolean;
+  bytes: number;
+  mtime: number;
+}
+
+export async function getFigures(): Promise<FigureInfo[]> {
+  try {
+    const r = await fetch("/api/figures", { cache: "no-store" });
+    if (!r.ok) return [];
+    const body = await r.json();
+    return body.figures ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export interface RunHandlers {
   onLog: (line: string) => void;
   onStatuses?: (statuses: Record<string, string>) => void;
@@ -106,21 +168,39 @@ export interface RunHandlers {
   onDone: (
     statuses: Record<string, string>,
     unavailable?: DetectUnavailable,
+    cancelled?: boolean,
   ) => void;
   onError: (message: string) => void;
 }
 
-// Opens the run WebSocket; returns a closer. Streams {type: log|result|done|error}.
-// `extra` (sources, threshold_snr) is merged into the init payload; the current
-// backend ignores unknown fields, the future backend reads them (see API_CONTRACT).
+// A live run. `cancel()` asks the backend to stop at the next stage boundary
+// (a solve already in flight cannot be interrupted); `close()` just detaches
+// this client and leaves the run going.
+export interface RunHandle {
+  cancel: () => void;
+  close: () => void;
+}
+
+// Opens the run WebSocket. Streams {type: log|result|done|error}.
+// `extra` (sources, threshold_snr) is merged into the init payload.
 export function runSimulation(
   stages: string[],
   force: boolean,
   handlers: RunHandlers,
   extra: Record<string, unknown> = {},
-): () => void {
+): RunHandle {
   const ws = new WebSocket(`${WS_BASE}/api/run`);
   let lastStatuses: Record<string, string> = {};
+  // The run is over exactly once — whether by `done`, by `error`, or because
+  // the socket dropped. Without this latch a backend crash mid-run produced no
+  // terminal message at all and the UI span forever on "Solving…".
+  let settled = false;
+  const settle = (fn: () => void) => {
+    if (settled) return;
+    settled = true;
+    fn();
+  };
+
   ws.onopen = () => ws.send(JSON.stringify({ stages, force, ...extra }));
   ws.onmessage = (ev) => {
     let msg: { type: string; [k: string]: unknown };
@@ -140,23 +220,51 @@ export function runSimulation(
       case "done":
         lastStatuses = (msg.statuses as Record<string, string>) ?? lastStatuses;
         handlers.onStatuses?.(lastStatuses);
-        handlers.onDone(
-          lastStatuses,
-          (msg.detect_unavailable as DetectUnavailable | null) ?? undefined,
+        settle(() =>
+          handlers.onDone(
+            lastStatuses,
+            (msg.detect_unavailable as DetectUnavailable | null) ?? undefined,
+            Boolean(msg.cancelled),
+          ),
         );
         ws.close();
         break;
       case "error":
-        handlers.onError(String(msg.message ?? "unknown error"));
+        settle(() => handlers.onError(String(msg.message ?? "unknown error")));
         ws.close();
         break;
     }
   };
   ws.onerror = () =>
-    handlers.onError(
-      `WebSocket error — is the backend running at ${WS_BASE}?`,
+    settle(() =>
+      handlers.onError(
+        `WebSocket error — is the backend running at ${WS_BASE}?`,
+      ),
     );
-  return () => ws.close();
+  // A close without a prior done/error means the backend went away mid-run.
+  // Report it rather than leaving the caller stuck in a "running" state.
+  ws.onclose = (ev) =>
+    settle(() =>
+      handlers.onError(
+        `Connection to the backend closed before the run finished` +
+          `${ev.reason ? ` (${ev.reason})` : ""}. The run may still be going ` +
+          `on the server — check the backend log.`,
+      ),
+    );
+
+  return {
+    cancel: () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "cancel" }));
+      }
+    },
+    // Detach without reporting an error: used on unmount, where the caller is
+    // going away and does not want a spurious failure message.
+    close: () => {
+      settled = true;
+      ws.close();
+    },
+  };
 }
 
 // ── forward-model ladder ────────────────────────────────────────────────────

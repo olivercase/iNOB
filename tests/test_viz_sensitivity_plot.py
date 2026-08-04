@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+
 import matplotlib
+
 matplotlib.use("Agg")
 
 from pathlib import Path

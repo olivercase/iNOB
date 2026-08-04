@@ -7,7 +7,15 @@ export interface ClusterSubmit {
   state: string;          // submitted | dryrun | failed
   job_id: string | null;
   message: string;
+  modality?: string;
   commands?: string[];
+  log?: string;
+}
+
+export interface ClusterFetch {
+  state: string;          // done | failed | dryrun
+  leadfield?: string;
+  command?: string;
   log?: string;
 }
 
@@ -22,18 +30,40 @@ export async function getProfiles(): Promise<string[]> {
   }
 }
 
+// Note there is no `stages` / `thresholdSnr` here: the cluster only runs the
+// forward solve, and both are local post-processing applied after the leadfield
+// comes back. They used to be sent and silently ignored by the backend, which
+// made the GUI look like it was honouring settings it wasn't.
 export async function submitCluster(
   profile: string,
   sources: PointSource[],
-  thresholdSnr: number,
   modality: string,
-  stages: string[],
 ): Promise<ClusterSubmit | null> {
   try {
     const r = await fetch("/api/cluster/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile, sources, threshold_snr: thresholdSnr, modality, stages }),
+      body: JSON.stringify({ profile, sources, modality }),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+// Pull the finished leadfield back from the cluster into outputs/forward.
+// The endpoint has always existed; the UI simply never offered a way to call it.
+export async function fetchCluster(
+  profile: string,
+  jobId: string | null,
+  modality: string,
+): Promise<ClusterFetch | null> {
+  try {
+    const r = await fetch("/api/cluster/fetch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile, job_id: jobId, modality }),
     });
     if (!r.ok) return null;
     return await r.json();
