@@ -39,6 +39,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # BLAS/LAPACK are switched off deliberately: duneuro uses only the headers,
 # and those two targets are the one part of Eigen that must be compiled — an
 # install without a build looked for libeigen_blas_static.a and failed.
+#
+# The version is confirmed by compiling against the headers rather than by
+# grepping a file: Eigen 5 moved the version macros out of Macros.h, so the
+# grep found nothing, exited 1, and took the whole build down with it. This
+# check answers the question that actually matters — can a compiler find
+# these headers, and what version do they report — and cannot go stale when
+# the layout changes again.
 ARG EIGEN_VERSION=5.0.1
 RUN set -eux; \
     curl -fsSL -o /tmp/eigen.tar.gz \
@@ -51,8 +58,14 @@ RUN set -eux; \
         -DEIGEN_BUILD_DOC=OFF; \
     cmake --install /tmp/eigen-build; \
     rm -rf /tmp/eigen.tar.gz "/tmp/eigen-${EIGEN_VERSION}" /tmp/eigen-build; \
-    grep -E "define EIGEN_(WORLD|MAJOR|MINOR)_VERSION" \
-        /usr/local/include/eigen3/Eigen/src/Core/util/Macros.h
+    printf '%s\n' \
+        '#include <Eigen/Core>' \
+        '#include <cstdio>' \
+        'int main() { printf("Eigen %d.%d.%d\\n", EIGEN_WORLD_VERSION,' \
+        '  EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION); }' > /tmp/eigen_version.cpp; \
+    g++ -I/usr/local/include/eigen3 /tmp/eigen_version.cpp -o /tmp/eigen_version; \
+    /tmp/eigen_version; \
+    rm -f /tmp/eigen_version.cpp /tmp/eigen_version
 
 ENV DUNE_SRC=/opt/dune-src
 WORKDIR ${DUNE_SRC}
