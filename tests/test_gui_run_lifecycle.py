@@ -19,6 +19,13 @@ import pytest
 
 from inob.cli.pipeline import ALL_STAGES, run_pipeline
 
+# See test_cluster_submit: this import happens at collection time, so without
+# the guard an image that has no GUI extra fails the run outright.
+pytest.importorskip(
+    "gui.backend",
+    reason="the GUI backend is not installed in this environment",
+)
+
 app_mod = importlib.import_module("gui.backend.app")
 
 

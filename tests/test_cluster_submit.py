@@ -7,6 +7,14 @@ from pathlib import Path
 
 import pytest
 
+# Collected, not just run: an import at module scope fails collection in an
+# environment without the GUI extra — the DUNEuro validation image, say —
+# which aborts the whole session even when these tests are deselected.
+pytest.importorskip(
+    "gui.backend",
+    reason="the GUI backend is not installed in this environment",
+)
+
 cluster = importlib.import_module("gui.backend.cluster")
 
 

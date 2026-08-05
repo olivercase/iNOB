@@ -113,7 +113,14 @@ RUN pip install --no-cache-dir --upgrade pip wheel setuptools \
 
 # ── build DUNE + duneuro + duneuro-py ──────────────────────────────────────
 # dunecontrol reads CMAKE_FLAGS from the environment (no opts file needed).
-ENV CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_FLAGS='-O3 -DNDEBUG -fPIC' -DCMAKE_C_FLAGS='-O3 -DNDEBUG -fPIC' -DBUILD_SHARED_LIBS=ON -DDUNE_ENABLE_PYTHONBINDINGS=ON -DCMAKE_DISABLE_FIND_PACKAGE_MPI=ON -DPython3_EXECUTABLE=/opt/venv/bin/python"
+ENV EIGEN_INC=/usr/local/include/eigen3
+ENV Eigen3_DIR=/usr/local/share/eigen3/cmake
+# Eigen now lives under /usr/local, not /usr/include where apt put it, so
+# both halves of the lookup have to be told: find_package(Eigen3) via
+# Eigen3_DIR, and the compiler itself via -I, because duneuro includes
+# <Eigen/Dense> directly in headers that DUNE's target-level include
+# paths do not reach. This mirrors what build_duneuro_local.sh passes.
+ENV CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=20 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_FLAGS='-O3 -DNDEBUG -fPIC -I/usr/local/include/eigen3' -DCMAKE_C_FLAGS='-O3 -DNDEBUG -fPIC' -DBUILD_SHARED_LIBS=ON -DDUNE_ENABLE_PYTHONBINDINGS=ON -DCMAKE_DISABLE_FIND_PACKAGE_MPI=ON -DPython3_EXECUTABLE=/opt/venv/bin/python -DEigen3_DIR=/usr/local/share/eigen3/cmake"
 RUN ${DUNE_SRC}/dune-common/bin/dunecontrol all
 
 # Install the compiled duneuro-py extension into the venv's site-packages.
@@ -129,6 +136,13 @@ RUN set -eux; \
 WORKDIR /work
 COPY . /work
 RUN pip install --no-cache-dir --no-deps -e /work
+
+# The whole point of this image is running the real-DUNEuro tests, and pytest
+# was not in it — `docker run inob:duneuro pytest` failed with "executable file
+# not found", which the duneuro-validation workflow would have hit the moment
+# the build itself stopped failing. Installed late and on its own line so test
+# tooling can change without invalidating the hour-long compile above.
+RUN pip install --no-cache-dir "pytest>=8.0"
 
 # Default to a shell on the venv; CMD is the command to run (e.g. a CLI).
 ENV MPLBACKEND=Agg
