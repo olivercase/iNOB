@@ -47,14 +47,24 @@ jobs:
             python -c "import duneuropy; print('duneuropy OK')"
 
       - name: Run the real-DUNEuro tests
-        # A skip here is a failure, not a pass: it would mean duneuropy didn't
-        # load and the validation quietly did nothing. `-rs` reports skip
-        # reasons; the grep turns any skip into a hard error.
+        # A duneuro test that skips is a failure, not a pass: it would mean
+        # duneuropy didn't load and the validation quietly did nothing.
+        #
+        # The check is on the skip *reason*, not the skip count. Counting any
+        # skip at all was too blunt — modules that need the GUI extra skip
+        # themselves here by design (they cannot even be imported in this
+        # image), and that legitimate skip failed a run in which all five
+        # real-DUNEuro tests had passed. `-rs` prints every reason, so ask the
+        # question the step actually means.
         run: |
           set -o pipefail
           docker run --rm inob:duneuro pytest -q -m duneuro -rs | tee /tmp/duneuro.txt
-          if grep -qE "[0-9]+ skipped" /tmp/duneuro.txt; then
+          if grep -qiE "^SKIPPED.*duneuro(py)?" /tmp/duneuro.txt; then
             echo "::error::real-DUNEuro tests SKIPPED — duneuropy did not load"
+            exit 1
+          fi
+          if ! grep -qE "[0-9]+ passed" /tmp/duneuro.txt; then
+            echo "::error::no real-DUNEuro tests ran at all"
             exit 1
           fi
 
