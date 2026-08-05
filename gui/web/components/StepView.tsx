@@ -1,10 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Icon, Note, Select, Tag } from "@/components/ui";
 import type { IconName } from "@/components/ui/Icon";
 import { getPath, setPath, type Cfg } from "@/lib/config";
-import { runLadder, type LadderResult, type LadderRung } from "@/lib/api";
+import {
+  getFieldMap,
+  getLevels,
+  getSensorArray,
+  runLadder,
+  suggestSources,
+  type LadderResult,
+  type LadderRung,
+  type FieldMap,
+  type LevelInfo,
+  type SensorArrayInfo,
+  type SuggestedSources,
+} from "@/lib/api";
 import type {
   DetectResult,
   DetectUnavailable,
@@ -18,6 +30,8 @@ import ClusterPanel from "@/components/ClusterPanel";
 import DuneuroSetup from "@/components/DuneuroSetup";
 import ResultsPanel from "@/components/ResultsPanel";
 import ComputePanel from "@/components/ComputePanel";
+import FigureView from "@/components/FigureView";
+import { BarChart, StatTile } from "@/components/Chart";
 
 const STATE_WORD: Record<NodeState, string> = {
   idle: "not run yet",
@@ -27,6 +41,25 @@ const STATE_WORD: Record<NodeState, string> = {
   skipped: "reused",
   failed: "failed",
 };
+
+// Idle and ready have no mark: nothing has happened to report yet.
+const STATE_ICON: Partial<Record<NodeState, IconName>> = {
+  active: "play",
+  done: "check",
+  skipped: "check",
+  failed: "alert",
+};
+
+// The vertebral levels this anatomy carries, grouped the way a clinician says
+// them. Mirrors inob.anatomy.VERTEBRA_LEVELS.
+const VERTEBRAE = [
+  { name: "cervical", levels: ["c1", "c2", "c3", "c4", "c5", "c6", "c7"] },
+  {
+    name: "thoracic",
+    levels: ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12"],
+  },
+  { name: "lumbar", levels: ["l1", "l2", "l3", "l4", "l5"] },
+];
 
 const THRESHOLDS = [
   { value: 3, label: "3 — Rose criterion (standard)" },
@@ -92,6 +125,10 @@ interface Props {
   running: boolean;
   /** Run only these stages and return to the canvas to watch them. */
   onRunStage: (stages: string[]) => void;
+  /** Hand a sensor cloud to the 3-D well behind this step, or clear it. */
+  onSensorCloud: (
+    cloud: { positions: [number, number, number][]; values?: number[] } | null,
+  ) => void;
   onOpenAdvanced: () => void;
   /** Persist the config and return to the journey. Resolves to any errors. */
   onSave: () => Promise<string[]>;
@@ -170,6 +207,24 @@ export default function StepView(p: Props) {
     p.onConfigChange(setPath(config, "fem.tissues", next));
   };
 
+  // Which steps actually own settings the pipeline will read. On the rest —
+  // a rendered figure, the two analytic rungs — "Save and return" was the
+  // green primary calling putConfig on an unchanged config, while the real
+  // action sat below it as a quiet link. So those steps just close.
+  const WRITES_CONFIG = new Set([
+    "anatomy",
+    "conductivity",
+    "mesh",
+    "sources",
+    "sensors",
+    "eeg",
+    "noise",
+    "anisotropy",
+    "solve",
+    "detect",
+  ]);
+  const writesConfig = WRITES_CONFIG.has(node.kind);
+
   const activeMeshPreset = MESH_PRESETS.find(
     (m) =>
       config &&
@@ -191,7 +246,14 @@ export default function StepView(p: Props) {
           <Icon name={node.icon as IconName} size={15} />
         </span>
         <h1 className="jstep-title">{node.title}</h1>
-        <span className={`jstate jstate--${p.state}`}>{STATE_WORD[p.state]}</span>
+        {/* Same glyphs as the canvas mark and the run HUD's step marks, so
+            "done", "reused" and "failed" look the same wherever they appear. */}
+        <span className={`jstate jstate--${p.state}`}>
+          {STATE_ICON[p.state] && (
+            <Icon name={STATE_ICON[p.state] as IconName} size={11} />
+          )}
+          {STATE_WORD[p.state]}
+        </span>
 
         <span className="jstep-spacer" />
         {node.stage && (
@@ -205,9 +267,25 @@ export default function StepView(p: Props) {
             <Icon name="play" size={13} /> Run this step
           </button>
         )}
-        <button type="button" className="jbtn jbtn--go" onClick={save} disabled={saving}>
-          <Icon name="check" size={14} /> {saving ? "Saving…" : "Save and return"}
-        </button>
+        {node.kind === "figure" && p.figure?.exists && (
+          <a
+            className="jbtn"
+            href={p.figure.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Icon name="external" size={13} /> Open full size
+          </a>
+        )}
+        {writesConfig ? (
+          <button type="button" className="jbtn jbtn--go" onClick={save} disabled={saving}>
+            <Icon name="check" size={14} /> {saving ? "Saving…" : "Save and return"}
+          </button>
+        ) : (
+          <button type="button" className="jbtn jbtn--go" onClick={p.onBack}>
+            <Icon name="check" size={14} /> Done
+          </button>
+        )}
       </header>
 
       <div className="jstep-body">
@@ -222,6 +300,75 @@ export default function StepView(p: Props) {
                 ))}
               </ul>
             </Note>
+          )}
+
+          {/* ── modality: the first decision ──────────────────────────── */}
+          {node.kind === "modality" && (
+            <>
+              <p className="jlead">
+                What you record with. It decides which sensors are placed, which
+                leadfield is solved, and which noise floor the answer is measured
+                against — so it comes first.
+              </p>
+              <div className="jstack">
+                {(
+                  [
+                    {
+                      key: "meg" as const,
+                      title: "MEG · OPM magnetometers",
+                      note: "Triaxial optically-pumped sensors standing off the skin. No contact, no skin impedance.",
+                    },
+                    {
+                      key: "eeg" as const,
+                      title: "EEG · surface electrodes",
+                      note: "Contacts on the skin. Cheaper and lighter, and blurred by the tissue between source and contact.",
+                    },
+                  ]
+                ).map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    className={`pick${p.modality === m.key ? " pick--on" : ""}`}
+                    aria-pressed={p.modality === m.key}
+                    onClick={() => p.onModalityChange(m.key)}
+                  >
+                    <span className="pick-dot" aria-hidden />
+                    <span className="pick-text">
+                      <span className="pick-title">{m.title}</span>
+                      <span className="pick-note">{m.note}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {config && p.modality === "eeg" && (
+                <>
+                  <h2 className="jsub">Electrode patch</h2>
+                  <NumField
+                    label="Rows"
+                    path="electrodes.rows"
+                    config={config}
+                    onChange={p.onConfigChange}
+                    help="Contacts along the body axis."
+                  />
+                  <NumField
+                    label="Columns"
+                    path="electrodes.cols"
+                    config={config}
+                    onChange={p.onConfigChange}
+                    help="Contacts around the circumference."
+                  />
+                  <NumField
+                    label="Contact pitch"
+                    unit="mm"
+                    path="electrodes.contact_pitch_mm"
+                    config={config}
+                    onChange={p.onConfigChange}
+                    help="Centre-to-centre spacing within the patch."
+                  />
+                </>
+              )}
+            </>
           )}
 
           {/* ── anatomy: which tissues are in the model ────────────────── */}
@@ -403,89 +550,30 @@ export default function StepView(p: Props) {
             </>
           )}
 
-          {/* ── sources ────────────────────────────────────────────────── */}
+          {/* ── sources: what fires, and where along the spine ────────── */}
           {node.kind === "sources" && (
-            <>
-              <p className="jlead">
-                Click <b>{p.target?.replace(/_/g, " ") ?? "the target"}</b> in the
-                3-D view to drop a current source where nerve activity might
-                occur. Each one is solved independently.
-              </p>
-
-              {config && (
-                <>
-                  <label className="jfield">
-                    <span>Source tissue</span>
-                    <Select
-                      value={getPath<string>(config, "forward.source_tissue", "")}
-                      ariaLabel="Source tissue"
-                      onChange={(v) =>
-                        p.onConfigChange(setPath(config, "forward.source_tissue", v))
-                      }
-                      options={(femTissues.length ? femTissues : p.meshes.map((m) => m.name)).map(
-                        (t) => ({ value: t, label: t.replace(/_/g, " ") }),
-                      )}
-                    />
-                  </label>
-                  <NumField
-                    label="Source spacing"
-                    unit="mm"
-                    path="forward.source_spacing_mm"
-                    config={config}
-                    onChange={p.onConfigChange}
-                    help="Spacing of the dipole grid laid along the source tissue."
-                  />
-                </>
-              )}
-
-              <h2 className="jsub">Placed sources — {p.sources.length}</h2>
-              <SourceList
-                sources={p.sources}
-                selected={p.selectedSource}
-                onSelect={p.onSelectSource}
-                onChange={p.onSourcesChange}
-              />
-            </>
+            <SourcesStep
+              config={config}
+              onConfigChange={p.onConfigChange}
+              femTissues={femTissues}
+              meshes={p.meshes}
+              target={p.target}
+              sources={p.sources}
+              onSourcesChange={p.onSourcesChange}
+              selectedSource={p.selectedSource}
+              onSelectSource={p.onSelectSource}
+            />
           )}
 
           {/* ── sensor array ───────────────────────────────────────────── */}
           {node.kind === "sensors" && config && (
             <>
+              <SensorArrayPreview modality={p.modality} onCloud={p.onSensorCloud} />
               <p className="jlead">
-                Where the sensors sit on the body, and what kind they are. The
-                solve reports whichever modality is selected here.
+                Where the sensors sit on the body. You are solving{" "}
+                <b>{p.modality.toUpperCase()}</b> — change that in the Modality
+                step at the head of the journey.
               </p>
-
-              <h2 className="jsub">Modality</h2>
-              <div className="jstack">
-                {(
-                  [
-                    {
-                      key: "meg" as const,
-                      title: "OPM magnetometers",
-                      note: "Triaxial optically-pumped sensors, standing off the skin.",
-                    },
-                    {
-                      key: "eeg" as const,
-                      title: "EEG electrodes",
-                      note: "Contacts on the surface. Needs the electrode array built.",
-                    },
-                  ]
-                ).map((m) => (
-                  <button
-                    key={m.key}
-                    type="button"
-                    className={`pick${p.modality === m.key ? " pick--on" : ""}`}
-                    onClick={() => p.onModalityChange(m.key)}
-                  >
-                    <span className="pick-dot" aria-hidden />
-                    <span className="pick-text">
-                      <span className="pick-title">{m.title}</span>
-                      <span className="pick-note">{m.note}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
 
               <h2 className="jsub">OPM array</h2>
               <NumField
@@ -518,161 +606,13 @@ export default function StepView(p: Props) {
             </>
           )}
 
-          {/* ── EEG electrodes (optional node) ─────────────────────────── */}
-          {node.kind === "eeg" && config && (
-            <>
-              <p className="jlead">
-                A contact array on the body surface, solved instead of the OPMs.
-                Selecting EEG here is what makes the next run an EEG run.
-              </p>
-              <div className="jstack">
-                <button
-                  type="button"
-                  className={`pick${p.modality === "eeg" ? " pick--on" : ""}`}
-                  onClick={() => p.onModalityChange("eeg")}
-                >
-                  <span className="pick-dot" aria-hidden />
-                  <span className="pick-text">
-                    <span className="pick-title">Solve EEG</span>
-                    <span className="pick-note">
-                      {p.modality === "eeg"
-                        ? "The next run reports electrode potentials."
-                        : "Currently solving OPM magnetometers instead."}
-                    </span>
-                  </span>
-                </button>
-              </div>
-
-              <h2 className="jsub">Contact layout</h2>
-              <NumField
-                label="Rows"
-                path="electrodes.rows"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Contacts along the body axis."
-              />
-              <NumField
-                label="Columns"
-                path="electrodes.cols"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Contacts around the circumference."
-              />
-              <NumField
-                label="Contact pitch"
-                unit="mm"
-                path="electrodes.contact_pitch_mm"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Centre-to-centre spacing within the paddle."
-              />
-            </>
-          )}
-
-          {/* ── noise floor (optional node) ────────────────────────────── */}
-          {node.kind === "noise" && config && (
-            <>
-              <p className="jlead">
-                Detection is a ratio, and this is its denominator: how much noise
-                the sensors contribute over the band you record in.
-              </p>
-              <NumField
-                label="OPM intrinsic noise"
-                unit="fT/√Hz"
-                path="noise.opm_intrinsic_fT_sqrtHz"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Sensor noise density quoted by the magnetometer's maker."
-              />
-              <NumField
-                label="EEG amplifier noise"
-                unit="µV/√Hz"
-                path="noise.eeg_amplifier_uV_sqrtHz"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Used instead of the OPM figure when solving EEG."
-              />
-              <NumField
-                label="Band low"
-                unit="Hz"
-                path="noise.band_lo_hz"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Bottom of the recording band. A wider band collects more noise."
-              />
-              <NumField
-                label="Band high"
-                unit="Hz"
-                path="noise.band_hi_hz"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Top of the recording band. Nerve signal is fast, so this stays high."
-              />
-            </>
-          )}
-
-          {/* ── muscle anisotropy (optional node) ──────────────────────── */}
-          {node.kind === "anisotropy" && config && (
-            <>
-              <p className="jlead">
-                Muscle carries current better along its fibres than across them.
-                This only affects runs whose source tissue includes muscle.
-              </p>
-              <label className="jfield">
-                <span>Mode</span>
-                <Select
-                  value={getPath<string>(config, "forward.muscle_anisotropy.mode", "auto")}
-                  ariaLabel="Anisotropy mode"
-                  onChange={(v) =>
-                    p.onConfigChange(setPath(config, "forward.muscle_anisotropy.mode", v))
-                  }
-                  options={[
-                    { value: "auto", label: "Auto — on for muscle runs" },
-                    { value: "on", label: "Always on" },
-                    { value: "off", label: "Off — muscle stays isotropic" },
-                  ]}
-                />
-              </label>
-              <NumField
-                label="Along the fibres"
-                unit="S/m"
-                path="forward.muscle_anisotropy.sigma_long_sm"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Conductivity parallel to the fibre direction."
-              />
-              <NumField
-                label="Across the fibres"
-                unit="S/m"
-                path="forward.muscle_anisotropy.sigma_trans_sm"
-                config={config}
-                onChange={p.onConfigChange}
-                help="Conductivity perpendicular to the fibres — always the smaller of the two."
-              />
-            </>
-          )}
-
-          {/* ── solver engine (optional node) ──────────────────────────── */}
-          {node.kind === "engine" && (
-            <>
-              <p className="jlead">
-                The forward solve needs a compiled DUNEuro. Point it at one here
-                and see, honestly, whether this backend can load it.
-              </p>
-              <DuneuroSetup />
-            </>
-          )}
-
-          {/* ── cluster (optional node) ────────────────────────────────── */}
-          {node.kind === "cluster" && (
-            <>
-              <p className="jlead">
-                Send the forward solve to UCL Myriad or Kathleen instead of this
-                machine. Only the solve runs there; the leadfield comes back and
-                is analysed locally.
-              </p>
-              <ClusterPanel sources={p.sources} modality={p.modality} />
-            </>
+          {/* ── field map: the topography, live ───────────────────────── */}
+          {node.kind === "fieldmap" && (
+            <FieldMapStep
+              modality={p.modality}
+              sourceCount={p.result?.per_source.length ?? 0}
+              onCloud={p.onSensorCloud}
+            />
           )}
 
           {/* ── analytic rungs (optional nodes) ────────────────────────── */}
@@ -733,15 +673,13 @@ export default function StepView(p: Props) {
           {node.kind === "figure" && (
             <>
               {p.figure?.exists ? (
-                <>
-                  <p className="jmeta mono">
-                    {(p.figure.bytes / 1024).toFixed(0)} kB · drawn{" "}
-                    {new Date(p.figure.mtime * 1000).toLocaleString()}
-                  </p>
-                  <a className="jlink" href={p.figure.url} target="_blank" rel="noreferrer">
-                    Open full size
-                  </a>
-                </>
+                /* "Open full size" is the real verb of this step, so it lives
+                   in the bar with the other actions rather than as a link
+                   underneath a byte count. */
+                <p className="jmeta mono">
+                  {(p.figure.bytes / 1024).toFixed(0)} kB · drawn{" "}
+                  {new Date(p.figure.mtime * 1000).toLocaleString()}
+                </p>
               ) : (
                 <p className="jlead">
                   Not drawn yet. Run the journey and this fills in when the{" "}
@@ -753,26 +691,451 @@ export default function StepView(p: Props) {
         </section>
 
         {node.kind === "figure" && p.figure?.exists && (
-          <section className="jstep-main">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="jfigure"
-              src={`${p.figure.url}?v=${Math.round(p.figure.mtime)}`}
-              alt={p.figure.label}
-            />
+          <section className="jstep-main jstep-main--figure">
+            <FigureView figure={p.figure} />
           </section>
         )}
 
-        {!p.usesViewer && node.kind !== "figure" && (
-          <section className="jstep-main jstep-main--quiet">
-            <div className="jstep-mark" aria-hidden>
-              <Icon name={node.icon as IconName} size={72} />
+        {/* The answer, drawn rather than listed: one bar per source, the
+            detection threshold marked, so "which source is hard" is a glance. */}
+        {node.kind === "detect" && p.result && (
+          <section className="jstep-main jstep-main--chart">
+            <div className="chart-wrap">
+              <StatTile
+                value={detectHeadline(p.result)}
+                unit="averaged trials to detect"
+                note={`${p.result.array.n_sensors} ${p.result.modality.toUpperCase()} sensors · noise floor ${p.result.array.noise_floor_fT} ${p.result.array.noise_unit ?? "fT"}`}
+              />
+
+              <h2 className="chart-title">Trials needed, per source</h2>
+              <BarChart
+                unit="trials"
+                bars={p.result.per_source.map((src) => ({
+                  label: `source ${src.index + 1}`,
+                  values: [src.trials_needed],
+                  display: [
+                    src.trials_needed >= 0 && Number.isFinite(src.trials_needed)
+                      ? src.trials_needed.toLocaleString()
+                      : "never reaches threshold",
+                  ],
+                }))}
+                series={["trials"]}
+              />
+
+              <h2 className="chart-title">Single-trial SNR</h2>
+              <BarChart
+                bars={p.result.per_source.map((src) => ({
+                  label: `source ${src.index + 1}`,
+                  values: [src.snr],
+                  display: [src.snr.toFixed(2)],
+                }))}
+                series={["SNR"]}
+                reference={{
+                  value: p.result.array.threshold_snr,
+                  label: `threshold ${p.result.array.threshold_snr}`,
+                }}
+              />
             </div>
-            <p className="jstep-caption">{node.caption}</p>
           </section>
         )}
+
+        {!p.usesViewer &&
+          node.kind !== "figure" &&
+          !(node.kind === "detect" && p.result) &&
+          !(node.kind === "biot" || node.kind === "sarvas") && (
+            <section className="jstep-main jstep-main--quiet">
+              <div className="jstep-mark" aria-hidden>
+                <Icon name={node.icon as IconName} size={72} />
+              </div>
+              <p className="jstep-caption">{node.caption}</p>
+            </section>
+          )}
       </div>
     </div>
+  );
+}
+
+/* Sources: the step that decides what fires and where.
+ *
+ * A vertebral level is not decoration here — it *is* the placement. Saying
+ * "C7" means the sources sit inside the source tissue within that vertebra's
+ * own measured Z band, and the electrode patch is centred on the same level,
+ * so the study and the array are describing one place rather than two. The
+ * points come back from the mesh as tetrahedron centroids, which is what makes
+ * them solvable: a click that lands a millimetre outside the volume is the
+ * commonest way a first run fails.
+ */
+function SourcesStep({
+  config,
+  onConfigChange,
+  femTissues,
+  meshes,
+  target,
+  sources,
+  onSourcesChange,
+  selectedSource,
+  onSelectSource,
+}: {
+  config: Cfg | null;
+  onConfigChange: (c: Cfg) => void;
+  femTissues: string[];
+  meshes: MeshInfo[];
+  target: string | null;
+  sources: PointSource[];
+  onSourcesChange: (s: PointSource[]) => void;
+  selectedSource: number | null;
+  onSelectSource: (i: number | null) => void;
+}) {
+  const [levels, setLevels] = useState<LevelInfo[]>([]);
+  const [count, setCount] = useState(3);
+  const [busy, setBusy] = useState(false);
+  const [placed, setPlaced] = useState<SuggestedSources | null>(null);
+  const [error, setError] = useState<{ msg: string; hint?: string } | null>(null);
+
+  useEffect(() => {
+    getLevels().then(setLevels);
+  }, []);
+
+  const tissue = config
+    ? getPath<string>(config, "forward.source_tissue", "") ||
+      (femTissues[0] ?? "")
+    : "";
+  const level = config
+    ? getPath<string>(config, "electrodes.target_level", "") || ""
+    : "";
+
+  const setLevel = (next: string | null) => {
+    if (!config) return;
+    onConfigChange(setPath(config, "electrodes.target_level", next));
+    setPlaced(null);
+    setError(null);
+  };
+
+  const place = async () => {
+    setBusy(true);
+    setError(null);
+    const { result, error: err, hint } = await suggestSources(
+      tissue,
+      level || null,
+      count,
+    );
+    if (result) {
+      setPlaced(result);
+      onSourcesChange(
+        result.sources.map((pt) => ({ ...pt, strength_nAm: 70 })),
+      );
+      onSelectSource(null);
+    } else if (err) {
+      setError({ msg: err, hint });
+    }
+    setBusy(false);
+  };
+
+  const bands = new Map(levels.map((l) => [l.level, l]));
+  const chosen = level ? bands.get(level) : undefined;
+
+  return (
+    <>
+      <p className="jlead">
+        Click <b>{target?.replace(/_/g, " ") ?? "the target"}</b> in the 3-D view
+        to drop a source, or place a set along a vertebral level below. Each
+        source is solved independently.
+      </p>
+
+      {config && (
+        <label className="jfield">
+          <span>Source tissue</span>
+          <Select
+            value={tissue}
+            ariaLabel="Source tissue"
+            onChange={(v) => onConfigChange(setPath(config, "forward.source_tissue", v))}
+            options={(femTissues.length ? femTissues : meshes.map((m) => m.name)).map(
+              (t) => ({ value: t, label: t.replace(/_/g, " ") }),
+            )}
+          />
+        </label>
+      )}
+
+      <h2 className="jsub">Vertebral level</h2>
+      <p className="stepfield-help" style={{ marginBottom: 10 }}>
+        The level places the sources and centres the electrode patch. Each band
+        is measured from that vertebra&rsquo;s own segmented STL, so it follows
+        this anatomy rather than an assumed proportion.
+      </p>
+
+      <div className="levels">
+        <div className="levels-group">
+          <button
+            type="button"
+            className={`level${!level ? " level--on" : ""}`}
+            aria-pressed={!level}
+            onClick={() => setLevel(null)}
+          >
+            any
+          </button>
+          <span className="levels-any-note">whole length of the tissue</span>
+        </div>
+        {VERTEBRAE.map((group) => {
+          const available = group.levels.filter((l) => bands.has(l));
+          if (available.length === 0) return null;
+          return (
+            <div key={group.name} className="levels-group">
+              <span className="levels-group-name">{group.name}</span>
+              {available.map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  className={`level${level === lvl ? " level--on" : ""}`}
+                  aria-pressed={level === lvl}
+                  title={`${lvl.toUpperCase()} · ${bands.get(lvl)!.z_lo_mm}–${bands.get(lvl)!.z_hi_mm} mm`}
+                  onClick={() => setLevel(lvl)}
+                >
+                  {lvl.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      {chosen && (
+        <p className="levels-band mono">
+          {chosen.level.toUpperCase()} spans {chosen.z_lo_mm}–{chosen.z_hi_mm} mm
+        </p>
+      )}
+
+      <div className="levels-place">
+        <label className="levels-count">
+          <span>How many</span>
+          <Select
+            value={count}
+            ariaLabel="How many sources"
+            onChange={(v) => setCount(Number(v))}
+            options={[1, 2, 3, 5, 8].map((n) => ({ value: n, label: String(n) }))}
+          />
+        </label>
+        <Button
+          variant="primary"
+          icon="bolt"
+          loading={busy}
+          disabled={!config || !tissue}
+          onClick={place}
+        >
+          Place sources
+        </Button>
+      </div>
+
+      {error && (
+        <Note tone="warn" title="Could not place sources">
+          <p>{error.msg}</p>
+          {error.hint && <p className="ui-dim">{error.hint}</p>}
+        </Note>
+      )}
+      {placed && !error && (
+        <Note tone="ok">
+          {placed.sources.length} source
+          {placed.sources.length === 1 ? "" : "s"} placed inside{" "}
+          {placed.tissue.replace(/_/g, " ")}
+          {placed.level ? ` at ${placed.level.toUpperCase()}` : ""}, chosen from{" "}
+          {placed.available} tetrahedra. Every one is inside the mesh, so the
+          solve will evaluate them.
+        </Note>
+      )}
+
+      {config && (
+        <NumField
+          label="Source spacing"
+          unit="mm"
+          path="forward.source_spacing_mm"
+          config={config}
+          onChange={onConfigChange}
+          help="Spacing of the dipole grid laid along the source tissue."
+        />
+      )}
+
+      <h2 className="jsub">Placed sources — {sources.length}</h2>
+      <SourceList
+        sources={sources}
+        selected={selectedSource}
+        onSelect={onSelectSource}
+        onChange={onSourcesChange}
+      />
+    </>
+  );
+}
+
+/* The headline: the easiest source to detect, since that is the number a
+   planner acts on. Sources that never reach threshold are excluded from it —
+   the per-source chart below says which those are. */
+function detectHeadline(result: DetectResult): string {
+  const trials = result.per_source
+    .map((s) => s.trials_needed)
+    .filter((n) => n >= 0 && Number.isFinite(n));
+  if (trials.length === 0) return "∞";
+  return Math.min(...trials).toLocaleString();
+}
+
+/* The array itself, drawn in the well rather than rendered to a PNG: every
+   sensor that was placed, where it sits on the body. */
+function SensorArrayPreview({
+  modality,
+  onCloud,
+}: {
+  modality: "meg" | "eeg";
+  onCloud: (
+    cloud: { positions: [number, number, number][]; values?: number[] } | null,
+  ) => void;
+}) {
+  const [info, setInfo] = useState<SensorArrayInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    getSensorArray(modality).then(({ result, error: err }) => {
+      if (!live) return;
+      if (result) {
+        setInfo(result);
+        setError(null);
+        onCloud({ positions: result.positions });
+      } else {
+        setInfo(null);
+        setError(err ?? "not built yet");
+        onCloud(null);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [modality, onCloud]);
+
+  useEffect(() => () => onCloud(null), [onCloud]);
+
+  if (error) {
+    return (
+      <Note tone="warn">
+        No {modality.toUpperCase()} array on disk yet — run this step and it
+        appears in the view.
+      </Note>
+    );
+  }
+  if (!info) return null;
+  return (
+    <Note tone="ok">
+      {info.count} {info.types.join(", ")} channels, drawn in the view. Drag to
+      orbit.
+    </Note>
+  );
+}
+
+/* The field map.
+ *
+ * The same topography the PNG topoplot draws, except the numbers come back per
+ * channel and are painted onto the array in the 3-D well — so it can be
+ * orbited, and a hot spot can be traced to the sensor that reads it. Nothing is
+ * rendered server-side.
+ */
+function FieldMapStep({
+  modality,
+  sourceCount,
+  onCloud,
+}: {
+  modality: "meg" | "eeg";
+  sourceCount: number;
+  onCloud: (
+    cloud: { positions: [number, number, number][]; values?: number[] } | null,
+  ) => void;
+}) {
+  const [source, setSource] = useState(0);
+  const [map, setMap] = useState<FieldMap | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ msg: string; hint?: string } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setBusy(true);
+    setError(null);
+    getFieldMap(source, modality).then(({ result, error: err, hint }) => {
+      if (!live) return;
+      if (result) {
+        setMap(result);
+        onCloud({ positions: result.positions, values: result.values });
+      } else {
+        setMap(null);
+        onCloud(null);
+        // No leadfield yet is the ordinary case before a solve, not a fault.
+        setError({ msg: err ?? "could not be read", hint });
+      }
+      setBusy(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [source, modality, onCloud]);
+
+  // The cloud belongs to this step; leaving it should not leave the well
+  // painted with a map the next step knows nothing about.
+  useEffect(() => () => onCloud(null), [onCloud]);
+
+  return (
+    <>
+      <p className="jlead">
+        What every sensor reads for one source, painted onto the array in the
+        view. Drag to orbit it — brighter is a stronger reading.
+      </p>
+
+      {sourceCount > 1 && (
+        <label className="jfield">
+          <span>Source</span>
+          <Select
+            value={source}
+            ariaLabel="Which source"
+            onChange={(v) => setSource(Number(v))}
+            options={Array.from({ length: sourceCount }, (_, i) => ({
+              value: i,
+              label: `source ${i + 1}`,
+            }))}
+          />
+        </label>
+      )}
+
+      {busy && <p className="ui-dim">reading the leadfield…</p>}
+
+      {error && !busy && (
+        <Note tone="warn" title="No field map yet">
+          <p>{error.msg}</p>
+          {error.hint && <p className="ui-dim">{error.hint}</p>}
+        </Note>
+      )}
+
+      {map && !busy && (
+        <>
+          <StatTile value={map.peak.toFixed(2)} unit={`${map.unit}, peak`} />
+          <div className="fieldscale">
+            <span className="fieldscale-bar" aria-hidden />
+            <span className="fieldscale-ends mono">
+              <span>0</span>
+              <span>
+                {map.peak.toFixed(1)} {map.unit.split(" ")[0]}
+              </span>
+            </span>
+          </div>
+          <dl className="fieldfacts mono">
+            <div>
+              <dt>channels</dt>
+              <dd>{map.count}</dd>
+            </div>
+            <div>
+              <dt>RMS</dt>
+              <dd>{map.rms.toFixed(2)}</dd>
+            </div>
+            <div>
+              <dt>source</dt>
+              <dd>{map.source_pos.map((v) => v.toFixed(1)).join(", ")} mm</dd>
+            </div>
+          </dl>
+        </>
+      )}
+    </>
   );
 }
 
@@ -815,14 +1178,26 @@ function LadderRungStep({ kind }: { kind: "biot" | "sarvas" }) {
 
       {value && (
         <>
-          <div className="result-headline">
-            <div className="result-number">{value.peak_fT_per_nAm.toFixed(2)}</div>
-            <div className="result-unit">fT per nA·m, peak</div>
-          </div>
-          <p className="result-verdict">
-            RMS across the array is {value.rms_fT_per_nAm.toFixed(2)} fT per nA·m,
-            over {res?.n_radial_coils} radial coils.
-          </p>
+          <StatTile
+            value={value.peak_fT_per_nAm.toFixed(2)}
+            unit="fT per nA·m, peak"
+            note={`RMS ${value.rms_fT_per_nAm.toFixed(2)} across ${res?.n_radial_coils} radial coils`}
+          />
+          <h2 className="chart-title">Peak against RMS</h2>
+          <BarChart
+            unit="fT/nA·m"
+            series={["peak", "RMS"]}
+            bars={[
+              {
+                label: kind === "biot" ? "Biot–Savart" : "Sarvas",
+                values: [value.peak_fT_per_nAm, value.rms_fT_per_nAm],
+                display: [
+                  value.peak_fT_per_nAm.toFixed(2),
+                  value.rms_fT_per_nAm.toFixed(2),
+                ],
+              },
+            ]}
+          />
         </>
       )}
     </>

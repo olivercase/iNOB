@@ -10,6 +10,7 @@
 import type { IconName } from "@/components/ui/Icon";
 
 export type NodeKind =
+  | "modality"
   | "anatomy"
   | "conductivity"
   | "mesh"
@@ -23,6 +24,7 @@ export type NodeKind =
   | "eeg"
   | "biot"
   | "sarvas"
+  | "fieldmap"
   | "noise"
   | "anisotropy"
   | "engine"
@@ -70,11 +72,35 @@ export const NODE_W = 208;
 export const NODE_H = 96;
 
 const COL = 300; // horizontal pitch between stages
-const ROW = 200; // vertical pitch between a stage and its figures
+const ROW = 200; // vertical pitch between bands
+
+/*
+ * The canvas is banded, and the bands are what keep cards off each other.
+ *
+ * Everything above the spine is authored at a fixed place: the analytic rungs
+ * and the sources that feed them in the first band up, the optional nodes in
+ * the second. Everything below the spine belongs to figures, which the user
+ * pins in unbounded numbers and which therefore stack downwards forever.
+ *
+ * Before this the optional nodes sat at +ROW — the first figure row — so
+ * adding EEG and pinning a sensor figure put two cards in the same cell.
+ */
+const BAND_UPPER = -ROW; // sources, Biot–Savart, Sarvas
+const BAND_OPTIONAL = -ROW * 2; // everything from the add panel
+const FIGURE_ROW = ROW; // first row of pinned figures
 
 // The spine of the journey. Every node here always exists; figure nodes are
-// added by the user from the "What happens next?" panel.
+// added by the user from the "Add to the journey" panel.
 export const BASE_NODES: JourneyNode[] = [
+  {
+    id: "modality",
+    kind: "modality",
+    title: "Modality",
+    caption: "What you record with",
+    icon: "sensor",
+    x: 0,
+    y: 0,
+  },
   {
     id: "anatomy",
     kind: "anatomy",
@@ -82,7 +108,7 @@ export const BASE_NODES: JourneyNode[] = [
     caption: "Which tissues to model",
     stage: "geom",
     icon: "anatomy",
-    x: 0,
+    x: COL,
     y: 0,
   },
   {
@@ -91,7 +117,7 @@ export const BASE_NODES: JourneyNode[] = [
     title: "Conductivities",
     caption: "S/m per tissue",
     icon: "bolt",
-    x: COL,
+    x: COL * 2,
     y: 0,
   },
   {
@@ -101,7 +127,7 @@ export const BASE_NODES: JourneyNode[] = [
     caption: "Element size",
     stage: "fem",
     icon: "mesh",
-    x: COL * 2,
+    x: COL * 3,
     y: 0,
   },
   {
@@ -110,17 +136,17 @@ export const BASE_NODES: JourneyNode[] = [
     title: "Sources",
     caption: "Where the nerve fires",
     icon: "bolt",
-    x: COL * 3,
+    x: COL * 4,
     y: -ROW,
   },
   {
     id: "sensors",
     kind: "sensors",
     title: "Sensor array",
-    caption: "OPM placement",
+    caption: "Where the sensors sit",
     stage: "sensors",
     icon: "sensor",
-    x: COL * 3,
+    x: COL * 4,
     y: 0,
   },
   {
@@ -130,7 +156,7 @@ export const BASE_NODES: JourneyNode[] = [
     caption: "DUNEuro leadfield",
     stage: "forward",
     icon: "solve",
-    x: COL * 4,
+    x: COL * 5,
     y: 0,
   },
   {
@@ -139,12 +165,13 @@ export const BASE_NODES: JourneyNode[] = [
     title: "Trials to detect",
     caption: "The answer",
     icon: "pulse",
-    x: COL * 5,
+    x: COL * 6,
     y: 0,
   },
 ];
 
 export const BASE_EDGES: JourneyEdge[] = [
+  { from: "modality", to: "anatomy", label: "meg / eeg" },
   { from: "anatomy", to: "conductivity", label: "surfaces" },
   { from: "conductivity", to: "mesh", label: "sigma" },
   { from: "mesh", to: "sensors", label: "volume" },
@@ -166,14 +193,25 @@ export function figureParent(stage: string): string {
   return FIGURE_PARENT[stage] ?? "detect";
 }
 
-/** Place a figure node under its parent, stacking further down for each sibling. */
+/**
+ * Place a figure node under its parent, two to a row and stacking downwards.
+ *
+ * The two columns are a full card apart plus a gutter. They used to be ±24px,
+ * which is a quarter of a card: pinning a second figure to the same stage put
+ * it almost exactly on top of the first, and the one underneath was simply
+ * unreachable.
+ */
+const FIG_GUTTER = 28;
+
 export function figurePosition(
   parent: JourneyNode,
   siblingIndex: number,
 ): { x: number; y: number } {
+  const column = siblingIndex % 2 === 0 ? -1 : 1;
+  const row = Math.floor(siblingIndex / 2);
   return {
-    x: parent.x + (siblingIndex % 2 === 0 ? -24 : 24),
-    y: parent.y + ROW + Math.floor(siblingIndex / 2) * (NODE_H + 64),
+    x: parent.x + (column * (NODE_W + FIG_GUTTER)) / 2,
+    y: parent.y + FIGURE_ROW + row * (NODE_H + 64),
   };
 }
 
@@ -209,7 +247,7 @@ export function wirePath(a: JourneyNode, b: JourneyNode): string {
 
 /* ── the optional nodes ───────────────────────────────────────────────────
  *
- * Everything here can be added to the journey and removed again. The five
+ * Everything here can be added to the journey and removed again. The seven
  * core stages cannot, because a FEM run is made of exactly those.
  */
 
@@ -233,41 +271,16 @@ export interface AddableSpec {
 
 export const ADDABLE: AddableSpec[] = [
   {
-    id: "eeg",
-    group: "sensing",
-    kind: "eeg",
-    title: "EEG electrodes",
-    caption: "Contact array",
-    blurb: "Solve for surface electrodes instead of OPM magnetometers",
-    icon: "sensor",
-    from: "mesh",
-    to: "solve",
-    x: COL * 3,
-    y: ROW,
-  },
-  {
-    id: "biot",
+    id: "fieldmap",
     group: "model",
-    kind: "biot",
-    title: "Biot–Savart",
-    caption: "Free space",
-    blurb: "The primary current alone — no volume conductor at all",
+    kind: "fieldmap",
+    title: "Field map",
+    caption: "What each sensor reads",
+    blurb: "The solved topography on the array itself, in 3-D — not a picture of one",
     icon: "pulse",
-    from: "sources",
-    x: COL * 4,
-    y: -ROW,
-  },
-  {
-    id: "sarvas",
-    group: "model",
-    kind: "sarvas",
-    title: "Sarvas sphere",
-    caption: "Homogeneous sphere",
-    blurb: "Analytic single-sphere model — the FEM sanity check",
-    icon: "anatomy",
-    from: "sources",
-    x: COL * 5,
-    y: -ROW,
+    from: "solve",
+    x: COL * 6,
+    y: ROW,
   },
   {
     id: "noise",
@@ -280,7 +293,7 @@ export const ADDABLE: AddableSpec[] = [
     from: "sensors",
     to: "detect",
     x: COL * 4,
-    y: ROW,
+    y: BAND_OPTIONAL,
   },
   {
     id: "anisotropy",
@@ -292,7 +305,7 @@ export const ADDABLE: AddableSpec[] = [
     icon: "mesh",
     from: "conductivity",
     x: COL,
-    y: ROW,
+    y: BAND_OPTIONAL,
   },
   {
     id: "engine",
@@ -304,7 +317,7 @@ export const ADDABLE: AddableSpec[] = [
     icon: "cog",
     from: "solve",
     x: COL * 5,
-    y: ROW,
+    y: BAND_OPTIONAL,
   },
   {
     id: "cluster",
@@ -315,8 +328,8 @@ export const ADDABLE: AddableSpec[] = [
     blurb: "Send the forward solve to UCL's cluster instead of this machine",
     icon: "cloud",
     from: "solve",
-    x: COL * 6,
-    y: ROW,
+    x: COL * 7,
+    y: BAND_OPTIONAL,
   },
 ];
 

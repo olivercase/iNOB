@@ -38,6 +38,8 @@ interface Props {
   onRemove: (id: string) => void;
   /** Run just this node's stage(s), leaving the rest of the journey alone. */
   onRunNode: (stages: string[]) => void;
+  /** Discard every dragged position. Omitted when nothing has been dragged. */
+  onResetLayout?: () => void;
   /** True while the pipeline runs — live wires carry a travelling pulse. */
   running: boolean;
   /**
@@ -77,6 +79,7 @@ export default function JourneyCanvas({
   onMove,
   onRemove,
   onRunNode,
+  onResetLayout,
   running,
   next = null,
   fitSignal = 0,
@@ -101,6 +104,7 @@ export default function JourneyCanvas({
     null,
   );
   const fitted = useRef(false);
+  const lastFitSignal = useRef(fitSignal);
 
   // Nodes that just finished, so the canvas can mark the moment rather than
   // silently swapping a spinner for a tick.
@@ -156,6 +160,17 @@ export default function JourneyCanvas({
     const id = window.requestAnimationFrame(fit);
     return () => window.cancelAnimationFrame(id);
   }, [fit]);
+
+  // Refit on demand. Without this, fit() ran once on mount and never again —
+  // so a node added from the panel could be authored well outside the visible
+  // area and simply never appear, with the panel showing a tick as if it had.
+  // The shell bumps fitSignal whenever it puts something new on the canvas.
+  useEffect(() => {
+    if (fitSignal === lastFitSignal.current) return;
+    lastFitSignal.current = fitSignal;
+    const id = window.requestAnimationFrame(fit);
+    return () => window.cancelAnimationFrame(id);
+  }, [fitSignal, fit]);
 
   // Wheel zooms about the pointer so the card under the cursor stays put.
   // Registered non-passively: React's onWheel cannot preventDefault, which let
@@ -372,9 +387,15 @@ export default function JourneyCanvas({
                   selected === n.id ? " jnode--selected" : ""
                 }${isFigure ? " jnode--figure" : ""}${
                   justDone.has(n.id) ? " jnode--justdone" : ""
-                }`}
+                }${next === n.id ? " jnode--next" : ""}`}
                 style={{ height: NODE_H }}
-                aria-label={`${n.title}, ${state}. Enter opens this step; arrow keys move it.`}
+                // The caption has to fit a card, so the hint is where the
+                // physics gets explained — read it before committing to
+                // opening the step.
+                title={n.hint}
+                aria-label={`${n.title}, ${state}.${
+                  n.hint ? ` ${n.hint}` : ""
+                } Enter opens this step; arrow keys move it.`}
                 onPointerDown={(e) => startDrag(e, n)}
                 onPointerMove={moveDrag}
                 onPointerUp={endDrag}
@@ -424,20 +445,19 @@ export default function JourneyCanvas({
                   </>
                 )}
 
-                {state === "done" && (
-                  <span className="jnode-tick" aria-hidden>
-                    <Icon name="check" size={12} />
-                  </span>
-                )}
-                {state === "skipped" && (
-                  <span className="jnode-tick jnode-tick--soft" aria-hidden>
-                    <Icon name="check" size={12} />
-                  </span>
-                )}
-                {state === "active" && <span className="jnode-spin" aria-hidden />}
-                {state === "failed" && (
-                  <span className="jnode-tick jnode-tick--bad" aria-hidden>
-                    <Icon name="alert" size={12} />
+                {/* One mark, four shapes. Green-vs-red is the worst pair to
+                    rely on for colour-blind users, so the states are told
+                    apart by fill and glyph as well: filled disc + tick for
+                    done, hollow ring + tick for reused, spinner for running,
+                    filled disc + alert for failed. Same vocabulary as the
+                    run HUD's step marks, deliberately. */}
+                {state !== "idle" && state !== "ready" && (
+                  <span className={`jnode-mark jnode-mark--${state}`} aria-hidden>
+                    {state === "active" ? (
+                      <span className="jnode-mark-spin" />
+                    ) : (
+                      <Icon name={state === "failed" ? "alert" : "check"} size={11} />
+                    )}
                   </span>
                 )}
               </div>
@@ -481,10 +501,8 @@ export default function JourneyCanvas({
                   <Icon name="close" size={11} />
                 </button>
               )}
-              {!removable && (
-                <span className="jnode-core" title="Core stage — every run needs it">
-                  core
-                </span>
+              {next === n.id && (
+                <span className="jnode-next">Start here</span>
               )}
             </div>
           );
@@ -501,6 +519,18 @@ export default function JourneyCanvas({
         <button type="button" onClick={fit} aria-label="Fit the journey to the view">
           <Icon name="fit" size={13} />
         </button>
+        {/* Dragged positions are saved, so without a way back the only escape
+            from a layout you regret was clearing site data. */}
+        {onResetLayout && (
+          <button
+            type="button"
+            onClick={onResetLayout}
+            title="Put every card back where the journey says it goes"
+            aria-label="Reset the layout"
+          >
+            <Icon name="reset" size={13} />
+          </button>
+        )}
         <span className="jzoom-read mono">{Math.round(view.scale * 100)}%</span>
       </div>
     </div>

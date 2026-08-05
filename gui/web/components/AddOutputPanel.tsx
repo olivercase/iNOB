@@ -80,7 +80,7 @@ export default function AddOutputPanel({
   return (
     <aside className="jpanel jpanel--add" aria-label="Add to the journey">
       <header className="jpanel-head">
-        <h2>What happens next?</h2>
+        <h2>Add to the journey</h2>
         <button type="button" className="jpanel-x" onClick={onClose} aria-label="Close">
           <Icon name="close" size={13} />
         </button>

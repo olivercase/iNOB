@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Button, Disclosure, Icon, Note, Sheet, Tag } from "@/components/ui";
+import { ToastHost, toast } from "@/components/ui/Toast";
 import {
   getFigures,
   getHealth,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/api";
 import { getPath, type Cfg } from "@/lib/config";
 import { loadSession, saveSession } from "@/lib/storage";
+import { presetById } from "@/lib/presets";
 import {
   BASE_EDGES,
   BASE_NODES,
@@ -31,7 +33,10 @@ import {
   type JourneyNode,
   type NodeState,
 } from "@/lib/journey";
+import Boot, { type BootChoice } from "@/components/Boot";
 import JourneyCanvas from "@/components/JourneyCanvas";
+import CommandPalette, { type Command } from "@/components/CommandPalette";
+import ShortcutsHelp from "@/components/ShortcutsHelp";
 import StepView from "@/components/StepView";
 import AddOutputPanel from "@/components/AddOutputPanel";
 import ParamPanels from "@/components/ParamPanels";
@@ -53,7 +58,7 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 // Nodes whose work happens in the 3-D view, so it opens alongside them.
-const VIEWER_NODES = new Set(["anatomy", "sources"]);
+const VIEWER_NODES = new Set(["anatomy", "sources", "fieldmap", "sensors"]);
 
 export default function Page() {
   const [healthy, setHealthy] = useState<boolean | null>(null);
@@ -83,6 +88,18 @@ export default function Page() {
   const [marked, setMarked] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // Bumped whenever something new lands on the canvas, so the view refits and
+  // the card the user just asked for is actually on screen. Added nodes are
+  // authored at fixed coordinates that can sit well outside the current pan.
+  const [fitSignal, setFitSignal] = useState(0);
+  // The opening self-check. It runs the same requests the app needs anyway,
+  // so the wait is the app getting ready rather than a splash screen.
+  const [booting, setBooting] = useState(true);
+  // A sensor cloud painted into the 3-D well by whichever step owns it.
+  const [sensorCloud, setSensorCloud] = useState<{
+    positions: [number, number, number][];
+    values?: number[];
+  } | null>(null);
 
   const [logs, setLogs] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
@@ -93,6 +110,8 @@ export default function Page() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [ladderOpen, setLadderOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [restored, setRestored] = useState(false);
   const [meshError, setMeshError] = useState(false);
   const [configErrors, setConfigErrors] = useState<string[]>([]);
@@ -103,6 +122,11 @@ export default function Page() {
   const [runningStages, setRunningStages] = useState<string[]>(ALL_STAGES);
   const [elapsed, setElapsed] = useState(0);
   const runRef = useRef<RunHandle | null>(null);
+  // The keyboard handler and the palette are both defined before the run
+  // callbacks are, and both need the current pair. A ref keeps them current
+  // without rebuilding every command on each state change.
+  const onRunRef = useRef<() => void>(() => {});
+  const onCancelRef = useRef<() => void>(() => {});
 
   // The 3-D well is expensive to build (tens of MB of STL), so it is mounted on
   // first use and then only hidden — never unmounted — when another node is
@@ -121,17 +145,35 @@ export default function Page() {
     [],
   );
 
-  useEffect(() => {
-    const s = loadSession();
-    if (s.sources) setSources(s.sources as PointSource[]);
-    if (typeof s.threshold === "number") setThreshold(s.threshold);
-    if (s.target) setTarget(s.target);
-    if (s.visible) setVisible(s.visible);
-    if (s.outputs) setOutputs(s.outputs);
-    if (s.extras) setExtras(s.extras);
-    if (s.modality === "eeg" || s.modality === "meg") setModality(s.modality);
-    if (s.positions) setPositions(s.positions);
+  // The previous session is read at mount but not applied until the opening
+  // sequence asks what to do with it: restoring first and offering a preset
+  // afterwards would mean silently discarding work the user might want back.
+  const saved = useRef<ReturnType<typeof loadSession> | null>(null);
+  if (saved.current === null) saved.current = loadSession();
+
+  const applyChoice = useCallback((choice: BootChoice) => {
+    const session =
+      choice.kind === "resume"
+        ? (saved.current ?? {})
+        : (presetById(choice.id)?.session ?? {});
+
+    setSources((session.sources as PointSource[]) ?? []);
+    setThreshold(typeof session.threshold === "number" ? session.threshold : 3);
+    setTarget(session.target ?? null);
+    setOutputs(session.outputs ?? []);
+    setExtras(session.extras ?? []);
+    setPositions(session.positions ?? {});
+    setModality(session.modality === "eeg" ? "eeg" : "meg");
+    // Tissue visibility is a view preference rather than part of a preset, so
+    // only a resumed session brings its own back.
+    if (choice.kind === "resume" && saved.current?.visible) {
+      setVisible(saved.current.visible);
+    }
+    setSelectedSource(null);
+    setMarked(null);
+    setSelected(null);
     setRestored(true);
+    setBooting(false);
   }, []);
 
   // Load everything the canvas needs from the backend. Kept as a callback,
@@ -255,6 +297,9 @@ export default function Page() {
         kind: spec.kind,
         title: spec.title,
         caption: spec.caption,
+        // The add panel's blurb and a card's hint answer the same question —
+        // what is this and when would I want it — so they are the same string.
+        hint: spec.blurb,
         icon: spec.icon,
         x: spec.x,
         y: spec.y,
@@ -320,6 +365,7 @@ export default function Page() {
 
   const states: Record<string, NodeState> = useMemo(() => {
     const s: Record<string, NodeState> = {
+      modality: "done",
       anatomy: stageState("geom", meshes.length ? "ready" : "idle"),
       // Conductivities aren't a pipeline stage — they're settings the solve
       // reads — so the node is "ready" as soon as the config has values.
@@ -338,7 +384,6 @@ export default function Page() {
     };
     // The optional nodes: EEG follows the chosen modality; the analytic rungs
     // are always available, since neither needs a leadfield.
-    if (extras.includes("eeg")) s.eeg = modality === "eeg" ? "done" : "ready";
     if (extras.includes("biot")) s.biot = "ready";
     if (extras.includes("sarvas")) s.sarvas = "ready";
 
@@ -372,10 +417,16 @@ export default function Page() {
       anatomy: target ? target.replace(/_/g, " ") : undefined,
       conductivity: tissues.length ? `${tissues.length} tissues` : undefined,
       mesh: pitch ? `${pitch} mm pitch` : undefined,
-      eeg: modality === "eeg" ? "solving EEG" : "not selected",
-      sources: sources.length
-        ? `${sources.length} placed`
-        : undefined,
+      modality: modality.toUpperCase(),
+      sources: (() => {
+        if (!sources.length) return undefined;
+        const level = config
+          ? getPath<string>(config, "electrodes.target_level", "")
+          : "";
+        return level
+          ? `${sources.length} at ${level.toUpperCase()}`
+          : `${sources.length} placed`;
+      })(),
       sensors: result
         ? `${result.array.n_sensors} ${modality.toUpperCase()} sensors`
         : modality.toUpperCase(),
@@ -496,6 +547,9 @@ export default function Page() {
     runRef.current.cancel();
   };
 
+  onRunRef.current = onRun;
+  onCancelRef.current = onCancel;
+
   // "Save and return" from a step. Placed sources and view choices are already
   // held in state (and localStorage); what needs persisting is the config the
   // pipeline will read, so write it and surface any validation error in the
@@ -507,33 +561,82 @@ export default function Page() {
     return saved.errors.length ? saved.errors : ["the config could not be saved"];
   };
 
-  // Only pinned output figures can be removed; the five core stages are what
+  // Only pinned output figures can be removed; the seven core stages are what
   // the FEM run is made of, so the canvas never offers to delete them.
-  const removeNode = useCallback((id: string) => {
-    if (id.startsWith("fig:")) {
-      const key = id.slice(4);
-      setOutputs((o) => o.filter((k) => k !== key));
-    } else if (addableById(id)) {
-      setExtras((e) => e.filter((k) => k !== id));
-      // Removing the EEG node hands the run back to the OPM array, so the
-      // canvas and the next run can never disagree about what is being solved.
-      if (id === "eeg") setModality("meg");
-    } else {
-      return; // a core stage: the run is made of exactly these
-    }
-    setPositions((p) => {
-      const next = { ...p };
-      delete next[id];
-      return next;
-    });
-    setMarked((m) => (m === id ? null : m));
-    setSelected((sel) => (sel === id ? null : sel));
-  }, []);
+  // Removal is one keypress and takes the card's dragged position with it, so
+  // it is always offered back. Restoring means putting the id back where it
+  // was in its list — appending would silently reorder the canvas.
+  const removeNode = useCallback(
+    (id: string) => {
+      const spec = addableById(id);
+      const isFigure = id.startsWith("fig:");
+      if (!isFigure && !spec) return; // a core stage: the run is made of these
+
+      const at = positions[id];
+      const title = isFigure
+        ? (figures.find((f) => f.key === id.slice(4))?.label ?? "figure")
+        : spec!.title;
+
+      let undo: () => void;
+      if (isFigure) {
+        const key = id.slice(4);
+        const index = outputs.indexOf(key);
+        setOutputs((o) => o.filter((k) => k !== key));
+        undo = () =>
+          setOutputs((o) =>
+            o.includes(key) ? o : [...o.slice(0, index), key, ...o.slice(index)],
+          );
+      } else {
+        const index = extras.indexOf(id);
+        const wasModality = modality;
+        setExtras((e) => e.filter((k) => k !== id));
+        // Removing the EEG node hands the run back to the OPM array, so the
+        // canvas and the next run can never disagree about what is solved.
+        if (id === "eeg") setModality("meg");
+        undo = () => {
+          setExtras((e) =>
+            e.includes(id) ? e : [...e.slice(0, index), id, ...e.slice(index)],
+          );
+          if (id === "eeg") setModality(wasModality);
+        };
+      }
+
+      setPositions((p) => {
+        const next = { ...p };
+        delete next[id];
+        return next;
+      });
+      setMarked((m) => (m === id ? null : m));
+      setSelected((sel) => (sel === id ? null : sel));
+
+      toast({
+        title: `Removed ${title}`,
+        body: "It can go back exactly where it was.",
+        action: {
+          label: "Undo",
+          icon: "reset",
+          onAct: () => {
+            undo();
+            if (at) setPositions((p) => ({ ...p, [id]: at }));
+            setMarked(id);
+          },
+        },
+      });
+    },
+    [positions, outputs, extras, figures, modality],
+  );
 
   const onReset = async () => {
     const r = await resetConfig();
     if (r) setConfig(r.config);
   };
+
+  // Dragged positions live in localStorage, so without this the only way back
+  // to the authored layout was clearing site data.
+  const resetLayout = useCallback(() => {
+    setPositions({});
+    setFitSignal((n) => n + 1);
+  }, []);
 
   const computeSummary = useMemo(() => {
     if (!config) return undefined;
@@ -541,13 +644,224 @@ export default function Page() {
     return w === 0 ? "all cores" : `${w} core${w === 1 ? "" : "s"}`;
   }, [config]);
 
+  // The one card the journey is actually blocked on. Only ever set when the
+  // user cannot yet press Run, because that is the state where a canvas of
+  // seven equally-weighted cards gives them nowhere to start.
+  const nextNode = useMemo(() => {
+    if (running || selected) return null;
+    if (!config) return null;
+    if (sources.length === 0) return "sources";
+    return null;
+  }, [running, selected, config, sources.length]);
+
+  // ── the keyboard ───────────────────────────────────────────────────────────
+  //
+  // The canvas hides most of its verbs behind a card you have to find first.
+  // These bindings, and the palette they open, are the flat index of the same
+  // verbs. Every binding here is listed in ShortcutsHelp; if one moves, that
+  // list moves with it.
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      // A stray letter typed into a field must never start a run.
+      const typing =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        el?.isContentEditable === true;
+
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
+
+      if (e.key === "Escape") {
+        // The palette and the two sheets own their own Escape, so stepping in
+        // here would close two layers on one press.
+        if (paletteOpen || advancedOpen || shortcutsOpen) return;
+        if (ladderOpen) return setLadderOpen(false);
+        if (logOpen) return setLogOpen(false);
+        if (addOpen) return setAddOpen(false);
+        if (selected) return setSelected(null);
+        return;
+      }
+
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+
+      switch (e.key) {
+        case "?":
+          e.preventDefault();
+          setShortcutsOpen(true);
+          break;
+        case "r":
+        case "R":
+          e.preventDefault();
+          if (running) onCancelRef.current();
+          else onRunRef.current();
+          break;
+        case "l":
+        case "L":
+          e.preventDefault();
+          setLogOpen((o) => !o);
+          break;
+        case "c":
+        case "C":
+          e.preventDefault();
+          setLadderOpen((o) => !o);
+          break;
+        case ",":
+          e.preventDefault();
+          setAdvancedOpen(true);
+          break;
+        case "a":
+        case "A":
+          e.preventDefault();
+          setSelected(null);
+          setAddOpen((o) => !o);
+          break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          setFitSignal((n) => n + 1);
+          break;
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [
+    paletteOpen,
+    advancedOpen,
+    shortcutsOpen,
+    ladderOpen,
+    logOpen,
+    addOpen,
+    selected,
+    running,
+  ]);
+
+  const commands: Command[] = useMemo(() => {
+    const steps: Command[] = nodes
+      .filter((n) => n.kind !== "figure")
+      .map((n) => ({
+        id: `open:${n.id}`,
+        title: `Open ${n.title}`,
+        group: "Steps",
+        icon: n.icon,
+        blurb: n.caption,
+        run: () => {
+          setSelected(n.id);
+          setMarked(n.id);
+          setAddOpen(false);
+        },
+      }));
+
+    return [
+      {
+        id: "run",
+        title: running ? "Stop the run" : "Run the journey",
+        group: "Run",
+        icon: running ? "stop" : "play",
+        hint: "R",
+        disabled: !running && (sources.length === 0 || !config),
+        blurb:
+          !running && sources.length === 0
+            ? "Place a current source first"
+            : "Every stage, start to finish",
+        run: () => (running ? onCancelRef.current() : onRunRef.current()),
+      },
+      {
+        id: "log",
+        title: "Show the run log",
+        group: "Run",
+        icon: "terminal",
+        hint: "L",
+        run: () => setLogOpen((o) => !o),
+      },
+      {
+        id: "ladder",
+        title: "Compare forward models",
+        group: "Run",
+        icon: "compare",
+        hint: "C",
+        run: () => setLadderOpen((o) => !o),
+      },
+      {
+        id: "add",
+        title: "Add to the journey",
+        group: "Canvas",
+        icon: "plus",
+        hint: "A",
+        blurb: "Figures, extra physics, where the solve runs",
+        run: () => {
+          setSelected(null);
+          setAddOpen(true);
+        },
+      },
+      {
+        id: "fit",
+        title: "Fit the journey to the view",
+        group: "Canvas",
+        icon: "fit",
+        hint: "F",
+        run: () => setFitSignal((n) => n + 1),
+      },
+      {
+        id: "layout",
+        title: "Reset the layout",
+        group: "Canvas",
+        icon: "reset",
+        blurb: "Put every card back where the journey says it goes",
+        disabled: Object.keys(positions).length === 0,
+        run: resetLayout,
+      },
+      ...steps,
+      {
+        id: "advanced",
+        title: "Advanced settings",
+        group: "Settings",
+        icon: "cog",
+        hint: ",",
+        disabled: !config,
+        run: () => setAdvancedOpen(true),
+      },
+      {
+        id: "shortcuts",
+        title: "Keyboard shortcuts",
+        group: "Settings",
+        icon: "terminal",
+        hint: "?",
+        run: () => setShortcutsOpen(true),
+      },
+    ];
+  }, [nodes, running, sources.length, config, positions, resetLayout]);
+
   const hudStages = running || Object.keys(statuses).length ? runningStages : ALL_STAGES;
+  const resumeSummary = useMemo(() => {
+    const s = saved.current;
+    if (!s) return undefined;
+    const n = s.sources?.length ?? 0;
+    const bits = [`${n} source${n === 1 ? "" : "s"}`];
+    if (s.target) bits.push(s.target.replace(/_/g, " "));
+    if (s.outputs?.length) bits.push(`${s.outputs.length} output nodes`);
+    return bits.join(" · ");
+  }, []);
+
   const doneCount = hudStages.filter(
     (s) => statuses[s] === "ran" || statuses[s] === "skipped",
   ).length;
 
   return (
     <div className="jshell">
+      {booting && (
+        <Boot
+          onDone={applyChoice}
+          canResume={(saved.current?.sources?.length ?? 0) > 0}
+          resumeSummary={resumeSummary}
+        />
+      )}
       <main className="jstage">
         <JourneyCanvas
           nodes={nodes}
@@ -567,7 +881,12 @@ export default function Page() {
           }
           onRemove={removeNode}
           onRunNode={(stages) => runStages(stages)}
+          onResetLayout={
+            Object.keys(positions).length ? resetLayout : undefined
+          }
           running={running}
+          next={nextNode}
+          fitSignal={fitSignal}
         />
 
         <div className="jchrome jchrome--tl" hidden={!!selectedNode}>
@@ -597,14 +916,26 @@ export default function Page() {
           <Button icon="cog" disabled={!config} onClick={() => setAdvancedOpen(true)}>
             Advanced
           </Button>
+          {/* Offline is the one state where the recovery action has to be
+              visible: hiding "click to reconnect" in a title attribute put it
+              exactly where a stuck user would never look. */}
           <button
             type="button"
             className={`jhealth${healthy ? " jhealth--up" : healthy === false ? " jhealth--down" : ""}`}
-            title="Backend status — click to reconnect"
+            title={
+              healthy === false
+                ? "The backend on :8000 is not answering"
+                : "Backend status — click to check now"
+            }
             onClick={loadBackend}
           >
             <span className="jhealth-dot" aria-hidden />
             {healthy == null ? "connecting" : healthy ? "online" : "offline"}
+            {healthy === false && (
+              <span className="jhealth-act">
+                <Icon name="reset" size={11} /> Reconnect
+              </span>
+            )}
           </button>
         </div>
 
@@ -621,7 +952,9 @@ export default function Page() {
               sources={sources}
               selected={selectedSource}
               target={target}
+              armPlacing={selected === "sources"}
               onSelect={setSelectedSource}
+              sensorCloud={sensorCloud}
               onAddSource={(p) => {
                 setSelectedSource(sources.length);
                 setSources((s) => [...s, { ...p, strength_nAm: 70 }]);
@@ -647,7 +980,7 @@ export default function Page() {
               refreshFigures();
             }}
           >
-            <Icon name="plus" size={14} /> Add output
+            <Icon name="plus" size={14} /> Add to journey
           </button>
           <span className="jtool-sep" aria-hidden />
           <button
@@ -676,12 +1009,14 @@ export default function Page() {
             added={
               new Set([...outputs.map((k) => `fig:${k}`), ...extras])
             }
-            onAddFigure={(f) =>
-              setOutputs((o) => (o.includes(f.key) ? o : [...o, f.key]))
-            }
+            onAddFigure={(f) => {
+              setOutputs((o) => (o.includes(f.key) ? o : [...o, f.key]));
+              setFitSignal((n) => n + 1);
+            }}
             onAddNode={(spec: AddableSpec) => {
               setExtras((e) => (e.includes(spec.id) ? e : [...e, spec.id]));
               if (spec.id === "eeg") setModality("eeg");
+              setFitSignal((n) => n + 1);
             }}
             onClose={() => setAddOpen(false)}
           />
@@ -715,6 +1050,7 @@ export default function Page() {
               setSelected(null);
               runStages(stages);
             }}
+            onSensorCloud={setSensorCloud}
             onOpenAdvanced={() => setAdvancedOpen(true)}
             onSave={onSaveStep}
             onBack={() => setSelected(null)}
@@ -742,7 +1078,11 @@ export default function Page() {
 
         {/* The run, narrated. Bottom centre, because during a run this is
             the only thing anyone is looking at. */}
-        <div className="jrun" aria-live="polite">
+        {/* No aria-live on the wrapper: it holds a clock that ticks every
+            second, so announcing the region announced the whole HUD once a
+            second for the length of the run. Only the stage name — the thing
+            that actually changes meaningfully — is live. */}
+        <div className="jrun">
           {configErrors.length > 0 && !running && (
             <div className="jrun-card jrun-card--bad">
               <Note tone="danger" title="Nothing was run">
@@ -763,7 +1103,7 @@ export default function Page() {
                     ? `${Math.min(doneCount + 1, hudStages.length)} / ${hudStages.length}`
                     : "done"}
                 </span>
-                <span className="jrun-name">
+                <span className="jrun-name" aria-live="polite">
                   {cancelling
                     ? "Stopping after this stage"
                     : running
@@ -772,7 +1112,11 @@ export default function Page() {
                         ? "Finished — no result"
                         : "Journey complete"}
                 </span>
-                <span className="jrun-clock mono">
+                <span
+                  className="jrun-clock mono"
+                  aria-hidden
+                  title={`${elapsed} seconds elapsed`}
+                >
                   {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
                   {String(elapsed % 60).padStart(2, "0")}
                 </span>
@@ -840,6 +1184,16 @@ export default function Page() {
           </p>
         )}
       </main>
+
+      <ToastHost />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
+
+      <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <Sheet
         open={advancedOpen}

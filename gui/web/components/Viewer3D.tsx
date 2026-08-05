@@ -257,6 +257,69 @@ function CameraRig({
   return null;
 }
 
+/**
+ * The sensor array drawn in the well itself, one point per channel.
+ *
+ * When `values` is present each point is coloured by what that sensor reads —
+ * a topography you can orbit, rather than a flat picture of one. The ramp is a
+ * single hue, dark to light, because the quantity is magnitude: there is no
+ * midpoint here for a diverging pair to sit on.
+ */
+function SensorCloud({
+  positions,
+  values,
+  size,
+}: {
+  positions: [number, number, number][];
+  values?: number[];
+  size: number;
+}) {
+  const geometry = useMemo(() => {
+    const geom = new THREE.BufferGeometry();
+    const xyz = new Float32Array(positions.length * 3);
+    positions.forEach((p, i) => {
+      xyz[i * 3] = p[0];
+      xyz[i * 3 + 1] = p[1];
+      xyz[i * 3 + 2] = p[2];
+    });
+    geom.setAttribute("position", new THREE.BufferAttribute(xyz, 3));
+
+    if (values && values.length === positions.length) {
+      const top = Math.max(...values) || 1;
+      const rgb = new Float32Array(positions.length * 3);
+      const low = new THREE.Color("#08301c");   // one hue…
+      const high = new THREE.Color("#7dffab");  // …dark to light
+      const c = new THREE.Color();
+      values.forEach((v, i) => {
+        // Field falls off steeply, so a linear ramp puts every sensor at the
+        // dark end and shows nothing. The square root keeps the near sensors
+        // separated without pretending the far ones read more than they do.
+        c.copy(low).lerp(high, Math.sqrt(Math.max(v, 0) / top));
+        rgb[i * 3] = c.r;
+        rgb[i * 3 + 1] = c.g;
+        rgb[i * 3 + 2] = c.b;
+      });
+      geom.setAttribute("color", new THREE.BufferAttribute(rgb, 3));
+    }
+    return geom;
+  }, [positions, values]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <points geometry={geometry}>
+      <pointsMaterial
+        size={size}
+        sizeAttenuation
+        vertexColors={!!values}
+        color={values ? undefined : "#8fb3a2"}
+        transparent
+        opacity={0.95}
+      />
+    </points>
+  );
+}
+
 interface Props {
   meshes: MeshInfo[];
   visible: Record<string, boolean>;
@@ -265,6 +328,18 @@ interface Props {
   target: string | null;
   onSelect: (i: number | null) => void;
   onAddSource: (p: { x: number; y: number; z: number }) => void;
+  /**
+   * True while the step whose whole job is placing sources is open. Placement
+   * is a mode, and the step's instruction is "click the target" — so the mode
+   * arms itself rather than making the user find a button the copy never
+   * mentioned and clicking the anatomy do nothing until they did.
+   */
+  armPlacing?: boolean;
+  /** Sensor positions to draw in the well, and optionally what each reads. */
+  sensorCloud?: {
+    positions: [number, number, number][];
+    values?: number[];
+  } | null;
 }
 
 export default function Viewer3D({
@@ -275,6 +350,8 @@ export default function Viewer3D({
   target,
   onSelect,
   onAddSource,
+  armPlacing = false,
+  sensorCloud = null,
 }: Props) {
   const { loaded, loading, failed, retryFailed } = useStlMeshes(meshes, visible);
   const [placing, setPlacing] = useState(false);
@@ -297,6 +374,13 @@ export default function Viewer3D({
   }, [loaded, shown, target]);
   const canSnap = snap && snapGeoms.length > 0;
   const markerR = modelSize * 0.011;
+
+  // Opening the Sources step arms placement; leaving it disarms, so the
+  // crosshair never survives into a step that has nothing to place.
+  useEffect(() => {
+    setPlacing(armPlacing);
+    setMissed(false);
+  }, [armPlacing]);
 
   useEffect(() => {
     if (!placing) return;
@@ -398,6 +482,14 @@ export default function Viewer3D({
           );
         })}
 
+        {sensorCloud && sensorCloud.positions.length > 0 && (
+          <SensorCloud
+            positions={sensorCloud.positions}
+            values={sensorCloud.values}
+            size={Math.max(modelSize * 0.006, 1.5)}
+          />
+        )}
+
         <OrbitControls ref={controls as never} makeDefault enableDamping />
         <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
           <GizmoViewport axisColors={["#e06666", "#7bd88f", "#6f9bff"]} labelColor="#0a0d13" />
@@ -444,7 +536,7 @@ export default function Viewer3D({
           </Tag>
         ) : (
           <Tag icon="eye-off">
-            no tissues visible — toggle one above
+            no tissues visible — turn one on in the panel
           </Tag>
         )}
         {failed.length > 0 && (
