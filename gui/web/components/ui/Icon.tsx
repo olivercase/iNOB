@@ -41,7 +41,7 @@ const PATHS: Record<IconName, string> = {
   // A body volume: the thing being imaged.
   anatomy: "M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6z M4 7.6l8 4.4 8-4.4 M12 12v8.8",
   // Tetrahedra: the FEM mesh.
-  mesh: "M4 19 12 4l8 15z M4 19h16 M12 4v15 M7.4 12.6h9.2",
+  mesh: "M4.2 5h15.6v14H4.2z M9.4 5v14 M14.6 5v14 M4.2 9.6h15.6 M4.2 14.4h15.6",
   // A sensor on a surface.
   sensor: "M5 15.5a7 7 0 0 1 14 0 M12 15.5v3.7 M8.4 19.2h7.2 M12 5.2V3.4 M17.8 7.4 19 6.2 M6.2 7.4 5 6.2",
   // Current: a dipole arrow.

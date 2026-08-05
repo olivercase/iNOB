@@ -20,6 +20,8 @@ export interface Session {
   extras: string[];
   /** Which physics the next run reports. */
   modality: "meg" | "eeg";
+  /** The vertebral level the sources were placed at, if they were. */
+  sourcesLevel: string | null;
 }
 
 export function loadSession(): Partial<Session> {
@@ -55,6 +57,8 @@ export function loadSession(): Partial<Session> {
         parsed.modality === "eeg" || parsed.modality === "meg"
           ? parsed.modality
           : undefined,
+      sourcesLevel:
+        typeof parsed.sourcesLevel === "string" ? parsed.sourcesLevel : null,
     };
   } catch {
     return {};

@@ -72,6 +72,11 @@ export default function Page() {
   // Which physics the run reports. The sensor-array step owns this; the EEG
   // node is a shortcut to it, so the two can never disagree.
   const [modality, setModality] = useState<"meg" | "eeg">("meg");
+  // Where the placed sources actually came from. Distinct from the config's
+  // electrodes.target_level, which is a patch setting that outlives any one
+  // set of sources — reading that for the badge claimed a level the sources
+  // had never been near.
+  const [sourcesLevel, setSourcesLevel] = useState<string | null>(null);
 
   const [figures, setFigures] = useState<FigureInfo[]>([]);
   const [outputs, setOutputs] = useState<string[]>([]);
@@ -164,6 +169,7 @@ export default function Page() {
     setExtras(session.extras ?? []);
     setPositions(session.positions ?? {});
     setModality(session.modality === "eeg" ? "eeg" : "meg");
+    setSourcesLevel(session.sourcesLevel ?? null);
     // Tissue visibility is a view preference rather than part of a preset, so
     // only a resumed session brings its own back.
     if (choice.kind === "resume" && saved.current?.visible) {
@@ -174,6 +180,9 @@ export default function Page() {
     setSelected(null);
     setRestored(true);
     setBooting(false);
+    // The canvas mounted behind the opening sequence with the bare spine on
+    // it; the choice just changed what is on it, so refit to the new graph.
+    setFitSignal((n) => n + 1);
   }, []);
 
   // Load everything the canvas needs from the backend. Kept as a callback,
@@ -266,6 +275,7 @@ export default function Page() {
       positions,
       extras,
       modality,
+      sourcesLevel,
     });
   }, [
     restored,
@@ -277,6 +287,7 @@ export default function Page() {
     positions,
     extras,
     modality,
+    sourcesLevel,
   ]);
 
   // ── the graph ──────────────────────────────────────────────────────────────
@@ -416,15 +427,11 @@ export default function Page() {
       conductivity: tissues.length ? `${tissues.length} tissues` : undefined,
       mesh: pitch ? `${pitch} mm pitch` : undefined,
       modality: modality.toUpperCase(),
-      sources: (() => {
-        if (!sources.length) return undefined;
-        const level = config
-          ? getPath<string>(config, "electrodes.target_level", "")
-          : "";
-        return level
-          ? `${sources.length} at ${level.toUpperCase()}`
-          : `${sources.length} placed`;
-      })(),
+      sources: sources.length
+        ? sourcesLevel
+          ? `${sources.length} at ${sourcesLevel.toUpperCase()}`
+          : `${sources.length} placed`
+        : undefined,
       sensors: result
         ? `${result.array.n_sensors} ${modality.toUpperCase()} sensors`
         : modality.toUpperCase(),
@@ -434,7 +441,7 @@ export default function Page() {
         : undefined,
     };
     return b;
-  }, [config, target, sources.length, result, modality]);
+  }, [config, target, sources.length, result, modality, sourcesLevel]);
 
   const previews: Record<string, string | undefined> = useMemo(() => {
     const p: Record<string, string | undefined> = {};
@@ -1048,6 +1055,8 @@ export default function Page() {
               setSelected(null);
               runStages(stages);
             }}
+            sourcesLevel={sourcesLevel}
+            onSourcesLevel={setSourcesLevel}
             onSensorCloud={setSensorCloud}
             onOpenAdvanced={() => setAdvancedOpen(true)}
             onSave={onSaveStep}

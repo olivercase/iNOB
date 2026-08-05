@@ -43,6 +43,7 @@ export const PRESETS: Preset[] = [
       positions: {},
       extras: [],
       modality: "meg",
+      sourcesLevel: null,
     },
   },
   {
@@ -68,6 +69,7 @@ export const PRESETS: Preset[] = [
       positions: {},
       extras: [],
       modality: "eeg",
+      sourcesLevel: "c7",
     },
   },
   {
@@ -86,6 +88,7 @@ export const PRESETS: Preset[] = [
       positions: {},
       extras: [],
       modality: "meg",
+      sourcesLevel: null,
     },
   },
 ];

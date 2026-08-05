@@ -125,6 +125,9 @@ interface Props {
   running: boolean;
   /** Run only these stages and return to the canvas to watch them. */
   onRunStage: (stages: string[]) => void;
+  /** The level the current sources were placed at, if any. */
+  sourcesLevel: string | null;
+  onSourcesLevel: (level: string | null) => void;
   /** Hand a sensor cloud to the 3-D well behind this step, or clear it. */
   onSensorCloud: (
     cloud: { positions: [number, number, number][]; values?: number[] } | null,
@@ -562,6 +565,7 @@ export default function StepView(p: Props) {
               onSourcesChange={p.onSourcesChange}
               selectedSource={p.selectedSource}
               onSelectSource={p.onSelectSource}
+              onSourcesLevel={p.onSourcesLevel}
             />
           )}
 
@@ -775,6 +779,7 @@ function SourcesStep({
   onSourcesChange,
   selectedSource,
   onSelectSource,
+  onSourcesLevel,
 }: {
   config: Cfg | null;
   onConfigChange: (c: Cfg) => void;
@@ -785,6 +790,7 @@ function SourcesStep({
   onSourcesChange: (s: PointSource[]) => void;
   selectedSource: number | null;
   onSelectSource: (i: number | null) => void;
+  onSourcesLevel: (level: string | null) => void;
 }) {
   const [levels, setLevels] = useState<LevelInfo[]>([]);
   const [count, setCount] = useState(3);
@@ -824,6 +830,9 @@ function SourcesStep({
       onSourcesChange(
         result.sources.map((pt) => ({ ...pt, strength_nAm: 70 })),
       );
+      // Only a placement can claim a level. Hand-edited sources go back to
+      // being simply "placed", because that is all we know about them.
+      onSourcesLevel(result.level);
       onSelectSource(null);
     } else if (err) {
       setError({ msg: err, hint });
@@ -958,7 +967,10 @@ function SourcesStep({
         sources={sources}
         selected={selectedSource}
         onSelect={onSelectSource}
-        onChange={onSourcesChange}
+        onChange={(next) => {
+          onSourcesChange(next);
+          onSourcesLevel(null);
+        }}
       />
     </>
   );

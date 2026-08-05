@@ -132,24 +132,29 @@ export default function JourneyCanvas({
     return () => window.clearTimeout(timer);
   }, [states]);
 
+  // Fit into the space the chrome leaves, not the whole element. The brand
+  // and run controls float over the top and the tool bars over the bottom, so
+  // fitting to the raw box tucked the first row of cards underneath them —
+  // the graph was there, just unreadable behind the buttons.
   const fit = useCallback(() => {
     const el = wrapRef.current;
     if (!el || nodes.length === 0) return;
     const b = bounds(nodes);
-    const pad = 130;
+    const inset = { top: 88, bottom: 84, side: 56 };
     const w = el.clientWidth || 1;
     const h = el.clientHeight || 1;
+    const availW = Math.max(w - inset.side * 2, 200);
+    const availH = Math.max(h - inset.top - inset.bottom, 200);
+    const graphW = b.maxX - b.minX;
+    const graphH = b.maxY - b.minY;
     const scale = Math.min(
       MAX_SCALE,
-      Math.max(
-        MIN_SCALE,
-        Math.min(w / (b.maxX - b.minX + pad * 2), h / (b.maxY - b.minY + pad * 2)),
-      ),
+      Math.max(MIN_SCALE, Math.min(availW / graphW, availH / graphH)),
     );
     setView({
       scale,
-      x: w / 2 - ((b.minX + b.maxX) / 2) * scale,
-      y: h / 2 - ((b.minY + b.maxY) / 2) * scale,
+      x: inset.side + availW / 2 - ((b.minX + b.maxX) / 2) * scale,
+      y: inset.top + availH / 2 - ((b.minY + b.maxY) / 2) * scale,
     });
   }, [nodes]);
 
