@@ -26,6 +26,10 @@ on:
       - "tests/test_meg_sphere_validation.py"
       - "Dockerfile"
       - "requirements-docker.txt"
+      # …and this file. A change to how the validation decides pass or fail
+      # could not test itself: the guard fix below went out on a push that
+      # this filter ignored, leaving the last visible result a stale failure.
+      - ".github/workflows/duneuro-validation.yml"
 
 jobs:
   duneuro:
