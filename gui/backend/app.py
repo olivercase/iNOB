@@ -28,20 +28,20 @@ import logging
 import os
 import queue
 import re
+import signal
 import subprocess
+import sys
 import tempfile
 import threading
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
-# The pipeline runs on a worker thread here (the request thread streams its log
-# over the WebSocket). matplotlib's default macOS backend refuses to build a
-# figure off the main thread — "Cannot create a GUI FigureManager outside the
-# main thread" — which killed the viz stage of every GUI run on a Mac while the
-# identical CLI run succeeded on the main thread. The pipeline only ever writes
-# PNGs to disk, so pin the non-interactive backend before anything imports
-# matplotlib. Must precede the inob imports below.
+# Anything in this process that touches matplotlib must stay off the GUI path:
+# its macOS backend refuses to build a figure outside the main thread. The
+# pipeline itself now runs in a child process (see /api/run — PyVista's VTK
+# window is Cocoa, and Cocoa is main-thread-only), but pin the non-interactive
+# backend here too, before anything imports matplotlib.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import yaml
@@ -57,7 +57,7 @@ from fastapi.responses import FileResponse
 from gui.backend import cluster, duneuro_setup
 from inob import __version__ as _inob_version
 from inob.analysis.detect import compute_detectability
-from inob.cli.pipeline import ALL_STAGES, run_pipeline
+from inob.cli.pipeline import ALL_STAGES
 from inob.config import ConfigError, load_config
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,10 @@ logger = logging.getLogger(__name__)
 # only one run may be in flight at a time (two concurrent runs would race on the
 # same files and the shared "inob" logger). Acquired non-blocking by /api/run.
 _RUN_LOCK = threading.Lock()
+
+# The pipeline child currently in flight, so shutdown can take it down with us
+# rather than leaving a headless solve behind.
+_ACTIVE_CHILD: dict[str, Any] = {"proc": None}
 
 # ── paths ───────────────────────────────────────────────────────────────────
 # gui/backend/app.py  →  project root is two parents up.
@@ -136,6 +140,11 @@ app.add_middleware(
 )
 
 
+@app.on_event("shutdown")
+def _stop_running_pipeline() -> None:
+    _stop_child(_ACTIVE_CHILD.get("proc"))
+
+
 @app.get("/api/system")
 def system_info() -> dict[str, Any]:
     """What this machine can bring to a local solve.
@@ -195,6 +204,144 @@ def health() -> dict[str, Any]:
         "active_config": str(_active_config_path()),
         "stages": list(ALL_STAGES),
     }
+
+
+# ── which interpreter runs a pipeline ─────────────────────────────────────────
+#
+# A DUNEuro build is a compiled extension tied to one Python version, and the
+# backend does not have to be that version: the pipeline runs as a child
+# process, so the solve can use whichever interpreter can actually load
+# duneuropy while the API keeps serving on its own. Without this a machine
+# whose only build targets 3.11 could never solve from a 3.14 backend, even
+# though the CLI ran fine under 3.11.
+#
+# Order: an explicit INOB_PIPELINE_PYTHON, then this interpreter if it can
+# solve, then the venv beside a discovered build — each candidate verified by
+# actually importing duneuropy and inob before it is used.
+
+_PIPELINE_PY: dict[str, str] = {}
+_TAGS: dict[str, str] = {}
+
+
+def _can_solve(python: str) -> bool:
+    """Can ``python`` run a real solve against *this* checkout?
+
+    Two things have to be true, and both have bitten us: the interpreter must
+    load the compiled ``duneuropy`` (it is built for one Python version), and
+    its ``inob`` must be the source in this project — a stale editable install
+    elsewhere on the machine silently ran a different copy of the pipeline.
+    The configured ``forward.duneuro_path`` is honoured here exactly as the
+    solver honours it, so a build that only needs a sys.path entry counts.
+    """
+    duneuro_path = _active_duneuro_path() or ""
+    # Never hand a build to an interpreter it was not compiled for: duneuropy
+    # has no ABI tag in its filename, so a mismatched interpreter dlopens it
+    # and segfaults inside PyInit_duneuropy rather than raising ImportError.
+    if duneuro_path:
+        build_tag = duneuro_setup._python_tag_for(Path(duneuro_path) / "x")
+        if duneuro_setup._tags_conflict(build_tag, _interpreter_tag(python)):
+            return False
+    probe = (
+        "import sys, json\n"
+        f"p = {duneuro_path!r}\n"
+        "if p: sys.path.insert(0, p)\n"
+        "import duneuropy, inob\n"
+        "print(inob.__file__)\n"
+    )
+    try:
+        out = subprocess.run(
+            [python, "-c", probe], capture_output=True, text=True, timeout=90,
+            env={**os.environ,
+                 "PYTHONPATH": os.pathsep.join(filter(None, [
+                     str(PROJECT_ROOT / "src"), os.environ.get("PYTHONPATH", "")]))},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if out.returncode != 0:
+        return False
+    where = Path(out.stdout.strip() or "/nonexistent").resolve()
+    return str(where).startswith(str((PROJECT_ROOT / "src").resolve()))
+
+
+def _interpreter_tag(python: str) -> str:
+    """Ask an interpreter for its own ``python3.X`` tag. Cheap and crash-free."""
+    cached = _TAGS.get(python)
+    if cached:
+        return cached
+    try:
+        out = subprocess.run(
+            [python, "-c",
+             "import sys; print(f'python3.{sys.version_info.minor}')"],
+            capture_output=True, text=True, timeout=30,
+        )
+        tag = out.stdout.strip() if out.returncode == 0 else "unknown"
+    except (OSError, subprocess.SubprocessError):
+        tag = "unknown"
+    _TAGS[python] = tag
+    return tag
+
+
+def _venv_python_for(site_packages: str) -> str | None:
+    """`.../venv/lib/python3.11/site-packages` → `.../venv/bin/python`."""
+    path = Path(site_packages)
+    for parent in path.parents:
+        candidate = parent / "bin" / "python"
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _solver_candidates() -> list[str]:
+    """Interpreters worth trying, best first.
+
+    This interpreter comes first (nothing to install). Then a plain
+    ``pythonX.Y`` matching a build's tag, which is usually the one that already
+    has this project installed. The build's own venv is last: it can load
+    duneuropy, but it often carries its own copy of ``inob``.
+    """
+    import shutil
+
+    out: list[str] = [sys.executable]
+    try:
+        found = duneuro_setup.discover(_active_duneuro_path())
+        candidates = found.get("candidates", [])  # type: ignore[union-attr]
+    except Exception as e:
+        logger.warning("could not enumerate duneuro builds: %s", e)
+        return out
+
+    tail: list[str] = []
+    for cand in candidates:
+        tag = str(cand.get("python_tag") or "")
+        if tag.startswith("python3"):
+            on_path = shutil.which(tag)
+            if on_path and on_path not in out:
+                out.append(on_path)
+        venv_py = _venv_python_for(str(cand["path"]))
+        if venv_py and venv_py not in tail:
+            tail.append(venv_py)
+    return out + tail
+
+
+def _pipeline_python() -> str:
+    """The interpreter a pipeline child should run under."""
+    explicit = os.environ.get("INOB_PIPELINE_PYTHON")
+    if explicit:
+        return explicit
+    cached = _PIPELINE_PY.get("path")
+    if cached:
+        return cached
+
+    chosen = sys.executable
+    for candidate in _solver_candidates():
+        if _can_solve(candidate):
+            chosen = candidate
+            break
+    if chosen != sys.executable:
+        logger.info("pipeline will run under %s (this backend cannot solve here)",
+                    chosen)
+
+    _PIPELINE_PY["path"] = chosen
+    return chosen
 
 
 # ── config ────────────────────────────────────────────────────────────────────
@@ -725,7 +872,7 @@ async def run_ws(ws: WebSocket) -> None:
         CLI reports.
         """
         argv = [
-            sys.executable, "-u", "-m", "inob.cli.pipeline",
+            _pipeline_python(), "-u", "-m", "inob.cli.pipeline",
             "--config", str(_active_config_path()),
             "--project-root", str(PROJECT_ROOT),
             "--stages", ",".join(stages),
@@ -737,17 +884,24 @@ async def run_ws(ws: WebSocket) -> None:
 
         env = dict(os.environ)
         env["MPLBACKEND"] = "Agg"          # matplotlib stays off any GUI path
+        # This project's src first, so the child can never pick up a stale
+        # editable install of inob from elsewhere on the machine.
         env["PYTHONPATH"] = os.pathsep.join(
             filter(None, [str(PROJECT_ROOT / "src"), env.get("PYTHONPATH", "")])
         )
 
         statuses: dict[str, str] = {}
+        # Its own process group: the forward stage fans out into a pool of
+        # chunk workers, and terminating only the parent orphaned twelve of
+        # them to keep burning every core with nothing to report to. Killing
+        # the group takes the whole solve down together.
         proc = subprocess.Popen(
             argv, cwd=str(PROJECT_ROOT), env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1,
+            text=True, bufsize=1, start_new_session=True,
         )
         child["proc"] = proc
+        _ACTIVE_CHILD["proc"] = proc
         assert proc.stdout is not None
         for line in proc.stdout:
             line = line.rstrip("\n")
@@ -761,6 +915,7 @@ async def run_ws(ws: WebSocket) -> None:
                 }[m.group(1)]
         code = proc.wait()
         child["proc"] = None
+        _ACTIVE_CHILD["proc"] = None
         if cancel.is_set():
             for name in stages:
                 statuses.setdefault(name, "cancelled")
@@ -844,19 +999,22 @@ async def run_ws(ws: WebSocket) -> None:
     async def _watch_for_cancel() -> None:
         """A client message during a run is a cancel request.
 
-        Cancellation is cooperative and lands at the next stage boundary — a
-        DUNEuro solve already in flight cannot be interrupted — so we tell the
-        client that plainly rather than pretending the run stopped at once.
+        The pipeline runs as a child process, so cancelling terminates it and
+        the run stops within a stage rather than only at the next boundary.
+        Whatever a stage had already written to disk stays there.
         """
         try:
             while not done.is_set():
                 msg = await ws.receive_json()
                 if isinstance(msg, dict) and msg.get("type") == "cancel":
                     cancel.set()
+                    # The work is a child process now, so a cancel can really
+                    # stop it: ask it to terminate rather than waiting out a
+                    # solve the user has already abandoned.
+                    _stop_child(child.get("proc"))
                     await ws.send_json({
                         "type": "log",
-                        "line": "— cancel requested; stopping after the "
-                                "current stage finishes —",
+                        "line": "— cancel requested; stopping the run —",
                     })
         except (WebSocketDisconnect, RuntimeError, ValueError):
             # Client vanished or sent junk. The run continues (it holds the

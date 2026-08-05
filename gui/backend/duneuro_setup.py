@@ -73,13 +73,39 @@ def _find_modules() -> list[Path]:
     return found
 
 
-def _importable_from(directory: Path, *, timeout: float = 20.0) -> bool:
+def _running_tag() -> str:
+    """This interpreter as a ``python3.X`` tag, to compare against a build."""
+    return f"python3.{sys.version_info.minor}"
+
+
+def _tags_conflict(build_tag: str, running_tag: str) -> bool:
+    """True when a build is known to target a different Python than ours.
+
+    ``unknown`` never conflicts: we cannot tell, so the build still gets
+    probed. A known mismatch is worth trusting, because probing one is not a
+    harmless experiment — see ``_importable_from``.
+    """
+    return build_tag.startswith("python3.") and build_tag != running_tag
+
+
+def _importable_from(directory: Path, *, timeout: float = 20.0,
+                     build_tag: str = "unknown") -> bool:
     """Can THIS interpreter import duneuropy with ``directory`` on sys.path?
 
     Runs in a subprocess of the current executable so a heavy or crashy
     extension can't take the backend down, and so sys.path/sys.modules stay
-    clean. The definitive compatibility test — not a filename heuristic.
+    clean.
+
+    A build compiled for another Python is NOT probed at all. duneuro-py names
+    its module plainly, with no ABI tag, so an incompatible interpreter will
+    happily dlopen it and then segfault inside ``PyInit_duneuropy`` — pybind11
+    calls into a CPython ABI that isn't there. That crash is contained by the
+    subprocess, but it still writes a macOS crash report every time the setup
+    panel is opened, so the version check comes first.
     """
+    if _tags_conflict(build_tag, _running_tag()):
+        return False
+
     code = (
         "import sys; sys.path.insert(0, sys.argv[1]); "
         "import duneuropy"
@@ -131,7 +157,7 @@ def discover(active_path: str | None) -> dict[str, object]:
             continue
         seen_dirs.add(key)
         tag = _python_tag_for(module_file)
-        importable = _importable_from(directory)
+        importable = _importable_from(directory, build_tag=tag)
         note = ""
         if not importable:
             note = (
@@ -159,7 +185,11 @@ def discover(active_path: str | None) -> dict[str, object]:
             module="(from config)",
             label=f"{directory.name}  ·  custom",
             python_tag=_python_tag_for(directory / "x"),
-            importable=_importable_from(directory) if directory.is_dir() else False,
+            importable=(
+                _importable_from(directory,
+                                 build_tag=_python_tag_for(directory / "x"))
+                if directory.is_dir() else False
+            ),
             note="" if directory.is_dir() else "Path does not exist.",
         ))
 
