@@ -23,16 +23,55 @@ _MODULE_NAMES = ("duneuropy.so", "duneuropy.dylib", "duneuropy.pyd")
 # Where local builds tend to live. Ordered best-first. The env var wins so a
 # non-standard build can be surfaced without code changes.
 def _search_roots() -> list[Path]:
+    """Where a DUNEuro build might plausibly live on this machine.
+
+    Nobody should have to type a path for a build that is sitting in an
+    obvious place, so this looks in the places people actually put one: an
+    explicit INOB_DUNEURO_ROOT, next to this checkout, the home directory,
+    every mounted volume, and the usual /opt and /usr/local prefixes. Each
+    root is scanned for the extension file itself (see _find_modules), so a
+    build nested a few directories down is still found.
+    """
     roots: list[Path] = []
     env = os.environ.get("INOB_DUNEURO_ROOT")
     if env:
         roots.append(Path(env))
-    roots += [
-        Path("/Volumes/UCL/duneuro_build"),
-        Path.home() / "duneuro_build",
-        Path.home() / "Scratch" / "inob" / "duneuro",
-    ]
-    return roots
+
+    home = Path.home()
+    here = Path(__file__).resolve().parents[2]      # the project checkout
+    named = ("duneuro_build", "duneuro", "duneuro-py", "duneuro-src")
+
+    for base in (here, here.parent, home, home / "Scratch" / "inob",
+                 Path("/opt"), Path("/usr/local")):
+        for name in named:
+            roots.append(base / name)
+
+    # Every mounted volume — an external disk is where a big build usually
+    # ends up, and /Volumes/UCL was only ever one example of that.
+    volumes = Path("/Volumes")
+    if volumes.is_dir():
+        try:
+            for volume in volumes.iterdir():
+                if not volume.is_dir():
+                    continue
+                for name in named:
+                    roots.append(volume / name)
+        except OSError:
+            pass
+
+    # Keep only directories that exist, in order, without duplicates.
+    seen: set[str] = set()
+    out: list[Path] = []
+    for root in roots:
+        try:
+            key = str(root.resolve())
+        except OSError:
+            continue
+        if key in seen or not root.is_dir():
+            continue
+        seen.add(key)
+        out.append(root)
+    return out
 
 
 @dataclass

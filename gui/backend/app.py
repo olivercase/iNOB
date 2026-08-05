@@ -215,35 +215,32 @@ def health() -> dict[str, Any]:
 # whose only build targets 3.11 could never solve from a 3.14 backend, even
 # though the CLI ran fine under 3.11.
 #
-# Order: an explicit INOB_PIPELINE_PYTHON, then this interpreter if it can
-# solve, then the venv beside a discovered build — each candidate verified by
-# actually importing duneuropy and inob before it is used.
+# The search pairs every plausible interpreter with every DUNEuro build found
+# on the machine and picks the first pair that genuinely imports, so a build
+# sitting in an obvious place needs no configuration at all.
 
-_PIPELINE_PY: dict[str, str] = {}
+_SOLVER: dict[str, Any] = {}
 _TAGS: dict[str, str] = {}
 
 
-def _can_solve(python: str) -> bool:
-    """Can ``python`` run a real solve against *this* checkout?
+def _can_solve(python: str, duneuro_path: str | None) -> bool:
+    """Can ``python`` run a real solve, with ``duneuro_path`` on sys.path?
 
-    Two things have to be true, and both have bitten us: the interpreter must
-    load the compiled ``duneuropy`` (it is built for one Python version), and
-    its ``inob`` must be the source in this project — a stale editable install
-    elsewhere on the machine silently ran a different copy of the pipeline.
-    The configured ``forward.duneuro_path`` is honoured here exactly as the
-    solver honours it, so a build that only needs a sys.path entry counts.
+    Three things have to be true, and each has bitten us. The interpreter must
+    load the compiled ``duneuropy`` (it is built for one Python version); its
+    ``inob`` must be the source in this checkout (a stale editable install
+    elsewhere silently ran a different copy of the pipeline); and the pair must
+    be tried in a subprocess, because an ABI mismatch segfaults rather than
+    raising ImportError.
     """
-    duneuro_path = _active_duneuro_path() or ""
-    # Never hand a build to an interpreter it was not compiled for: duneuropy
-    # has no ABI tag in its filename, so a mismatched interpreter dlopens it
-    # and segfaults inside PyInit_duneuropy rather than raising ImportError.
     if duneuro_path:
         build_tag = duneuro_setup._python_tag_for(Path(duneuro_path) / "x")
         if duneuro_setup._tags_conflict(build_tag, _interpreter_tag(python)):
             return False
+
     probe = (
-        "import sys, json\n"
-        f"p = {duneuro_path!r}\n"
+        "import sys\n"
+        f"p = {duneuro_path or ''!r}\n"
         "if p: sys.path.insert(0, p)\n"
         "import duneuropy, inob\n"
         "print(inob.__file__)\n"
@@ -264,7 +261,7 @@ def _can_solve(python: str) -> bool:
 
 
 def _interpreter_tag(python: str) -> str:
-    """Ask an interpreter for its own ``python3.X`` tag. Cheap and crash-free."""
+    """This interpreter as a ``python3.X`` tag. Cheap, cached, crash-free."""
     cached = _TAGS.get(python)
     if cached:
         return cached
@@ -291,57 +288,101 @@ def _venv_python_for(site_packages: str) -> str | None:
     return None
 
 
-def _solver_candidates() -> list[str]:
+def _interpreter_candidates(builds: list[dict[str, Any]]) -> list[str]:
     """Interpreters worth trying, best first.
 
-    This interpreter comes first (nothing to install). Then a plain
-    ``pythonX.Y`` matching a build's tag, which is usually the one that already
-    has this project installed. The build's own venv is last: it can load
-    duneuropy, but it often carries its own copy of ``inob``.
+    This one comes first — nothing to arrange. Then a plain ``pythonX.Y``
+    matching a build's tag, which is usually where this project is already
+    installed. A build's own venv is last: it can always load its duneuropy,
+    but it often carries its own copy of ``inob``.
     """
     import shutil
 
     out: list[str] = [sys.executable]
-    try:
-        found = duneuro_setup.discover(_active_duneuro_path())
-        candidates = found.get("candidates", [])  # type: ignore[union-attr]
-    except Exception as e:
-        logger.warning("could not enumerate duneuro builds: %s", e)
-        return out
-
     tail: list[str] = []
-    for cand in candidates:
-        tag = str(cand.get("python_tag") or "")
-        if tag.startswith("python3"):
-            on_path = shutil.which(tag)
-            if on_path and on_path not in out:
-                out.append(on_path)
-        venv_py = _venv_python_for(str(cand["path"]))
+    for build in builds:
+        tag = str(build.get("python_tag") or "")
+        if tag.startswith("python3."):
+            found = shutil.which(tag)
+            if found and found not in out:
+                out.append(found)
+        venv_py = _venv_python_for(str(build["path"]))
         if venv_py and venv_py not in tail:
             tail.append(venv_py)
     return out + tail
 
 
-def _pipeline_python() -> str:
-    """The interpreter a pipeline child should run under."""
-    explicit = os.environ.get("INOB_PIPELINE_PYTHON")
-    if explicit:
-        return explicit
-    cached = _PIPELINE_PY.get("path")
-    if cached:
-        return cached
+def _solver_choice() -> dict[str, Any]:
+    """Find an interpreter and a DUNEuro build that actually work together.
 
-    chosen = sys.executable
-    for candidate in _solver_candidates():
-        if _can_solve(candidate):
-            chosen = candidate
-            break
-    if chosen != sys.executable:
-        logger.info("pipeline will run under %s (this backend cannot solve here)",
-                    chosen)
+    Nobody should have to configure a path for a build that is sitting in an
+    obvious place, so this searches: the configured ``forward.duneuro_path``
+    first (an explicit choice wins), then every build discovered on the
+    machine, each paired with every plausible interpreter. The first pair that
+    genuinely imports is remembered for the session.
 
-    _PIPELINE_PY["path"] = chosen
-    return chosen
+    Returns ``{"python": str, "duneuro_path": str | None, "found": bool}``.
+    """
+    if _SOLVER.get("resolved"):
+        return _SOLVER["resolved"]  # type: ignore[return-value]
+
+    explicit_py = os.environ.get("INOB_PIPELINE_PYTHON")
+    configured = _active_duneuro_path()
+
+    try:
+        builds = list(duneuro_setup.discover(configured).get(
+            "candidates", []))  # type: ignore[arg-type]
+    except Exception as e:
+        logger.warning("could not search for DUNEuro builds: %s", e)
+        builds = []
+
+    # Paths to try, configured first, then everything discovered.
+    paths: list[str | None] = []
+    if configured:
+        paths.append(configured)
+    for build in builds:
+        path = str(build["path"])
+        if path not in paths:
+            paths.append(path)
+    # …and "no extra path at all", for an interpreter that already has it.
+    paths.append(None)
+
+    pythons = [explicit_py] if explicit_py else _interpreter_candidates(builds)
+
+    for python in pythons:
+        for path in paths:
+            if _can_solve(python, path):
+                choice = {"python": python, "duneuro_path": path, "found": True}
+                logger.info("solver: %s%s", python,
+                            f" with {path}" if path else "")
+                _SOLVER["resolved"] = choice
+                return choice
+
+    # Nothing works yet. Run anyway on this interpreter so the failure is the
+    # pipeline's own clear message rather than a guess made here.
+    choice = {"python": explicit_py or sys.executable,
+              "duneuro_path": configured, "found": False}
+    logger.info("solver: no working DUNEuro found; runs will use %s",
+                choice["python"])
+    _SOLVER["resolved"] = choice
+    return choice
+
+
+@app.get("/api/solver")
+def solver_info() -> dict[str, Any]:
+    """What the next run will solve with, and whether it can solve at all."""
+    choice = dict(_solver_choice())
+    choice["python_version"] = _interpreter_tag(str(choice["python"]))
+    choice["searched"] = [str(r) for r in duneuro_setup._search_roots()]
+    return choice
+
+
+@app.post("/api/solver/rescan")
+def solver_rescan() -> dict[str, Any]:
+    """Forget the cached choice and search again (a build may have appeared)."""
+    _SOLVER.pop("resolved", None)
+    _TAGS.clear()
+    return solver_info()
 
 
 # ── config ────────────────────────────────────────────────────────────────────
@@ -871,12 +912,18 @@ async def run_ws(ws: WebSocket) -> None:
         prints ([run]/[ok]/[skip]/[FAIL]), so the client sees exactly what the
         CLI reports.
         """
+        solver = _solver_choice()
         argv = [
-            _pipeline_python(), "-u", "-m", "inob.cli.pipeline",
+            str(solver["python"]), "-u", "-m", "inob.cli.pipeline",
             "--config", str(_active_config_path()),
             "--project-root", str(PROJECT_ROOT),
             "--stages", ",".join(stages),
         ]
+        # A build found by searching is passed to the run, so an auto-detected
+        # DUNEuro works without anyone having to save it into the config first.
+        found_path = solver.get("duneuro_path")
+        if found_path and found_path != _active_duneuro_path():
+            argv += ["--set", f"forward.duneuro_path={found_path}"]
         if force_run:
             argv.append("--force")
         for override in overrides:

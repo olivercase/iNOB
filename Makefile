@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint test doctor status pipeline geom fem sensors forward viz clean clean-outputs
+.PHONY: install install-dev lint test doctor status gui pipeline geom fem sensors forward viz clean clean-outputs
 
 PYTHON ?= python3
 CONFIG ?= configs/default.yaml
@@ -47,3 +47,8 @@ clean:
 
 clean-outputs:
 	rm -rf outputs
+
+# One action to get the whole GUI up: API, web app, browser. Stops both on
+# Ctrl-C. See scripts/gui.sh for the interpreter and port handling.
+gui:
+	./scripts/gui.sh

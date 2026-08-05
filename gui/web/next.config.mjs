@@ -13,6 +13,8 @@ const nextConfig = {
       { source: "/api/config/:path*", destination: `${BACKEND}/api/config/:path*` },
       { source: "/api/config", destination: `${BACKEND}/api/config` },
       { source: "/api/duneuro", destination: `${BACKEND}/api/duneuro` },
+      { source: "/api/solver", destination: `${BACKEND}/api/solver` },
+      { source: "/api/solver/:path*", destination: `${BACKEND}/api/solver/:path*` },
       { source: "/api/ladder", destination: `${BACKEND}/api/ladder` },
       { source: "/api/figures/:path*", destination: `${BACKEND}/api/figures/:path*` },
       { source: "/api/figures", destination: `${BACKEND}/api/figures` },

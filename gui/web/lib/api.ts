@@ -161,6 +161,37 @@ export async function getFigures(): Promise<FigureInfo[]> {
   }
 }
 
+// What the next run will solve with. The backend searches the machine for a
+// DUNEuro build and pairs it with an interpreter that can load it, so this
+// reports a decision already made rather than asking anyone to make one.
+export interface SolverInfo {
+  python: string;
+  python_version: string;
+  duneuro_path: string | null;
+  found: boolean;
+  searched: string[];
+}
+
+export async function getSolver(): Promise<SolverInfo | null> {
+  try {
+    const r = await fetch("/api/solver", { cache: "no-store" });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function rescanSolver(): Promise<SolverInfo | null> {
+  try {
+    const r = await fetch("/api/solver/rescan", { method: "POST" });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
 export interface RunHandlers {
   onLog: (line: string) => void;
   onStatuses?: (statuses: Record<string, string>) => void;

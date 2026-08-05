@@ -2378,3 +2378,51 @@ body {
   opacity: 0;
   cursor: not-allowed;
 }
+
+/* What the next run will solve with — reported, not asked for. */
+.solver {
+  padding: 12px 13px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--hair);
+  background: rgba(255, 255, 255, 0.02);
+}
+.solver-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+.solver-title {
+  font-size: 13px;
+}
+.solver-head .ui-btn {
+  margin-left: auto;
+}
+.solver-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+}
+.solver-facts > div {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+.solver-facts dt {
+  width: 52px;
+  flex: none;
+  color: var(--ink-3);
+}
+.solver-facts dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;          /* a long path truncates at the front, not the end */
+  text-align: left;
+}
