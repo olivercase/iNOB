@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
-from inob.analysis.propagation import compute_propagation_signals
+from inob.analysis.propagation import compute_propagation_signals, is_ordered_polyline
 from inob.config import Config, source_region_label, source_target_tag, target_output
 from inob.io.npz import load_leadfield
 from inob.physiology.profiles import profile_for_tag
@@ -117,6 +117,15 @@ def render_cap_compare(
     logger.info("[cap-compare] physiology profile:\n%s", profile.describe())
 
     lf = load_leadfield(cfg.outputs.forward_npz)
+    # "Whole polyline" arc length only means anything for an arc-length-
+    # ordered source set (vagus bundle, cord). Muscle's sources are a 3-D
+    # volume fill of the belly (see sources/muscle.py) — connecting them in
+    # list order to compute a cumulative arc length gives a number with no
+    # physical referent (tens of metres for a ~300 mm muscle; see
+    # PHYSIOLOGY-TODO in inob.physiology.scenarios). Gate the whole-polyline
+    # curve and its stats on the same ordering check
+    # inob.viz.detectability already uses for its propagation correction.
+    ordered_sources = is_ordered_polyline(lf.source_pos)
     # The source-model simulation itself lives in inob.analysis.propagation so
     # that inob.viz.detectability measures the same ratio this figure prints —
     # the two used to disagree by the full propagation factor.
@@ -131,9 +140,20 @@ def render_cap_compare(
     cv_mean = sig.cv_mean_m_per_s
     seg_len_m = sig.segment_mm * 1e-3
     arc_total_m = sig.total_span_mm * 1e-3
-    segment_mm = sig.segment_mm
     transit_seg_ms = sig.transit_segment_ms
     transit_whole_ms = sig.transit_whole_ms
+    # Like the whole-polyline arc length, the "active segment" length/transit
+    # are measured by walking the source list in cumulative-arc-length order
+    # (see compute_propagation_signals) — meaningless for muscle's unordered
+    # volume-fill (a nominal 50 mm window came out as 22822 mm on the current
+    # source ordering). The propagating *waveform* itself is unaffected — its
+    # per-source wavelet timing is still keyed to real 3-D position via
+    # nearest-neighbour search, not this statistic — so only the reported
+    # length/transit are gated, not sig_seg/p_seg.
+    seg_len_label = (f"{seg_len_m * 1000:.0f} mm" if ordered_sources
+                     else "n/a (volume-fill sources, not an ordered path)")
+    seg_len_legend = f"{seg_len_m * 1000:.0f} mm" if ordered_sources else "arc length n/a"
+    transit_seg_label = (f"{transit_seg_ms:.2f} ms" if ordered_sources else "n/a")
     Q_total_nAm = sig.Q_total_nAm
     mean_diameter_um = float(np.sum(profile.fibres.diameters_um * profile.fibres.weights))
 
@@ -160,13 +180,19 @@ def render_cap_compare(
     rms_residual = float(np.sqrt(np.mean(residual ** 2)))
     rms_stat = float(np.sqrt(np.mean(p_stat ** 2)))
 
+    whole_log = (
+        f"whole-{region} prop={peak_whole:.2f} fT "
+        f"(ratio {peak_whole / max(peak_stat, 1e-30):.3f})  ·  "
+        if ordered_sources else
+        "whole-polyline: n/a (volume-fill sources)  ·  "
+    )
     logger.info(
         "[cap-compare] best MEG #%d  ·  stat=%.2f fT  ·  active-segment prop=%.2f fT "
-        "(ratio %.3f)  ·  whole-%s prop=%.2f fT (ratio %.3f)  ·  FWHM stat/prop=%.2f/%.2f ms "
+        "(ratio %.3f)  ·  %sFWHM stat/prop=%.2f/%.2f ms "
         " ·  rms residual / rms stat=%.3f",
         best_c, peak_stat,
         peak_seg, peak_seg / max(peak_stat, 1e-30),
-        region, peak_whole, peak_whole / max(peak_stat, 1e-30),
+        whole_log,
         fwhm_stat, fwhm_seg,
         rms_residual / max(rms_stat, 1e-30),
     )
@@ -185,11 +211,11 @@ def render_cap_compare(
         )
     elif not profile.stationary_ok:
         logger.warning(
-            "[cap-compare] %s: transit %.2f ms over %.0f mm vs AP width %.2f ms — "
+            "[cap-compare] %s: transit %s over %s vs AP width %.2f ms — "
             "the stationary approximation is NOT valid for this target; it "
             "misestimates the peak by %.0f%% and the width by %.2fx. Use the "
             "propagating model for %s figures.",
-            region, transit_seg_ms, seg_len_m * 1000, ap_width_ms,
+            region, transit_seg_label, seg_len_label, ap_width_ms,
             100.0 * stat_error, fwhm_seg / max(fwhm_stat, 1e-30), region,
         )
     else:
@@ -203,7 +229,7 @@ def render_cap_compare(
         )
 
     seg_label = ("whole cord" if profile.propagation_span_mm is None
-                 else f"{segment_mm:.0f} mm segment")
+                 else "active segment")
 
     fig = plt.figure(figsize=(13.5, 4.6))
     gs = GridSpec(1, 3, figure=fig, left=0.06, right=0.98, top=0.82, bottom=0.16,
@@ -213,11 +239,11 @@ def render_cap_compare(
     ax0.plot(t_ms, p_stat, color=NATURE_PALETTE["blue"], lw=1.6,
              label="Stationary at generator")
     ax0.plot(t_ms, p_seg, color=NATURE_PALETTE["red"], lw=1.4, alpha=0.95,
-             label=f"Propagating, {seg_label} ({seg_len_m * 1000:.0f} mm)")
+             label=f"Propagating, {seg_label} ({seg_len_legend})")
     # When the profile has no localised generator the active segment IS the
     # whole polyline, so the third curve would be an exact duplicate of the
     # second. Draw it only when it is a distinct model.
-    whole_is_distinct = abs(seg_len_m - arc_total_m) > 1e-6
+    whole_is_distinct = ordered_sources and abs(seg_len_m - arc_total_m) > 1e-6
     if whole_is_distinct:
         ax0.plot(t_ms, p_whole, color=NATURE_PALETTE["axis"], lw=1.0, alpha=0.7,
                  linestyle="--",
@@ -249,22 +275,38 @@ def render_cap_compare(
         if profile.stationary_ok else
         "Stationary approximation INVALID\n  (transit >> AP width)"
     )
+    # The whole-polyline arc length/transit/peak are only meaningful when the
+    # sources are an ordered path (see ``ordered_sources`` above) — for a
+    # volume-fill target say so instead of printing a number with no
+    # physical referent.
+    whole_lines = (
+        f"Whole {region} polyline: {arc_total_m * 1000:.0f} mm\n"
+        if ordered_sources else
+        f"Whole {region}: n/a (volume-fill sources, not an ordered path)\n"
+    )
+    whole_transit_line = (
+        f"Transit, whole: {transit_whole_ms:.2f} ms\n" if ordered_sources else ""
+    )
+    whole_peak_lines = (
+        f"Propagating (whole): {peak_whole:8.2f} fT\n"
+        f"  P/S ratio:         {peak_whole / max(peak_stat, 1e-30):8.3f}\n\n"
+        if ordered_sources else ""
+    )
     summary = (
         f"{profile.paradigm}\n"
         f"Generator: {profile.generator}\n\n"
         f"Event: {n_fibres} fibres, mean d={mean_diameter_um:.1f} µm\n"
         f"Total moment Q_total: {Q_total_nAm:.2f} nA·m\n"
-        f"Active segment: {seg_len_m * 1000:.0f} mm\n"
-        f"Whole {region} polyline: {arc_total_m * 1000:.0f} mm\n"
+        f"Active segment: {seg_len_label}\n"
+        f"{whole_lines}"
         f"Mean fibre CV: {cv_mean:.1f} m/s\n"
-        f"Transit, active segment: {transit_seg_ms:.2f} ms\n"
-        f"Transit, whole: {transit_whole_ms:.2f} ms\n"
+        f"Transit, active segment: {transit_seg_label}\n"
+        f"{whole_transit_line}"
         f"AP width: {ap_width_ms:.2f} ms\n\n"
         f"Stationary peak:     {peak_stat:8.2f} fT\n"
         f"Propagating (segment):{peak_seg:7.2f} fT\n"
         f"  P/S ratio:         {peak_seg / max(peak_stat, 1e-30):8.3f}\n"
-        f"Propagating (whole): {peak_whole:8.2f} fT\n"
-        f"  P/S ratio:         {peak_whole / max(peak_stat, 1e-30):8.3f}\n\n"
+        f"{whole_peak_lines}"
         f"FWHM stationary:  {fwhm_stat:5.2f} ms\n"
         f"FWHM propagating: {fwhm_seg:5.2f} ms\n"
         f"FWHM ratio:       {fwhm_seg / max(fwhm_stat, 1e-30):6.3f}\n\n"
