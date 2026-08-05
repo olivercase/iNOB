@@ -104,12 +104,35 @@ def test_lock_survives_client_disconnect_until_the_pipeline_finishes(
     entered = threading.Event()
     may_finish = threading.Event()
 
-    def _slow_pipeline(cfg, *, stages, force=False, should_cancel=None):
-        entered.set()
-        may_finish.wait(timeout=10)
-        return {s: "ran" for s in stages}
+    # The pipeline runs as a child process now (VTK's renderer is main-thread
+    # only, so it cannot share this one), which is what has to be stood in for:
+    # a process whose output stream blocks until the test lets it finish.
+    class _SlowChild:
+        pid = -1
 
-    monkeypatch.setattr(app_mod, "run_pipeline", _slow_pipeline)
+        def __init__(self) -> None:
+            self.returncode: int | None = None
+
+        @property
+        def stdout(self):
+            def lines():
+                yield "[run]  geom: building"
+                entered.set()
+                may_finish.wait(timeout=10)
+                yield "[ok]   geom"
+            return lines()
+
+        def wait(self, timeout=None) -> int:
+            self.returncode = 0
+            return 0
+
+        def poll(self):
+            return self.returncode
+
+    monkeypatch.setattr(app_mod.subprocess, "Popen", lambda *a, **k: _SlowChild())
+    monkeypatch.setattr(app_mod, "_solver_choice",
+                        lambda: {"python": "python3", "duneuro_path": None,
+                                 "found": True})
     monkeypatch.setattr(app_mod, "load_config", lambda *a, **k: object())
     monkeypatch.setattr(app_mod, "compute_detectability",
                         lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no lf")))
