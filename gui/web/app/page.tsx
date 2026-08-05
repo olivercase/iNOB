@@ -20,7 +20,7 @@ import {
   type RunHandle,
 } from "@/lib/api";
 import { getPath, type Cfg } from "@/lib/config";
-import { loadSession, saveSession } from "@/lib/storage";
+import { clearSession, loadSession, saveSession } from "@/lib/storage";
 import { presetById } from "@/lib/presets";
 import {
   BASE_EDGES,
@@ -113,6 +113,7 @@ export default function Page() {
   const [unavailable, setUnavailable] = useState<DetectUnavailable | null>(null);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [ladderOpen, setLadderOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -223,6 +224,46 @@ export default function Page() {
   useEffect(() => {
     if (healthy && (config === null || meshes.length === 0)) loadBackend();
   }, [healthy, config, meshes.length, loadBackend]);
+
+  // Back to a blank journey. This clears *browser* state only — the canvas
+  // layout, placed sources, the last result — and re-reads the config from the
+  // backend so unsaved edits go too. Nothing on disk is touched: the YAML the
+  // backend holds and every figure and leadfield a run has written stay put,
+  // which is why the confirmation says so rather than implying a wipe.
+  //
+  // It ends back at the opening sequence, which is where a journey now starts.
+  // The saved session is forgotten first, so the boot screen offers presets
+  // rather than a "resume" that would hand the cleared work straight back.
+  const doReset = useCallback(() => {
+    clearSession();
+    saved.current = {};
+    setSources([]);
+    setSelectedSource(null);
+    setSourcesLevel(null);
+    setSensorCloud(null);
+    setThreshold(3);
+    setModality("meg");
+    setVisible({});
+    setTarget(null);
+    setOutputs([]);
+    setExtras([]);
+    setPositions({});
+    setMarked(null);
+    setSelected(null);
+    setLogs([]);
+    setStatuses({});
+    setResult(null);
+    setUnavailable(null);
+    setConfigErrors([]);
+    setStage(null);
+    setStartedAt(null);
+    setElapsed(0);
+    setRunningStages(ALL_STAGES);
+    setRestored(false);
+    setResetOpen(false);
+    setBooting(true);
+    loadBackend();
+  }, [loadBackend]);
 
   const refreshFigures = useCallback(() => {
     getFigures().then(setFigures);
@@ -374,6 +415,16 @@ export default function Page() {
     [running, stage, statuses],
   );
 
+  // Two ways to define the source set, and the solve is happy with either:
+  // dipoles placed by hand, or a tissue sampled at a spacing (the config's
+  // `forward.source_tissue`, which is what a whole-nerve run uses). Placed
+  // sources override sampling in the solver, so they win here too.
+  const sourceTissue = config
+    ? getPath<string>(config, "forward.source_tissue", "")
+    : "";
+  const sampledSources = !sources.length && !!sourceTissue;
+  const sourcesReady = sources.length > 0 || sampledSources;
+
   const states: Record<string, NodeState> = useMemo(() => {
     const s: Record<string, NodeState> = {
       modality: "done",
@@ -383,13 +434,13 @@ export default function Page() {
       conductivity: config ? "ready" : "idle",
       mesh: stageState("fem", "idle"),
       sensors: stageState("sensors", "idle"),
-      sources: sources.length ? "done" : "ready",
+      sources: sourcesReady ? "done" : "ready",
       solve: stageState("forward", "idle"),
       detect: result
         ? "done"
         : unavailable
           ? "failed"
-          : sources.length
+          : sourcesReady
             ? "ready"
             : "idle",
     };
@@ -409,7 +460,7 @@ export default function Page() {
     config,
     extras,
     meshes.length,
-    sources.length,
+    sourcesReady,
     result,
     unavailable,
     nodes,
@@ -473,8 +524,11 @@ export default function Page() {
   const runStages = async (stages: string[]) => {
     if (!config || running) return;
     // Only a solve needs dipoles; rebuilding geometry or the mesh does not.
+    // "No dipoles" is fine as long as a source tissue is set — the solver
+    // samples that instead. Blocking on placed sources alone made a
+    // whole-nerve run impossible from the GUI.
     const needsSources = stages.includes("forward");
-    if (needsSources && sources.length === 0) return;
+    if (needsSources && !sourcesReady) return;
     setLogs([]);
     setStatuses({});
     setResult(null);
@@ -911,15 +965,31 @@ export default function Page() {
             <Button
               variant="primary"
               icon="play"
-              disabled={sources.length === 0 || !config}
+              disabled={!sourcesReady || !config}
               onClick={onRun}
-              title={sources.length === 0 ? "Place a current source first" : "Run every stage"}
+              title={
+                !sourcesReady
+                  ? "Place a source, or pick a source tissue to sample"
+                  : "Run every stage"
+              }
             >
               Run journey
             </Button>
           )}
           <Button icon="cog" disabled={!config} onClick={() => setAdvancedOpen(true)}>
             Advanced
+          </Button>
+          <Button
+            icon="reset"
+            disabled={running}
+            onClick={() => setResetOpen(true)}
+            title={
+              running
+                ? "Stop the run before resetting"
+                : "Clear the journey and start over"
+            }
+          >
+            Start over
           </Button>
           {/* Offline is the one state where the recovery action has to be
               visible: hiding "click to reconnect" in a title attribute put it
@@ -1184,10 +1254,11 @@ export default function Page() {
           </section>
         )}
 
-        {sources.length === 0 && !running && !selectedNode && (
+        {!sourcesReady && !running && !selectedNode && (
           <p className="jhint">
-            Open <b>Sources</b>, then click the target in the 3-D view to drop
-            one. Drag any card to rearrange the journey.
+            Open <b>Sources</b> and pick a source tissue to sample along, or
+            click the target in the 3-D view to drop a single dipole. Drag any
+            card to rearrange the journey.
           </p>
         )}
       </main>
@@ -1266,6 +1337,49 @@ export default function Page() {
               own, or click the status chip to try now.
             </Note>
           )}
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        title="Start over?"
+        icon="reset"
+      >
+        <div className="drawer-body">
+          <Note tone="warn" title="This clears the whole journey">
+            Everything you have set up in this browser goes back to a blank
+            canvas, and it cannot be undone.
+          </Note>
+          <p className="drawer-lead">Cleared:</p>
+          <ul className="jlist">
+            <li>Placed sources and the detection threshold</li>
+            <li>The chosen target, modality, and which tissues are visible</li>
+            <li>Pinned output figures, added nodes, and the card layout</li>
+            <li>The last run&rsquo;s log, stage statuses, and result</li>
+            <li>Unsaved settings edits — the config is re-read from the backend</li>
+          </ul>
+          <p className="drawer-lead">
+            You land back at the opening sequence, ready to pick a starting
+            point.
+          </p>
+          <p className="drawer-lead">Kept:</p>
+          <ul className="jlist">
+            <li>
+              The saved config on disk. To put its values back to defaults, use
+              <b> Advanced → Reset all to defaults</b> instead.
+            </li>
+            <li>
+              Everything a run has written — meshes, figures, and leadfields
+              under <span className="mono">outputs/</span>. No files are deleted.
+            </li>
+          </ul>
+          <div className="drawer-actions">
+            <Button variant="danger" icon="reset" onClick={doReset}>
+              Reset everything
+            </Button>
+            <Button onClick={() => setResetOpen(false)}>Cancel</Button>
+          </div>
         </div>
       </Sheet>
     </div>

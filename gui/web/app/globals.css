@@ -1557,6 +1557,19 @@ body {
 }
 .drawer-actions {
   margin-bottom: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+/* Plain itemised list inside a sheet — used by the reset confirmation to spell
+   out what goes and what stays. */
+.jlist {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  line-height: 1.65;
+}
+.jlist li {
+  margin-bottom: 3px;
 }
 .adv {
   margin-bottom: 14px;
