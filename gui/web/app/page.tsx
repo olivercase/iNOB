@@ -382,8 +382,7 @@ export default function Page() {
             ? "ready"
             : "idle",
     };
-    // The optional nodes: EEG follows the chosen modality; the analytic rungs
-    // are always available, since neither needs a leadfield.
+    // The analytic rungs are always available: neither needs a leadfield.
     if (extras.includes("biot")) s.biot = "ready";
     if (extras.includes("sarvas")) s.sarvas = "ready";
 
@@ -398,7 +397,6 @@ export default function Page() {
     stageState,
     config,
     extras,
-    modality,
     meshes.length,
     sources.length,
     result,

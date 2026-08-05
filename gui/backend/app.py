@@ -224,6 +224,29 @@ _SOLVER: dict[str, Any] = {}
 _TAGS: dict[str, str] = {}
 
 
+def _stop_child(proc: subprocess.Popen[str] | None) -> None:
+    """Stop a pipeline child and every worker it spawned.
+
+    The child runs in its own session, so signalling the group reaches the
+    forward stage's chunk pool too — terminating only the parent orphaned
+    twelve solve workers that kept burning every core with nothing to report
+    to. TERM first, KILL if it is still there a few seconds later, because a
+    DUNEuro chunk mid-solve does not always unwind.
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    for sig, wait in ((signal.SIGTERM, 5.0), (signal.SIGKILL, 2.0)):
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except (ProcessLookupError, PermissionError, OSError):
+            return
+        try:
+            proc.wait(timeout=wait)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def _can_solve(python: str, duneuro_path: str | None) -> bool:
     """Can ``python`` run a real solve, with ``duneuro_path`` on sys.path?
 
@@ -702,7 +725,7 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
 
 
-def _figure_index() -> "OrderedDict[str, dict[str, Any]]":
+def _figure_index() -> OrderedDict[str, dict[str, Any]]:
     """Map figure key → metadata, in journey order (declared first, found after).
 
     Built fresh per request: figures appear mid-run, and the whole point of the
@@ -812,7 +835,7 @@ def sensor_array(modality: str = "meg") -> dict[str, Any]:
     orient = np.asarray(array.coilori, dtype=float)
     return {
         "modality": modality.lower(),
-        "count": int(len(pos)),
+        "count": len(pos),
         "unit": array.unit,
         "positions": [[round(float(v), 2) for v in p] for p in pos],
         "orientations": [[round(float(v), 4) for v in o] for o in orient],
@@ -873,7 +896,7 @@ def field_map(source: int = 0, modality: str = "meg") -> dict[str, Any]:
         "unit": unit,
         "peak": round(float(values.max()), 4),
         "rms": round(float(np.sqrt((values ** 2).mean())), 4),
-        "count": int(len(values)),
+        "count": len(values),
         "positions": [[round(float(v), 2) for v in p] for p in pos],
         "orientations": [[round(float(v), 4) for v in o]
                          for o in np.asarray(lf.coil_orient, dtype=float)],
@@ -964,7 +987,7 @@ def suggest_sources(
         "tissue": tissue,
         "level": level,
         "z_band_mm": list(band) if band else None,
-        "available": int(len(centroids)),
+        "available": len(centroids),
         "sources": [
             {"x": round(float(pt[0]), 2),
              "y": round(float(pt[1]), 2),
