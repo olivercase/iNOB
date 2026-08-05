@@ -20,6 +20,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      # PyVista renders the FEM figure through VTK, which needs an OpenGL
+      # context. A GitHub runner has no display, so the render segfaulted the
+      # whole pytest process (exit 139) rather than failing a test. Xvfb gives
+      # it one.
+      - name: Install rendering libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb libgl1 libglx-mesa0 libxrender1 libxext6 libsm6
+
       - name: Install package + dev deps
         run: |
           python -m pip install --upgrade pip
@@ -33,7 +43,11 @@ jobs:
       - name: Pytest
         # DUNEuro smoke tests auto-skip when duneuropy is unavailable; the
         # duneuro-validation workflow is what actually exercises them.
-        run: pytest -q
+        # xvfb-run supplies the display VTK needs for the FEM render test.
+        env:
+          MPLBACKEND: Agg
+          PYVISTA_OFF_SCREEN: "true"
+        run: xvfb-run -a pytest -q
 
   gui:
     # The browser GUI is the primary interface for non-CLI users, so a type

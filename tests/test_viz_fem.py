@@ -1,6 +1,9 @@
 """Tests for inob.viz.fem (PyVista FEM render)."""
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +16,41 @@ from inob.viz.fem import _build_grid, _build_lut, render_fem
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
+
+
+def _can_render() -> bool:
+    """Can VTK open a rendering context here?
+
+    PyVista renders through OpenGL, and where there is none it does not raise
+    — it segfaults the interpreter, taking the whole test session with it
+    (exit 139, no failure report, no remaining tests). So this is checked in a
+    subprocess, and the render test skips rather than detonating: CI supplies
+    a display with Xvfb, and a contributor on a headless box is not blocked by
+    a figure they were not touching.
+    """
+    probe = (
+        "import pyvista as pv;"
+        "pv.OFF_SCREEN = True;"
+        "p = pv.Plotter(off_screen=True);"
+        "p.add_mesh(pv.Sphere());"
+        "p.screenshot(None, return_img=False);"
+        "p.close()"
+    )
+    try:
+        done = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True, timeout=120,
+            env={**os.environ, "PYVISTA_OFF_SCREEN": "true", "MPLBACKEND": "Agg"},
+        )
+        return done.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+CAN_RENDER = _can_render()
+needs_gl = pytest.mark.skipif(
+    not CAN_RENDER, reason="no OpenGL context available for VTK rendering"
+)
 
 
 @pytest.fixture
@@ -42,6 +80,7 @@ def test_render_fem_missing_file_raises(cfg) -> None:
         render_fem(cfg)
 
 
+@needs_gl
 def test_render_fem_writes_png(cfg, tiny_fem: FemMesh) -> None:
     save_fem(cfg.outputs.fem_mat, tiny_fem)
     out = render_fem(cfg)
