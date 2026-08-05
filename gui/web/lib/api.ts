@@ -192,6 +192,115 @@ export async function rescanSolver(): Promise<SolverInfo | null> {
   }
 }
 
+// A vertebral level and the Z band its own segmented STL occupies.
+export interface LevelInfo {
+  level: string;
+  z_lo_mm: number;
+  z_hi_mm: number;
+}
+
+export async function getLevels(): Promise<LevelInfo[]> {
+  try {
+    const r = await fetch("/api/levels", { cache: "no-store" });
+    if (!r.ok) return [];
+    return (await r.json()).levels ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Points guaranteed to sit inside the mesh — tet centroids of a tissue,
+// optionally restricted to a vertebral level.
+export interface SuggestedSources {
+  tissue: string;
+  level: string | null;
+  z_band_mm: [number, number] | null;
+  available: number;
+  sources: { x: number; y: number; z: number }[];
+}
+
+export async function suggestSources(
+  tissue: string,
+  level: string | null,
+  count: number,
+): Promise<{ result?: SuggestedSources; error?: string; hint?: string }> {
+  const params = new URLSearchParams({ tissue, count: String(count) });
+  if (level) params.set("level", level);
+  try {
+    const r = await fetch(`/api/sources/suggest?${params}`, { cache: "no-store" });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) return { result: body };
+    return {
+      error: body.detail?.errors?.[0] ?? `request failed: ${r.status}`,
+      hint: body.detail?.hint,
+    };
+  } catch {
+    return { error: "could not reach the backend" };
+  }
+}
+
+// The sensor array, as data rather than a rendered picture.
+export interface SensorArrayInfo {
+  modality: string;
+  count: number;
+  unit: string;
+  positions: [number, number, number][];
+  orientations: [number, number, number][];
+  names: string[];
+  types: string[];
+}
+
+export async function getSensorArray(
+  modality: string,
+): Promise<{ result?: SensorArrayInfo; error?: string; hint?: string }> {
+  try {
+    const r = await fetch(`/api/sensors?modality=${modality}`, { cache: "no-store" });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) return { result: body };
+    return {
+      error: body.detail?.errors?.[0] ?? `request failed: ${r.status}`,
+      hint: body.detail?.hint,
+    };
+  } catch {
+    return { error: "could not reach the backend" };
+  }
+}
+
+// What every sensor reads for one solved source — the topography, as numbers.
+export interface FieldMap {
+  modality: string;
+  source_index: number;
+  n_sources: number;
+  source_pos: [number, number, number];
+  unit: string;
+  peak: number;
+  rms: number;
+  count: number;
+  positions: [number, number, number][];
+  orientations: [number, number, number][];
+  values: number[];
+  names: string[];
+}
+
+export async function getFieldMap(
+  source: number,
+  modality: string,
+): Promise<{ result?: FieldMap; error?: string; hint?: string }> {
+  try {
+    const r = await fetch(`/api/fieldmap?source=${source}&modality=${modality}`, {
+      cache: "no-store",
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) return { result: body };
+    return {
+      error: body.detail?.errors?.[0] ?? `request failed: ${r.status}`,
+      hint: body.detail?.hint,
+    };
+  } catch {
+    return { error: "could not reach the backend" };
+  }
+}
+
 export interface RunHandlers {
   onLog: (line: string) => void;
   onStatuses?: (statuses: Record<string, string>) => void;

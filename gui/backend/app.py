@@ -44,6 +44,7 @@ from typing import Any
 # backend here too, before anything imports matplotlib.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
+import numpy as np
 import yaml
 from fastapi import (
     FastAPI,
@@ -777,6 +778,220 @@ def get_figure(key: str) -> FileResponse:
     if meta is None or not meta["exists"]:
         raise HTTPException(status_code=404, detail=f"no figure named {key!r}")
     return FileResponse(meta["path"], media_type="image/png")
+
+
+# ── sensor array and field map ────────────────────────────────────────────────
+#
+# The stage figures are rendered PNGs, which cannot answer a question: you
+# cannot rotate one, or ask which channel that hot spot is. These two endpoints
+# serve the same information as data — sensor placement, and what each sensor
+# actually reads for a solved source — so the GUI can draw it in the 3-D well
+# and let it be interrogated.
+
+@app.get("/api/sensors")
+def sensor_array(modality: str = "meg") -> dict[str, Any]:
+    """Sensor positions and orientations for the array that was built."""
+    from inob.io.hdf5 import load_sensors
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    path = (cfg.outputs.electrodes_mat if modality.lower() == "eeg"
+            else cfg.outputs.sensors_mat)
+    if not path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail={"errors": [f"no {modality.upper()} array has been built yet"],
+                    "hint": "Run the Sensor array step first."},
+        )
+
+    array = load_sensors(path)
+    pos = np.asarray(array.coilpos, dtype=float)
+    orient = np.asarray(array.coilori, dtype=float)
+    return {
+        "modality": modality.lower(),
+        "count": int(len(pos)),
+        "unit": array.unit,
+        "positions": [[round(float(v), 2) for v in p] for p in pos],
+        "orientations": [[round(float(v), 4) for v in o] for o in orient],
+        "names": list(array.labels)[: len(pos)],
+        "types": sorted(set(array.chantype)),
+    }
+
+
+@app.get("/api/fieldmap")
+def field_map(source: int = 0, modality: str = "meg") -> dict[str, Any]:
+    """What every sensor reads for one solved source.
+
+    This is the topography the PNG topoplot draws, served as numbers: one value
+    per channel, with the channel's own position, so the client can colour the
+    array in 3-D rather than showing a flat picture of it.
+    """
+    from inob.io.npz import load_leadfield
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    path = (cfg.outputs.forward_eeg_npz if modality.lower() == "eeg"
+            else cfg.outputs.forward_npz)
+    try:
+        lf = load_leadfield(path)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"errors": [str(e)],
+                    "hint": "Run the forward solve — the field map is read from "
+                            "its leadfield."},
+        ) from e
+
+    n_sources = int(np.asarray(lf.source_pos).shape[0])
+    if not 0 <= source < n_sources:
+        raise HTTPException(
+            status_code=422,
+            detail={"errors": [f"source {source} is out of range (have {n_sources})"]},
+        )
+
+    # L is (channels, 3·sources): three orthogonal dipole components per source.
+    # The magnitude over those three is what a sensor would read for a unit
+    # dipole there, whatever its orientation.
+    L = np.asarray(lf.L_fT_per_nAm, dtype=float)
+    block = L[:, 3 * source: 3 * source + 3]
+    values = np.linalg.norm(block, axis=1)
+
+    pos = np.asarray(lf.coil_pos, dtype=float)
+    src = np.asarray(lf.source_pos, dtype=float)[source]
+    unit = "uV per nA·m" if modality.lower() == "eeg" else "fT per nA·m"
+    return {
+        "modality": modality.lower(),
+        "source_index": source,
+        "n_sources": n_sources,
+        "source_pos": [round(float(v), 2) for v in src],
+        "unit": unit,
+        "peak": round(float(values.max()), 4),
+        "rms": round(float(np.sqrt((values ** 2).mean())), 4),
+        "count": int(len(values)),
+        "positions": [[round(float(v), 2) for v in p] for p in pos],
+        "orientations": [[round(float(v), 4) for v in o]
+                         for o in np.asarray(lf.coil_orient, dtype=float)],
+        "values": [round(float(v), 4) for v in values],
+        "names": list(lf.channel_names)[: len(values)],
+    }
+
+
+# ── source suggestions ────────────────────────────────────────────────────────
+#
+# Clicking anatomy in the 3-D view is how a source gets placed, and the way it
+# most often goes wrong is a click that lands just outside the volume: the
+# surface is right there, but the solver needs a point *inside* a tetrahedron.
+# This returns points that are inside by construction — tet centroids of the
+# requested tissue — optionally restricted to a named vertebral level, which is
+# how a spinal study actually specifies where it is looking.
+
+@app.get("/api/sources/suggest")
+def suggest_sources(
+    tissue: str = "vagus_left",
+    level: str | None = None,
+    count: int = 3,
+) -> dict[str, Any]:
+    import numpy as np
+
+    from inob.anatomy import VERTEBRA_LEVELS, vertebra_z_band
+    from inob.io.hdf5 import load_fem
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    if not cfg.outputs.fem_mat.exists():
+        raise HTTPException(
+            status_code=409,
+            detail={"errors": ["the FEM mesh has not been built yet"],
+                    "hint": "Run the FEM meshing step first — sources are placed "
+                            "inside its tetrahedra."},
+        )
+
+    fem = load_fem(cfg.outputs.fem_mat)
+    if tissue not in fem.label_to_id:
+        raise HTTPException(
+            status_code=422,
+            detail={"errors": [f"{tissue!r} is not in the mesh"],
+                    "hint": f"have: {', '.join(sorted(fem.label_to_id))}"},
+        )
+
+    nodes = np.asarray(fem.nodes)
+    tets = np.asarray(fem.tets)
+    labels = np.asarray(fem.tissue).astype(int)
+    centroids = nodes[tets[labels == int(fem.label_to_id[tissue])]].mean(axis=1)
+
+    band: tuple[float, float] | None = None
+    if level:
+        key = level.lower()
+        if key not in VERTEBRA_LEVELS:
+            raise HTTPException(
+                status_code=422,
+                detail={"errors": [f"unknown vertebral level {level!r}"],
+                        "hint": f"have: {', '.join(VERTEBRA_LEVELS)}"},
+            )
+        z_lo, z_hi = vertebra_z_band(cfg.data.bone_dir, key)
+        band = (z_lo, z_hi)
+        inside = centroids[(centroids[:, 2] >= z_lo) & (centroids[:, 2] <= z_hi)]
+        if len(inside) == 0:
+            raise HTTPException(
+                status_code=409,
+                detail={"errors": [
+                    f"no {tissue} tetrahedra lie within {key.upper()} "
+                    f"({z_lo:.0f}–{z_hi:.0f} mm)"],
+                    "hint": "That tissue does not reach this level. Pick another "
+                            "level, or another source tissue."},
+            )
+        centroids = inside
+
+    # Spread the picks along the structure rather than clustering them: a study
+    # places sources over a span, not all at one height.
+    count = max(1, min(int(count), 24))
+    order = np.argsort(centroids[:, 2])
+    picks = [
+        centroids[order[int(len(order) * (i + 0.5) / count)]]
+        for i in range(count)
+    ]
+
+    return {
+        "tissue": tissue,
+        "level": level,
+        "z_band_mm": list(band) if band else None,
+        "available": int(len(centroids)),
+        "sources": [
+            {"x": round(float(pt[0]), 2),
+             "y": round(float(pt[1]), 2),
+             "z": round(float(pt[2]), 2)}
+            for pt in picks
+        ],
+    }
+
+
+@app.get("/api/levels")
+def vertebral_levels() -> dict[str, Any]:
+    """The vertebral levels this anatomy actually carries, with their Z bands."""
+    from inob.anatomy import VERTEBRA_LEVELS, vertebra_z_band
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    out = []
+    for level in VERTEBRA_LEVELS:
+        try:
+            z_lo, z_hi = vertebra_z_band(cfg.data.bone_dir, level)
+        except Exception:
+            continue          # not segmented in this dataset — simply not offered
+        out.append({"level": level, "z_lo_mm": round(z_lo, 1), "z_hi_mm": round(z_hi, 1)})
+    return {"levels": out}
 
 
 # ── cluster submission ──────────────────────────────────────────────────────────
