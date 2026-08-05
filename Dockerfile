@@ -35,13 +35,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # with "invalid use of non-static member function" 6 minutes in. Eigen is
 # header-only, so pinning it is cheap, and 5.0.1 is the version the working
 # local build (cluster/build_duneuro.sh, via Homebrew) compiles against.
+#
+# BLAS/LAPACK are switched off deliberately: duneuro uses only the headers,
+# and those two targets are the one part of Eigen that must be compiled — an
+# install without a build looked for libeigen_blas_static.a and failed.
 ARG EIGEN_VERSION=5.0.1
 RUN set -eux; \
     curl -fsSL -o /tmp/eigen.tar.gz \
         "https://gitlab.com/libeigen/eigen/-/archive/${EIGEN_VERSION}/eigen-${EIGEN_VERSION}.tar.gz"; \
     tar -xzf /tmp/eigen.tar.gz -C /tmp; \
     cmake -S "/tmp/eigen-${EIGEN_VERSION}" -B /tmp/eigen-build \
-        -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_TESTING=OFF; \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DBUILD_TESTING=OFF \
+        -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF \
+        -DEIGEN_BUILD_DOC=OFF; \
     cmake --install /tmp/eigen-build; \
     rm -rf /tmp/eigen.tar.gz "/tmp/eigen-${EIGEN_VERSION}" /tmp/eigen-build; \
     grep -E "define EIGEN_(WORLD|MAJOR|MINOR)_VERSION" \
