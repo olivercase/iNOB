@@ -39,6 +39,21 @@ from inob.viz.style import (
 logger = logging.getLogger(__name__)
 
 
+def _fmt_peak(value: float) -> str:
+    """Format a peak amplitude with ~3 significant figures.
+
+    A fixed ``.1f`` reads fine for a vagus/spine MEG peak (10s–1000s fT) but
+    rounds a small EEG peak — muscle's common-average-referenced surface
+    potential is ~0.005 µV — down to "0.0", making a real, if small, signal
+    look like exactly zero in the legend.
+    """
+    if value == 0 or not np.isfinite(value):
+        return f"{value:.1f}"
+    from math import floor, log10
+    decimals = max(0, 2 - floor(log10(abs(value))))
+    return f"{value:.{decimals}f}"
+
+
 @dataclass(frozen=True)
 class TopoFrame:
     source_idx: int
@@ -561,9 +576,9 @@ def render_dual_topoplot(
     meg_norm = meg_val / np.abs(meg_val).max() if np.abs(meg_val).max() else meg_val
     eeg_norm = eeg_val / np.abs(eeg_val).max() if np.abs(eeg_val).max() else eeg_val
     ax_d.hist(meg_norm, bins=bins, color=NATURE_PALETTE["blue"], alpha=0.65,
-              label=f"MEG  ·  peak |L| = {np.abs(meg_val).max():.1f} fT")
+              label=f"MEG  ·  peak |L| = {_fmt_peak(np.abs(meg_val).max())} fT")
     ax_d.hist(eeg_norm, bins=bins, color=NATURE_PALETTE["red"], alpha=0.65,
-              label=f"EEG  ·  peak |L| = {np.abs(eeg_val).max():.1f} µV")
+              label=f"EEG  ·  peak |L| = {_fmt_peak(np.abs(eeg_val).max())} µV")
     ax_d.axvline(0, color=NATURE_PALETTE["axis"], lw=0.6)
     ax_d.set_xlabel("Channel amplitude  /  modality peak")
     ax_d.set_ylabel("Sensor count")

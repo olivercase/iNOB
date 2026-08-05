@@ -27,6 +27,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from inob.config import Config, source_region_label, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
+from inob.viz.detectability import default_source_idx
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -145,7 +146,7 @@ def render_surface_topoplots(
     electrodes = load_sensors(cfg.outputs.electrodes_mat)
 
     if source_idx < 0:
-        source_idx = meg_lf.source_pos.shape[0] // 2
+        source_idx = default_source_idx(meg_lf, eeg_lf)
     src = meg_lf.source_pos[source_idx]
 
     # ── MEG: longitudinal-moment leadfield at radial OPMs ──────────────────

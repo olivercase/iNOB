@@ -44,6 +44,7 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 
+from inob.analysis.propagation import is_ordered_polyline
 from inob.analysis.snr import (
     compute_noise_floors,
     per_source_best_bipolar,
@@ -331,6 +332,36 @@ def _optional_leadfield(path):
     return load_leadfield(path) if path.exists() else None
 
 
+def _compatible_eeg_leadfield(meg_lf, eeg_lf):
+    """Drop the EEG leadfield if it was solved against a different source set.
+
+    The MEG and EEG leadfields for one target are supposed to share a source
+    list (same ``forward.source_spacing_mm`` / anisotropy run), so every
+    per-source panel can index both with the same ``source_idx``. When a
+    target has been re-solved on one modality but not the other — e.g. muscle
+    after a source-spacing or anisotropy change was re-run for MEG but the EEG
+    array job is still queued — the two ``.npz`` files disagree on source
+    count and every per-source EEG panel raises a matplotlib shape error deep
+    in rendering instead of failing informatively.
+
+    Treat a mismatch as "no EEG yet" (same as the file being absent) rather
+    than crashing, and say why in the log so it is not mistaken for the EEG
+    solve having failed outright.
+    """
+    if eeg_lf is None:
+        return None
+    if eeg_lf.source_pos.shape[0] != meg_lf.source_pos.shape[0]:
+        logger.warning(
+            "EEG leadfield has %d sources but MEG has %d — solved against a "
+            "different source set (stale cache or a re-run that only "
+            "regenerated one modality). Rendering MEG-only until a matching "
+            "EEG solve is available.",
+            eeg_lf.source_pos.shape[0], meg_lf.source_pos.shape[0],
+        )
+        return None
+    return eeg_lf
+
+
 def default_source_idx(meg_lf, eeg_lf) -> int:
     """Which source the single-source panels (a, c, d, f) should report.
 
@@ -379,7 +410,8 @@ def render_detectability(
 
     region = source_region_label(cfg)
     meg_lf = load_leadfield(cfg.outputs.forward_npz)
-    eeg_lf = _optional_leadfield(cfg.outputs.forward_eeg_npz)
+    eeg_lf = _compatible_eeg_leadfield(
+        meg_lf, _optional_leadfield(cfg.outputs.forward_eeg_npz))
     has_eeg = eeg_lf is not None
     if source_idx < 0:
         source_idx = default_source_idx(meg_lf, eeg_lf)
@@ -391,6 +423,13 @@ def render_detectability(
     eeg_peak = (per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)   # µV/nAm
                 if has_eeg else None)
     z = meg_lf.source_pos[:, 2]
+    # A volume-fill source set (muscle) has no meaningful order along its
+    # source list — connecting points by list order in a line plot draws
+    # zigzags between sources that share a z but sit in different muscles, or
+    # different sides of the body. The per-source panels switch to a scatter
+    # for these targets; ordered-polyline targets (vagus, spine) are
+    # unaffected and keep the line plot they have always had.
+    ordered_sources = is_ordered_polyline(meg_lf.source_pos)
     budget = clinical_average_budget(cfg)
     # Where the stationary lump is not defensible, every panel carries a second
     # dashed family showing what propagation costs. Solid is then an upper
@@ -432,8 +471,15 @@ def render_detectability(
     # ── figure (2 rows MEG+EEG, or 1 row MEG-only) ─────────────────────────
     fig_h = 11.5 if has_eeg else 6.2
     fig = plt.figure(figsize=(15, fig_h))
+    # The suptitle, each panel's own title, and the "b"/"e" panel labels all
+    # need physical (inch) space above the axes, not a fixed figure-fraction —
+    # a fraction sized for the two-row (fig_h=11.5) case leaves only ~0.4 in
+    # for the one-row MEG-only case (e.g. muscle, which has no EEG solve yet),
+    # so the panel label and suptitle text overlap. Reserve a constant ~0.85 in
+    # regardless of row count.
+    top = 1.0 - 0.85 / fig_h
     gs = GridSpec(2 if has_eeg else 1, 3, figure=fig,
-                  left=0.06, right=0.97, top=0.93,
+                  left=0.06, right=0.97, top=top,
                   bottom=0.055 + 0.115 * caption_lines / fig_h,
                   hspace=0.36, wspace=0.30)
 
@@ -483,6 +529,19 @@ def render_detectability(
         ax.legend(handles + proxies, labels + [h.get_label() for h in proxies],
                   loc="lower right", fontsize=7, handlelength=1.6)
 
+    def _line_or_scatter(ax, y, *, color, lw, label=None, ls="-", alpha=1.0):
+        """Line for an ordered polyline source set, scatter otherwise.
+
+        See the ``ordered_sources`` note above ``z`` — a list-order line plot
+        over muscle's volume-fill sources connects points that are not spatial
+        neighbours, drawing zigzags with no physical meaning.
+        """
+        if ordered_sources:
+            ax.plot(z, y, color=color, lw=lw, label=label, ls=ls, alpha=alpha)
+        else:
+            ax.scatter(z, y, color=color, s=6, label=label, alpha=max(alpha, 0.35),
+                       edgecolors="none")
+
     def _plot_trials_per_source(ax, peak_arr: np.ndarray, sigma: float,
                                   *, ymax: float | None = None,
                                   factor: float | None = None):
@@ -501,14 +560,15 @@ def render_detectability(
             sig = peak_arr * sc.Q_nAm
             n = trials(sig)
             all_n.append(n)
-            ax.plot(z, n, color=col, lw=1.4, label=sc.label)
+            _line_or_scatter(ax, n, color=col, lw=1.4, label=sc.label)
             if factor is not None:
                 # One scalar applied across the whole source axis: the
                 # propagating model is a single event sweeping the structure,
                 # so it has no per-source form to plot.
                 n_prop = trials(sig * factor)
                 all_n.append(n_prop)
-                ax.plot(z, n_prop, color=col, lw=1.2, ls=(0, (4, 2)), alpha=0.9)
+                _line_or_scatter(ax, n_prop, color=col, lw=1.2, ls=(0, (4, 2)),
+                                 alpha=0.9)
         ax.set_xlabel("Source z (mm)")
         ax.set_ylabel(f"Trials needed for SNR ≥ {snr_threshold:g}")
         ax.set_yscale("log")
@@ -531,6 +591,49 @@ def render_detectability(
                        linestyle=":", alpha=0.6)
             ax.text(z.min(), max_trials * 1.4, f"{max_trials:.0e} trials",
                     fontsize=6.5, color=NATURE_PALETTE["axis"], alpha=0.8)
+
+    def _floors_everywhere(peak_arr: np.ndarray, sigma: float) -> bool:
+        """True when every scenario clears threshold in one trial at every z.
+
+        ``_plot_trials_per_source`` floors at N = 1 (§ module docstring), so
+        for a source this strong the whole panel is a flat line at 1 — no
+        detection boundary crosses the plotted range, so the panel carries no
+        information about *where* along the structure detection succeeds or
+        fails (see :func:`_plot_snr_margin_per_source`, used instead for that
+        case). Checked per modality/scenario-set combination, since a source
+        this strong for MEG need not be for EEG.
+        """
+        if not scenarios:
+            return False
+        weakest = min(scenarios, key=lambda sc: sc.Q_nAm)
+        snr1 = peak_arr * weakest.Q_nAm / sigma
+        return bool(np.all(snr1 >= snr_threshold))
+
+    def _plot_snr_margin_per_source(ax, peak_arr: np.ndarray, sigma: float,
+                                     *, factor: float | None = None):
+        """Single-trial SNR along the source axis (dB above threshold).
+
+        Used instead of :func:`_plot_trials_per_source` when every scenario
+        already clears the detection threshold in a single trial everywhere
+        along the structure (muscle's MMG signal does, by 1–3 orders of
+        magnitude) — trials-to-detect is then a flat line at N = 1 with no
+        information in it. The informative question for a source this strong
+        is not "how many trials" but "how much headroom", so this panel plots
+        single-trial SNR in dB, which keeps varying with position even when
+        every curve sits far above the N = 1 floor.
+        """
+        for sc, col in zip(scenarios, scenario_colors, strict=False):
+            snr = np.maximum(peak_arr * sc.Q_nAm / sigma, 1e-30)
+            _line_or_scatter(ax, 20 * np.log10(snr), color=col, lw=1.4,
+                             label=sc.label)
+            if factor is not None:
+                snr_prop = np.maximum(peak_arr * sc.Q_nAm * factor / sigma, 1e-30)
+                _line_or_scatter(ax, 20 * np.log10(snr_prop), color=col, lw=1.2,
+                                 ls=(0, (4, 2)), alpha=0.9)
+        ax.axhline(20 * np.log10(snr_threshold), color=NATURE_PALETTE["axis"],
+                   lw=0.8, linestyle="--", label=f"SNR = {snr_threshold:g}")
+        ax.set_xlabel("Source z (mm)")
+        ax.set_ylabel("Single-trial SNR (dB above 1)")
 
     # Event-repetition rates for the averaging axis, and their label. Muscle
     # events recur at motor-unit firing rates (~8–30 Hz); vagal CAPs at the
@@ -578,9 +681,14 @@ def render_detectability(
     add_panel_label(ax_a, "a")
 
     ax_b = fig.add_subplot(gs[0, 1])
-    _plot_trials_per_source(ax_b, meg_peak, sigma_meg,
-                            factor=None if prop is None else prop.meg)
-    ax_b.set_title(f"MEG  ·  trials-to-detect along the {region}")
+    meg_factor = None if prop is None else prop.meg
+    if _floors_everywhere(meg_peak, sigma_meg):
+        _plot_snr_margin_per_source(ax_b, meg_peak, sigma_meg, factor=meg_factor)
+        ax_b.set_title(f"MEG  ·  single-trial SNR along the {region} "
+                       "(detects in N=1 everywhere)")
+    else:
+        _plot_trials_per_source(ax_b, meg_peak, sigma_meg, factor=meg_factor)
+        ax_b.set_title(f"MEG  ·  trials-to-detect along the {region}")
     ax_b.legend(loc="upper right", fontsize=6.5, handlelength=1.4)
     add_panel_label(ax_b, "b")
 
@@ -601,9 +709,14 @@ def render_detectability(
         add_panel_label(ax_d, "d")
 
         ax_e = fig.add_subplot(gs[1, 1])
-        _plot_trials_per_source(ax_e, eeg_peak, sigma_eeg,
-                                factor=None if prop is None else prop.eeg)
-        ax_e.set_title(f"EEG  ·  trials-to-detect along the {region}")
+        eeg_factor = None if prop is None else prop.eeg
+        if _floors_everywhere(eeg_peak, sigma_eeg):
+            _plot_snr_margin_per_source(ax_e, eeg_peak, sigma_eeg, factor=eeg_factor)
+            ax_e.set_title(f"EEG  ·  single-trial SNR along the {region} "
+                           "(detects in N=1 everywhere)")
+        else:
+            _plot_trials_per_source(ax_e, eeg_peak, sigma_eeg, factor=eeg_factor)
+            ax_e.set_title(f"EEG  ·  trials-to-detect along the {region}")
         ax_e.legend(loc="upper right", fontsize=6.5, handlelength=1.4)
         add_panel_label(ax_e, "e")
 
@@ -641,7 +754,8 @@ def detectability_summary(cfg: Config, *, source_idx: int = -1) -> dict:
     sigma_eeg = floors.eeg_per_channel_uV
 
     meg_lf = load_leadfield(cfg.outputs.forward_npz)
-    eeg_lf = _optional_leadfield(cfg.outputs.forward_eeg_npz)
+    eeg_lf = _compatible_eeg_leadfield(
+        meg_lf, _optional_leadfield(cfg.outputs.forward_eeg_npz))
     if source_idx < 0:
         source_idx = default_source_idx(meg_lf, eeg_lf)
 
