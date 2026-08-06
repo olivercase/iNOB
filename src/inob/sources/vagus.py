@@ -173,6 +173,50 @@ def resolve_source_positions(cfg, fem: FemMesh) -> np.ndarray:
         assert_sources_in_mesh(pos, fem)
         logger.info("%d explicit point sources (overriding vagus sampling)", len(pos))
         return pos
-    return sample_source_tissues(
+    pos = sample_source_tissues(
         fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
     )
+    return _restrict_to_level(pos, cfg)
+
+
+def level_span_z_band(bone_dir, spec: str) -> tuple[float, float]:
+    """Z band for a level spec: one level (``"c7"``) or a range (``"c1-c7"``).
+
+    A range is the union of its endpoints' own measured bands, so "cervical"
+    means C1's top down to C7's bottom as segmented in this anatomy — not a
+    proportion of body height. Order is irrelevant: ``c7-c1`` == ``c1-c7``,
+    because the union is taken rather than assuming which end is superior.
+    """
+    from inob.anatomy import vertebra_z_band
+
+    parts = [p.strip().lower() for p in str(spec).split("-") if p.strip()]
+    if not parts:
+        raise ValueError(f"empty source level spec: {spec!r}")
+    bands = [vertebra_z_band(bone_dir, p) for p in parts]
+    return min(b[0] for b in bands), max(b[1] for b in bands)
+
+
+def _restrict_to_level(pos: np.ndarray, cfg) -> np.ndarray:
+    """Keep only dipoles inside ``forward.source_level``'s vertebral Z band.
+
+    Studying one region means sampling it at the same density as the whole
+    structure, not thinning the whole structure down to a few points — so the
+    spacing is unchanged and this only clips the extent.
+    """
+    level = getattr(cfg.forward, "source_level", None)
+    if not level:
+        return pos
+    z_lo, z_hi = level_span_z_band(cfg.data.bone_dir, level)
+    keep = (pos[:, 2] >= z_lo) & (pos[:, 2] <= z_hi)
+    if not keep.any():
+        raise ValueError(
+            f"no {cfg.forward.source_tissue} dipoles lie within "
+            f"{str(level).upper()} ({z_lo:.0f}-{z_hi:.0f} mm), so the forward solve "
+            "would have nothing to evaluate. Pick another level, or clear "
+            "forward.source_level to sample the whole structure."
+        )
+    logger.info(
+        "%d of %d dipoles kept: %s spans %.1f-%.1f mm",
+        int(keep.sum()), len(pos), str(level).upper(), z_lo, z_hi,
+    )
+    return pos[keep]

@@ -930,8 +930,9 @@ def suggest_sources(
 ) -> dict[str, Any]:
     import numpy as np
 
-    from inob.anatomy import VERTEBRA_LEVELS, vertebra_z_band
+    from inob.anatomy import VERTEBRA_LEVELS
     from inob.io.hdf5 import load_fem
+    from inob.sources.vagus import level_span_z_band
 
     try:
         cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
@@ -962,13 +963,16 @@ def suggest_sources(
     band: tuple[float, float] | None = None
     if level:
         key = level.lower()
-        if key not in VERTEBRA_LEVELS:
+        # One level ("c7") or a span ("c1-c7"); the span form is how a cervical
+        # study is expressed, so the points path has to understand it too or
+        # choosing cervical would break the moment you switched to placing.
+        if any(p.strip() not in VERTEBRA_LEVELS for p in key.split("-") if p.strip()):
             raise HTTPException(
                 status_code=422,
                 detail={"errors": [f"unknown vertebral level {level!r}"],
                         "hint": f"have: {', '.join(VERTEBRA_LEVELS)}"},
             )
-        z_lo, z_hi = vertebra_z_band(cfg.data.bone_dir, key)
+        z_lo, z_hi = level_span_z_band(cfg.data.bone_dir, key)
         band = (z_lo, z_hi)
         inside = centroids[(centroids[:, 2] >= z_lo) & (centroids[:, 2] <= z_hi)]
         if len(inside) == 0:
@@ -1001,6 +1005,66 @@ def suggest_sources(
              "y": round(float(pt[1]), 2),
              "z": round(float(pt[2]), 2)}
             for pt in picks
+        ],
+    }
+
+
+@app.get("/api/sources/sampled")
+def sampled_sources(
+    tissue: str | None = None,
+    level: str | None = None,
+    spacing_mm: float | None = None,
+) -> dict[str, Any]:
+    """How many dipoles the solve would sample, and where — the default path.
+
+    Placing explicit points is the override; sampling the structure at
+    ``forward.source_spacing_mm`` is what a run does when the source list is
+    empty. The step needs to say what that means in numbers before the user
+    commits to a solve, so this runs the *same* sampler the pipeline uses
+    (``resolve_source_positions``) rather than approximating it — a count the
+    GUI derived by its own rule would be a count the run does not honour.
+    """
+    from dataclasses import replace
+
+    from inob.io.hdf5 import load_fem
+    from inob.sources.vagus import resolve_source_positions
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    if not cfg.outputs.fem_mat.exists():
+        raise HTTPException(
+            status_code=409,
+            detail={"errors": ["the FEM mesh has not been built yet"],
+                    "hint": "Run the FEM meshing step first — dipoles are "
+                            "sampled inside its tetrahedra."},
+        )
+
+    fwd = cfg.forward
+    # An empty point_sources is the whole point here: we are reporting the
+    # sampled path, not whatever points happen to be placed right now.
+    fwd = replace(
+        fwd,
+        point_sources=(),
+        source_tissue=tissue or fwd.source_tissue,
+        source_level=level if level is not None else fwd.source_level,
+        source_spacing_mm=float(spacing_mm) if spacing_mm else fwd.source_spacing_mm,
+    )
+    try:
+        pos = resolve_source_positions(replace(cfg, forward=fwd), load_fem(cfg.outputs.fem_mat))
+    except Exception as e:
+        raise HTTPException(status_code=409, detail={"errors": [str(e)]}) from e
+
+    return {
+        "tissue": fwd.source_tissue,
+        "level": fwd.source_level,
+        "spacing_mm": fwd.source_spacing_mm,
+        "count": int(len(pos)),
+        "sources": [
+            {"x": round(float(p[0]), 2), "y": round(float(p[1]), 2), "z": round(float(p[2]), 2)}
+            for p in pos
         ],
     }
 

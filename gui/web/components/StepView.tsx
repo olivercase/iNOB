@@ -7,6 +7,7 @@ import { getPath, setPath, type Cfg } from "@/lib/config";
 import {
   getFieldMap,
   getLevels,
+  getSampledSources,
   getSensorArray,
   runLadder,
   suggestSources,
@@ -14,6 +15,7 @@ import {
   type LadderRung,
   type FieldMap,
   type LevelInfo,
+  type SampledSources,
   type SensorArrayInfo,
   type SuggestedSources,
 } from "@/lib/api";
@@ -56,10 +58,34 @@ const VERTEBRAE = [
   { name: "cervical", levels: ["c1", "c2", "c3", "c4", "c5", "c6", "c7"] },
   {
     name: "thoracic",
-    levels: ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12"],
+    levels: [
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+      "t5",
+      "t6",
+      "t7",
+      "t8",
+      "t9",
+      "t10",
+      "t11",
+      "t12",
+    ],
   },
   { name: "lumbar", levels: ["l1", "l2", "l3", "l4", "l5"] },
 ];
+
+// The level a "one level" study means when nothing else is said. Mirrors the
+// spine entry in inob.config.SOURCE_TARGETS, which sets the same default for
+// the CLI and the cluster path.
+const DEFAULT_LEVEL = "c7";
+
+// The cervical span, as forward.source_level spells it. The vagus mesh runs
+// from below T12 to above C1, but the 70 nA·m reference and the Biot-Savart /
+// Sarvas ladder are all cervical-vagus figures (Bu et al. 2024) — so a study
+// that wants to match those constants has to be able to say "cervical".
+const CERVICAL_SPAN = "c1-c7";
 
 const THRESHOLDS = [
   { value: 3, label: "3 — Rose criterion (standard)" },
@@ -128,6 +154,11 @@ interface Props {
   /** The level the current sources were placed at, if any. */
   sourcesLevel: string | null;
   onSourcesLevel: (level: string | null) => void;
+  /** Mark the current sources as one placement's worth, so the well lights
+   *  them up together; cleared as soon as any of them is edited by hand. */
+  onJustPlaced: (v: boolean) => void;
+  /** Hand the sampled dipoles to the 3-D well, or clear them. */
+  onDipoleCloud: (positions: [number, number, number][] | null) => void;
   /** Hand a sensor cloud to the 3-D well behind this step, or clear it. */
   onSensorCloud: (
     cloud: { positions: [number, number, number][]; values?: number[] } | null,
@@ -172,7 +203,8 @@ function NumField({
             const v = e.currentTarget.value;
             setDraft(v);
             const n = Number(v);
-            if (v.trim() !== "" && Number.isFinite(n)) onChange(setPath(config, path, n));
+            if (v.trim() !== "" && Number.isFinite(n))
+              onChange(setPath(config, path, n));
           }}
           onBlur={() => setDraft(null)}
         />
@@ -281,8 +313,14 @@ export default function StepView(p: Props) {
           </a>
         )}
         {writesConfig ? (
-          <button type="button" className="jbtn jbtn--go" onClick={save} disabled={saving}>
-            <Icon name="check" size={14} /> {saving ? "Saving…" : "Save and return"}
+          <button
+            type="button"
+            className="jbtn jbtn--go"
+            onClick={save}
+            disabled={saving}
+          >
+            <Icon name="check" size={14} />{" "}
+            {saving ? "Saving…" : "Save and return"}
           </button>
         ) : (
           <button type="button" className="jbtn jbtn--go" onClick={p.onBack}>
@@ -310,24 +348,22 @@ export default function StepView(p: Props) {
             <>
               <p className="jlead">
                 What you record with. It decides which sensors are placed, which
-                leadfield is solved, and which noise floor the answer is measured
-                against — so it comes first.
+                leadfield is solved, and which noise floor the answer is
+                measured against — so it comes first.
               </p>
               <div className="jstack">
-                {(
-                  [
-                    {
-                      key: "meg" as const,
-                      title: "MEG · OPM magnetometers",
-                      note: "Triaxial optically-pumped sensors standing off the skin. No contact, no skin impedance.",
-                    },
-                    {
-                      key: "eeg" as const,
-                      title: "EEG · surface electrodes",
-                      note: "Contacts on the skin. Cheaper and lighter, and blurred by the tissue between source and contact.",
-                    },
-                  ]
-                ).map((m) => (
+                {[
+                  {
+                    key: "meg" as const,
+                    title: "MEG · OPM magnetometers",
+                    note: "Triaxial optically-pumped sensors standing off the skin. No contact, no skin impedance.",
+                  },
+                  {
+                    key: "eeg" as const,
+                    title: "EEG · surface electrodes",
+                    note: "Contacts on the skin. Cheaper and lighter, and blurred by the tissue between source and contact.",
+                  },
+                ].map((m) => (
                   <button
                     key={m.key}
                     type="button"
@@ -398,15 +434,19 @@ export default function StepView(p: Props) {
 
               <h2 className="jsub">Tissues in the mesh</h2>
               <p className="stepfield-help" style={{ marginBottom: 10 }}>
-                Each tissue included here becomes its own conductive compartment.
-                Leaving one out makes it part of the surrounding tissue.
+                Each tissue included here becomes its own conductive
+                compartment. Leaving one out makes it part of the surrounding
+                tissue.
               </p>
               <div className="jstack">
                 {p.meshes.map((m) => {
                   const inMesh = femTissues.includes(m.name);
                   const shown = p.visible[m.name] !== false;
                   return (
-                    <div key={m.name} className={`tissue${inMesh ? " tissue--on" : ""}`}>
+                    <div
+                      key={m.name}
+                      className={`tissue${inMesh ? " tissue--on" : ""}`}
+                    >
                       <button
                         type="button"
                         className="tissue-main"
@@ -417,7 +457,9 @@ export default function StepView(p: Props) {
                         <span className="tissue-box" aria-hidden>
                           {inMesh && <Icon name="check" size={11} />}
                         </span>
-                        <span className="tissue-name">{m.name.replace(/_/g, " ")}</span>
+                        <span className="tissue-name">
+                          {m.name.replace(/_/g, " ")}
+                        </span>
                         {inMesh && (
                           <span className="tissue-sigma mono">
                             {conductivities[m.name] ?? "—"} S/m
@@ -450,9 +492,9 @@ export default function StepView(p: Props) {
           {node.kind === "conductivity" && (
             <>
               <p className="jlead">
-                How well each tissue carries current, in siemens per metre. These
-                set the volume-conductor the solver sees — the field at the
-                sensors depends on them as much as on the source.
+                How well each tissue carries current, in siemens per metre.
+                These set the volume-conductor the solver sees — the field at
+                the sensors depends on them as much as on the source.
               </p>
               {!config && (
                 <Note tone="warn" title="No config loaded">
@@ -460,10 +502,11 @@ export default function StepView(p: Props) {
                   automatically — start it on :8000 and this fills in.
                 </Note>
               )}
-              {config &&
-                Object.keys(conductivities).length === 0 && (
-                  <Note tone="warn">No conductivities are defined in this config.</Note>
-                )}
+              {config && Object.keys(conductivities).length === 0 && (
+                <Note tone="warn">
+                  No conductivities are defined in this config.
+                </Note>
+              )}
               {config &&
                 Object.keys(conductivities)
                   .sort()
@@ -565,6 +608,8 @@ export default function StepView(p: Props) {
               onSourcesChange={p.onSourcesChange}
               selectedSource={p.selectedSource}
               onSelectSource={p.onSelectSource}
+              onJustPlaced={p.onJustPlaced}
+              onDipoleCloud={p.onDipoleCloud}
               onSourcesLevel={p.onSourcesLevel}
             />
           )}
@@ -572,7 +617,10 @@ export default function StepView(p: Props) {
           {/* ── sensor array ───────────────────────────────────────────── */}
           {node.kind === "sensors" && config && (
             <>
-              <SensorArrayPreview modality={p.modality} onCloud={p.onSensorCloud} />
+              <SensorArrayPreview
+                modality={p.modality}
+                onCloud={p.onSensorCloud}
+              />
               <p className="jlead">
                 Where the sensors sit on the body. You are solving{" "}
                 <b>{p.modality.toUpperCase()}</b> — change that in the Modality
@@ -605,7 +653,9 @@ export default function StepView(p: Props) {
                 help="How far around the body the array wraps from the target."
               />
               {p.result && (
-                <Tag tone="signal">{p.result.array.n_sensors} sensors in the last solve</Tag>
+                <Tag tone="signal">
+                  {p.result.array.n_sensors} sensors in the last solve
+                </Tag>
               )}
             </>
           )}
@@ -780,6 +830,8 @@ function SourcesStep({
   selectedSource,
   onSelectSource,
   onSourcesLevel,
+  onJustPlaced,
+  onDipoleCloud,
 }: {
   config: Cfg | null;
   onConfigChange: (c: Cfg) => void;
@@ -791,12 +843,16 @@ function SourcesStep({
   selectedSource: number | null;
   onSelectSource: (i: number | null) => void;
   onSourcesLevel: (level: string | null) => void;
+  onJustPlaced: (v: boolean) => void;
+  onDipoleCloud: (positions: [number, number, number][] | null) => void;
 }) {
   const [levels, setLevels] = useState<LevelInfo[]>([]);
   const [count, setCount] = useState(3);
   const [busy, setBusy] = useState(false);
   const [placed, setPlaced] = useState<SuggestedSources | null>(null);
-  const [error, setError] = useState<{ msg: string; hint?: string } | null>(null);
+  const [error, setError] = useState<{ msg: string; hint?: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     getLevels().then(setLevels);
@@ -806,25 +862,112 @@ function SourcesStep({
     ? getPath<string>(config, "forward.source_tissue", "") ||
       (femTissues[0] ?? "")
     : "";
+  // Vertebral levels only mean something for the cord. The vagus is a nerve
+  // running past the vertebrae, not a structure indexed by them, and muscle is
+  // volume-filled rather than sliced into Z bands — offering either of them a
+  // "C7" was describing the anatomy wrongly. This mirrors SOURCE_TARGETS, where
+  // only the spine entries carry a `level`.
+  const isSpine = tissue.includes("spinal_cord");
+  // forward.source_level is the single truth for what gets sampled. The patch
+  // field follows it only for the cord (see setLevel).
   const level = config
+    ? getPath<string>(config, "forward.source_level", "") || ""
+    : "";
+  const patchLevel = config
     ? getPath<string>(config, "electrodes.target_level", "") || ""
     : "";
 
+  // For the cord, one level has two consumers: it clips where dipoles are
+  // sampled AND centres the electrode patch. Writing only the patch field was
+  // the old behaviour and it meant "C7" moved the array while the solve still
+  // swept the whole cord — the study and the array describing different places.
   const setLevel = (next: string | null) => {
     if (!config) return;
-    onConfigChange(setPath(config, "electrodes.target_level", next));
+    let c = setPath(config, "electrodes.target_level", next);
+    c = setPath(c, "forward.source_level", next);
+    onConfigChange(c);
     setPlaced(null);
     setError(null);
   };
 
+  // The vagus is different: restricting it to the cervical span must NOT move
+  // the electrode patch. SOURCE_TARGETS gives vagus no level, so the patch has
+  // always used the fractional body-height slab, and centring it on C1-C7 here
+  // would change vagus results that have never depended on a level.
+  const setSourceLevelOnly = (next: string | null) => {
+    if (!config) return;
+    onConfigChange(setPath(config, "forward.source_level", next));
+    setPlaced(null);
+    setError(null);
+  };
+
+  // A *patch* level left over from a spine run must not follow the user to the
+  // vagus — it would keep centring the array from a control no longer on
+  // screen. The source level is left alone here, because on the vagus it is a
+  // legitimate cervical restriction rather than spine leftovers.
+  useEffect(() => {
+    if (!config) return;
+    if (isSpine) return;
+    // Off the cord, the only meaningful restriction is the cervical span. A
+    // single vertebra carried over from a spine run ("c7") would clip the
+    // nerve to 5 dipoles from a control that is not on screen, so it goes.
+    const strayLevel = level && level !== CERVICAL_SPAN;
+    if (!patchLevel && !strayLevel) return;
+    let c = config;
+    if (patchLevel) c = setPath(c, "electrodes.target_level", null);
+    if (strayLevel) c = setPath(c, "forward.source_level", null);
+    onConfigChange(c);
+  }, [config, isSpine, patchLevel, level, onConfigChange]);
+
+  // The two ways to say what fires. Sampling is the base operation — it is what
+  // a run does when nothing is placed, and it models the region at a real
+  // density instead of a handful of points. Explicit points are the override,
+  // and they are exactly that: resolve_source_positions uses them *instead of*
+  // sampling, so placing 3 points silently replaces ~90 dipoles.
+  const mode: "sample" | "points" = sources.length > 0 ? "points" : "sample";
+  const [sampled, setSampled] = useState<SampledSources | null>(null);
+  const spacing = config
+    ? getPath<number>(config, "forward.source_spacing_mm", 5)
+    : 5;
+
+  useEffect(() => {
+    if (!tissue) return;
+    let live = true;
+    getSampledSources(tissue, level || null, spacing).then(({ result }) => {
+      if (live) setSampled(result ?? null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [tissue, level, spacing]);
+
+  // Draw the sampled dipoles in the well — otherwise choosing "whole cord" or
+  // "C7" changed a number on a card and nothing else, with no way to see that
+  // the region you picked is the region being modelled. Only in sample mode:
+  // in points mode the placed markers already are the answer, and showing both
+  // would imply the stipple is still being solved when it has been overridden.
+  useEffect(() => {
+    if (mode !== "sample" || !sampled) {
+      onDipoleCloud(null);
+      return;
+    }
+    onDipoleCloud(
+      sampled.sources.map((s) => [s.x, s.y, s.z] as [number, number, number]),
+    );
+  }, [mode, sampled, onDipoleCloud]);
+
+  // The well outlives this step, so the stipple has to be cleared on the way
+  // out or it lingers over every other step that opens the 3-D view.
+  useEffect(() => () => onDipoleCloud(null), [onDipoleCloud]);
+
   const place = async () => {
     setBusy(true);
     setError(null);
-    const { result, error: err, hint } = await suggestSources(
-      tissue,
-      level || null,
-      count,
-    );
+    const {
+      result,
+      error: err,
+      hint,
+    } = await suggestSources(tissue, level || null, count);
     if (result) {
       setPlaced(result);
       onSourcesChange(
@@ -833,7 +976,12 @@ function SourcesStep({
       // Only a placement can claim a level. Hand-edited sources go back to
       // being simply "placed", because that is all we know about them.
       onSourcesLevel(result.level);
+      // No one source is "the" result of a placement, so nothing is selected —
+      // but the set lights up in the well instead, which is what the user just
+      // asked for. Clearing the selection alone left the new sources in the
+      // resting colour, indistinguishable from nothing having happened.
       onSelectSource(null);
+      onJustPlaced(true);
     } else if (err) {
       setError({ msg: err, hint });
     }
@@ -841,13 +989,24 @@ function SourcesStep({
   };
 
   const bands = new Map(levels.map((l) => [l.level, l]));
-  const chosen = level ? bands.get(level) : undefined;
+  // Choosing "one level" without naming one has to mean something, and C7 is
+  // what it has always meant here: it is the spine source-target's own default
+  // (SOURCE_TARGETS) and the level every past cord run used. If this anatomy
+  // has no C7 segmented, the first level it does carry stands in — better than
+  // a picker whose value is not in its own list.
+  const defaultLevel = bands.has(DEFAULT_LEVEL)
+    ? DEFAULT_LEVEL
+    : (levels[0]?.level ?? DEFAULT_LEVEL);
+  // Named for what it is in this run, so the choice reads "Whole spinal cord"
+  // rather than a generic "whole length of the tissue".
+  const structure = tissue ? tissue.replace(/_/g, " ") : "source tissue";
 
   return (
     <>
       <p className="jlead">
-        Click <b>{target?.replace(/_/g, " ") ?? "the target"}</b> in the 3-D view
-        to drop a source, or place a set along a vertebral level below. Each
+        Click <b>{target?.replace(/_/g, " ") ?? "the target"}</b> in the 3-D
+        view to drop a source, or place a set along it below
+        {isSpine ? ", at a vertebral level or over the whole cord" : ""}. Each
         source is solved independently.
       </p>
 
@@ -857,82 +1016,213 @@ function SourcesStep({
           <Select
             value={tissue}
             ariaLabel="Source tissue"
-            onChange={(v) => onConfigChange(setPath(config, "forward.source_tissue", v))}
-            options={(femTissues.length ? femTissues : meshes.map((m) => m.name)).map(
-              (t) => ({ value: t, label: t.replace(/_/g, " ") }),
-            )}
+            onChange={(v) =>
+              onConfigChange(setPath(config, "forward.source_tissue", v))
+            }
+            options={(femTissues.length
+              ? femTissues
+              : meshes.map((m) => m.name)
+            ).map((t) => ({ value: t, label: t.replace(/_/g, " ") }))}
           />
         </label>
       )}
 
-      <h2 className="jsub">Vertebral level</h2>
+      {isSpine && (
+        <>
+          <h2 className="jsub">How much of it to run</h2>
+          <p className="stepfield-help" style={{ marginBottom: 10 }}>
+            Take the whole cord, or narrow the study to one vertebral level. A
+            level places the sources inside that vertebra&rsquo;s own measured Z
+            band and centres the electrode patch on the same place, so the study
+            and the array describe one location instead of two. Each band comes
+            from that vertebra&rsquo;s segmented STL, so it follows this anatomy
+            rather than an assumed proportion.
+          </p>
+
+          <div className="jstack">
+            <button
+              type="button"
+              className={`pick${!level ? " pick--on" : ""}`}
+              aria-pressed={!level}
+              onClick={() => setLevel(null)}
+            >
+              <span className="pick-dot" aria-hidden />
+              <span className="pick-text">
+                <span className="pick-title">Whole {structure}</span>
+                <span className="pick-note">
+                  Sources spread along its entire length, and the electrode
+                  patch falls back to the mid-body slab. The full-length survey.
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`pick${level ? " pick--on" : ""}`}
+              aria-pressed={!!level}
+              disabled={levels.length === 0}
+              onClick={() => setLevel(level || defaultLevel)}
+            >
+              <span className="pick-dot" aria-hidden />
+              <span className="pick-text">
+                <span className="pick-title">One vertebral level</span>
+                <span className="pick-note">
+                  Model only the section of the {structure} inside a single
+                  vertebra — what the published {DEFAULT_LEVEL.toUpperCase()}{" "}
+                  runs do. Defaults to {DEFAULT_LEVEL.toUpperCase()}.
+                </span>
+              </span>
+            </button>
+          </div>
+
+          {level && (
+            <label className="jfield levels-choice">
+              <span>Level</span>
+              <Select
+                value={level}
+                ariaLabel="Vertebral level"
+                onChange={(v) => setLevel(v)}
+              >
+                {VERTEBRAE.map((group) => {
+                  const available = group.levels.filter((l) => bands.has(l));
+                  if (available.length === 0) return null;
+                  return (
+                    <optgroup key={group.name} label={group.name}>
+                      {available.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl.toUpperCase()} · {bands.get(lvl)!.z_lo_mm}–
+                          {bands.get(lvl)!.z_hi_mm} mm
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </Select>
+            </label>
+          )}
+        </>
+      )}
+
+      {!isSpine && (
+        <>
+          <h2 className="jsub">How much of it to run</h2>
+          <p className="stepfield-help" style={{ marginBottom: 10 }}>
+            This nerve is meshed over its whole course — from below T12 to above
+            C1 — and has always been solved that way. The 70 nA·m reference and
+            the Biot&ndash;Savart / Sarvas ladder are cervical-vagus figures
+            though, so restrict it here if your study needs to match them.
+          </p>
+
+          <div className="jstack">
+            <button
+              type="button"
+              className={`pick${!level ? " pick--on" : ""}`}
+              aria-pressed={!level}
+              onClick={() => setSourceLevelOnly(null)}
+            >
+              <span className="pick-dot" aria-hidden />
+              <span className="pick-text">
+                <span className="pick-title">Whole {structure}</span>
+                <span className="pick-note">
+                  Its entire meshed course. This is what every previous run has
+                  modelled, so leave it here to stay comparable with them.
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`pick${level === CERVICAL_SPAN ? " pick--on" : ""}`}
+              aria-pressed={level === CERVICAL_SPAN}
+              onClick={() => setSourceLevelOnly(CERVICAL_SPAN)}
+            >
+              <span className="pick-dot" aria-hidden />
+              <span className="pick-text">
+                <span className="pick-title">Cervical only — C1 to C7</span>
+                <span className="pick-note">
+                  Clips the dipoles to the cervical vertebrae&rsquo;s own
+                  measured Z band. The electrode patch is left where it is:
+                  the vagus has never sited it by level.
+                </span>
+              </span>
+            </button>
+          </div>
+        </>
+      )}
+
+      <h2 className="jsub">What fires</h2>
       <p className="stepfield-help" style={{ marginBottom: 10 }}>
-        The level places the sources and centres the electrode patch. Each band
-        is measured from that vertebra&rsquo;s own segmented STL, so it follows
-        this anatomy rather than an assumed proportion.
+        By default the whole region you chose above is modelled, at the dipole
+        spacing below. Placing individual points is an override — the solver
+        uses them <em>instead of</em> sampling, so a handful of points replaces
+        the full set rather than adding to it.
       </p>
 
-      <div className="levels">
-        <div className="levels-group">
-          <button
-            type="button"
-            className={`level${!level ? " level--on" : ""}`}
-            aria-pressed={!level}
-            onClick={() => setLevel(null)}
-          >
-            any
-          </button>
-          <span className="levels-any-note">whole length of the tissue</span>
-        </div>
-        {VERTEBRAE.map((group) => {
-          const available = group.levels.filter((l) => bands.has(l));
-          if (available.length === 0) return null;
-          return (
-            <div key={group.name} className="levels-group">
-              <span className="levels-group-name">{group.name}</span>
-              {available.map((lvl) => (
-                <button
-                  key={lvl}
-                  type="button"
-                  className={`level${level === lvl ? " level--on" : ""}`}
-                  aria-pressed={level === lvl}
-                  title={`${lvl.toUpperCase()} · ${bands.get(lvl)!.z_lo_mm}–${bands.get(lvl)!.z_hi_mm} mm`}
-                  onClick={() => setLevel(lvl)}
-                >
-                  {lvl.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-
-      {chosen && (
-        <p className="levels-band mono">
-          {chosen.level.toUpperCase()} spans {chosen.z_lo_mm}–{chosen.z_hi_mm} mm
-        </p>
-      )}
-
-      <div className="levels-place">
-        <label className="levels-count">
-          <span>How many</span>
-          <Select
-            value={count}
-            ariaLabel="How many sources"
-            onChange={(v) => setCount(Number(v))}
-            options={[1, 2, 3, 5, 8].map((n) => ({ value: n, label: String(n) }))}
-          />
-        </label>
-        <Button
-          variant="primary"
-          icon="bolt"
-          loading={busy}
+      <div className="jstack">
+        <button
+          type="button"
+          className={`pick${mode === "sample" ? " pick--on" : ""}`}
+          aria-pressed={mode === "sample"}
+          onClick={() => {
+            onSourcesChange([]);
+            onSourcesLevel(null);
+            onJustPlaced(false);
+            setPlaced(null);
+          }}
+        >
+          <span className="pick-dot" aria-hidden />
+          <span className="pick-text">
+            <span className="pick-title">
+              Sample the whole {level ? level.toUpperCase() : structure}
+              {sampled ? ` — ${sampled.count} dipoles` : ""}
+            </span>
+            <span className="pick-note">
+              Dipoles every {spacing} mm through the region. This is what a run
+              does when nothing is placed, and what the CLI does.
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          className={`pick${mode === "points" ? " pick--on" : ""}`}
+          aria-pressed={mode === "points"}
           disabled={!config || !tissue}
           onClick={place}
         >
-          Place sources
-        </Button>
+          <span className="pick-dot" aria-hidden />
+          <span className="pick-text">
+            <span className="pick-title">Place a few specific points</span>
+            <span className="pick-note">
+              For inspecting chosen spots rather than modelling the region.
+              Overrides the sampling above.
+            </span>
+          </span>
+        </button>
       </div>
+
+      {mode === "points" && (
+        <div className="levels-place levels-choice">
+          <label className="levels-count">
+            <span>How many</span>
+            <Select
+              value={count}
+              ariaLabel="How many sources"
+              onChange={(v) => setCount(Number(v))}
+              options={[1, 2, 3, 5, 8, 12, 16, 24].map((n) => ({
+                value: n,
+                label: String(n),
+              }))}
+            />
+          </label>
+          <Button
+            variant="default"
+            icon="bolt"
+            loading={busy}
+            disabled={!config || !tissue}
+            onClick={place}
+          >
+            Re-place
+          </Button>
+        </div>
+      )}
 
       {error && (
         <Note tone="warn" title="Could not place sources">
@@ -970,6 +1260,8 @@ function SourcesStep({
         onChange={(next) => {
           onSourcesChange(next);
           onSourcesLevel(null);
+          // Edited by hand, so this is no longer the set a placement returned.
+          onJustPlaced(false);
         }}
       />
     </>
@@ -1060,7 +1352,9 @@ function FieldMapStep({
   const [source, setSource] = useState(0);
   const [map, setMap] = useState<FieldMap | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ msg: string; hint?: string } | null>(null);
+  const [error, setError] = useState<{ msg: string; hint?: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     let live = true;

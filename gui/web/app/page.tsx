@@ -19,7 +19,7 @@ import {
   type DetectUnavailable,
   type RunHandle,
 } from "@/lib/api";
-import { getPath, type Cfg } from "@/lib/config";
+import { getPath, setPath, type Cfg } from "@/lib/config";
 import { clearSession, loadSession, saveSession } from "@/lib/storage";
 import { presetById } from "@/lib/presets";
 import {
@@ -77,6 +77,10 @@ export default function Page() {
   // set of sources — reading that for the badge claimed a level the sources
   // had never been near.
   const [sourcesLevel, setSourcesLevel] = useState<string | null>(null);
+  // True while every source on the canvas came from one "Place sources" run, so
+  // the well can light the set up as a set. Not derived from sourcesLevel: a
+  // whole-cord placement has no level and still deserves to be seen landing.
+  const [justPlaced, setJustPlaced] = useState(false);
 
   const [figures, setFigures] = useState<FigureInfo[]>([]);
   const [outputs, setOutputs] = useState<string[]>([]);
@@ -105,6 +109,11 @@ export default function Page() {
     positions: [number, number, number][];
     values?: number[];
   } | null>(null);
+  // The sampled dipoles drawn in the well. Owned here because the well outlives
+  // the step that computes them.
+  const [dipoleCloud, setDipoleCloud] = useState<
+    [number, number, number][] | null
+  >(null);
 
   const [logs, setLogs] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
@@ -171,6 +180,36 @@ export default function Page() {
     setPositions(session.positions ?? {});
     setModality(session.modality === "eeg" ? "eeg" : "meg");
     setSourcesLevel(session.sourcesLevel ?? null);
+    // A preset's sources are a placement's worth by construction (its blurb
+    // says so), and a resumed set was placed at some point too — but neither
+    // is something that just happened in front of the user, so neither lights
+    // up. The glow marks a placement you watched land.
+    setJustPlaced(false);
+    // A preset starts fresh, so it owns the extent as well as the sources: the
+    // spine preset's own blurb promises the patch is centred on C7, and until
+    // this wrote electrodes.target_level it was not — the sources sat in C7's
+    // band while the patch fell back to the fractional mid-body slab. A resume
+    // is left alone, because there the config on disk is the authority and
+    // sourcesLevel only records where the placed sources came from.
+    if (choice.kind !== "resume") {
+      setConfig((c) => {
+        if (!c) return c;
+        const lvl = session.sourcesLevel ?? null;
+        // Both halves of what a level means: where dipoles are sampled, and
+        // where the patch sits. The spine preset says "at C7" and must mean it
+        // for the solve as well as the array.
+        let next = setPath(c, "electrodes.target_level", lvl);
+        next = setPath(next, "forward.source_level", lvl);
+        // …and the structure it studies. A preset names one anatomy — the
+        // spine preset's sources are cord tet centroids — but it only ever set
+        // the snap target, leaving forward.source_tissue on whatever the last
+        // run used. So "Cervical spine at C7" could open with the source tissue
+        // still reading vagus left, which is both wrong on its face and the
+        // reason the spine-only extent control stayed hidden on a spine run.
+        if (session.target) next = setPath(next, "forward.source_tissue", session.target);
+        return next;
+      });
+    }
     // Tissue visibility is a view preference rather than part of a preset, so
     // only a resumed session brings its own back.
     if (choice.kind === "resume" && saved.current?.visible) {
@@ -1028,10 +1067,15 @@ export default function Page() {
               selected={selectedSource}
               target={target}
               armPlacing={selected === "sources"}
+              justPlaced={justPlaced}
+              dipoleCloud={dipoleCloud}
               onSelect={setSelectedSource}
               sensorCloud={sensorCloud}
               onAddSource={(p) => {
                 setSelectedSource(sources.length);
+                // A hand-placed point breaks the set: these are no longer "the
+                // sources that came back from the level you picked".
+                setJustPlaced(false);
                 setSources((s) => [...s, { ...p, strength_nAm: 70 }]);
               }}
             />
@@ -1114,6 +1158,8 @@ export default function Page() {
             onSourcesChange={setSources}
             selectedSource={selectedSource}
             onSelectSource={setSelectedSource}
+            onJustPlaced={setJustPlaced}
+            onDipoleCloud={setDipoleCloud}
             threshold={threshold}
             onThresholdChange={setThreshold}
             modality={modality}

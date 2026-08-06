@@ -208,6 +208,19 @@ class ForwardCfg:
     # solve uses these instead of geometry-derived ``vagus_sources`` sampling
     # — this is how the GUI's clicked source points reach the solver.
     point_sources: tuple[tuple[float, float, float], ...] = ()
+    # Optional vertebral level restricting where dipoles are sampled: sampling
+    # still runs at ``source_spacing_mm``, but only the positions inside that
+    # band are kept. Accepts one level ("c7") or an inclusive range spanning
+    # several ("c1-c7" for the cervical vagus, whose 70 nA·m reference and
+    # analytic ladder are cervical-specific while the nerve mesh runs from
+    # below T12 to above C1). A range's band is the union of its endpoints'
+    # own measured bands, so it follows this anatomy rather than an assumed
+    # proportion, exactly as a single level does. This is
+    # deliberately NOT ``electrodes.target_level``, which every spine run
+    # already sets via SOURCE_TARGETS to place the electrode patch — reusing it
+    # here would silently narrow every existing whole-cord solve to C7. Default
+    # None = sample the whole tissue, exactly as before.
+    source_level: str | None = None
     # Local parallelism for the forward solve. The coil array is split into
     # this many independent chunks, each solved in its own process (mirroring
     # the cluster array-job path) and stitched back together. 0 = use all

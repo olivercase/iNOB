@@ -239,6 +239,36 @@ export async function suggestSources(
   }
 }
 
+// What the solve samples when no explicit points are placed: the whole source
+// tissue at forward.source_spacing_mm, clipped to a vertebral level if one is
+// set. This is the default path, so the step reports it in numbers rather than
+// leaving "no sources placed" looking like nothing will be modelled.
+export interface SampledSources {
+  tissue: string;
+  level: string | null;
+  spacing_mm: number;
+  count: number;
+  sources: { x: number; y: number; z: number }[];
+}
+
+export async function getSampledSources(
+  tissue: string,
+  level: string | null,
+  spacingMm?: number,
+): Promise<{ result?: SampledSources; error?: string }> {
+  const params = new URLSearchParams({ tissue });
+  if (level) params.set("level", level);
+  if (spacingMm) params.set("spacing_mm", String(spacingMm));
+  try {
+    const r = await fetch(`/api/sources/sampled?${params}`, { cache: "no-store" });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) return { result: body };
+    return { error: body.detail?.errors?.[0] ?? `request failed: ${r.status}` };
+  } catch {
+    return { error: "could not reach the backend" };
+  }
+}
+
 // The sensor array, as data rather than a rendered picture.
 export interface SensorArrayInfo {
   modality: string;

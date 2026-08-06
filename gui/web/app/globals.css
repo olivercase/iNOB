@@ -2261,6 +2261,13 @@ body {
 .pick:hover {
   border-color: var(--hair-3);
 }
+.pick:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pick:disabled:hover {
+  border-color: var(--hair);
+}
 .pick--on {
   border-color: rgba(62, 224, 122, 0.45);
   background: var(--signal-wash);
@@ -3310,59 +3317,10 @@ body {
   color: var(--ink-3);
 }
 
-/* Vertebral levels, grouped as a clinician says them. Small targets, so they
-   get a real hit area rather than the 20px a bare label would give. */
-.levels {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.levels-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-}
-.levels-group-name {
-  width: 100%;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.level {
-  min-width: 38px;
-  height: 30px;
-  padding: 0 9px;
-  border-radius: 9px;
-  border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 11.5px;
-  font-family: var(--mono);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-.level:hover {
-  color: var(--ink);
-  border-color: var(--hair-3);
-}
-.level--on {
-  color: var(--on-signal);
-  background: var(--signal);
-  border-color: var(--signal);
-  box-shadow: 0 0 16px rgba(62, 224, 122, 0.3);
-}
-
-.levels-any-note {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.levels-band {
-  margin: 10px 0 0;
-  font-size: 11px;
-  color: var(--signal-hi);
+/* The level dropdown, sat under the "one vertebral level" choice it belongs
+   to. Indented so it reads as that option's detail rather than a third one. */
+.levels-choice {
+  margin: 10px 0 0 25px;
 }
 .levels-place {
   display: flex;

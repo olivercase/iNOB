@@ -320,6 +320,54 @@ function SensorCloud({
   );
 }
 
+/**
+ * The sampled dipoles, drawn as a fine white stipple along the structure.
+ *
+ * These are the default modelling path and there are ~90 of them, so they must
+ * read as a *distribution* rather than as objects: the placed-source markers
+ * are deliberately big and haloed because each one is a thing the user chose,
+ * and giving that treatment to ninety of them would bury the anatomy. Small
+ * white points sit on top of any tissue colour without competing with it.
+ */
+function DipoleCloud({
+  positions,
+  size,
+}: {
+  positions: [number, number, number][];
+  size: number;
+}) {
+  const geometry = useMemo(() => {
+    const geom = new THREE.BufferGeometry();
+    const xyz = new Float32Array(positions.length * 3);
+    positions.forEach((p, i) => {
+      xyz[i * 3] = p[0];
+      xyz[i * 3 + 1] = p[1];
+      xyz[i * 3 + 2] = p[2];
+    });
+    geom.setAttribute("position", new THREE.BufferAttribute(xyz, 3));
+    return geom;
+  }, [positions]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    // depthTest off so the stipple stays visible through the translucent
+    // tissue it sits inside — the cord is *behind* the muscle from most
+    // angles, and a dipole you cannot see is not confirmation of anything.
+    <points geometry={geometry} renderOrder={13}>
+      <pointsMaterial
+        size={size}
+        sizeAttenuation
+        color="#ffffff"
+        transparent
+        opacity={0.9}
+        depthTest={false}
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
 interface Props {
   meshes: MeshInfo[];
   visible: Record<string, boolean>;
@@ -335,6 +383,15 @@ interface Props {
    * mentioned and clicking the anatomy do nothing until they did.
    */
   armPlacing?: boolean;
+  /**
+   * True when every current source came from one "Place sources" run, so the
+   * whole set lights up together. A placement has no single source to select,
+   * and the set is what the user just asked for — the level they chose.
+   */
+  justPlaced?: boolean;
+  /** Dipoles the solve would sample, drawn as a stipple. Empty when the user
+   *  has overridden sampling with explicitly placed points. */
+  dipoleCloud?: [number, number, number][] | null;
   /** Sensor positions to draw in the well, and optionally what each reads. */
   sensorCloud?: {
     positions: [number, number, number][];
@@ -351,6 +408,8 @@ export default function Viewer3D({
   onSelect,
   onAddSource,
   armPlacing = false,
+  justPlaced = false,
+  dipoleCloud = null,
   sensorCloud = null,
 }: Props) {
   const { loaded, loading, failed, retryFailed } = useStlMeshes(meshes, visible);
@@ -454,21 +513,50 @@ export default function Viewer3D({
 
         {sources.map((s, i) => {
           const sel = i === selected;
+          // A whole placement lights up as a set: after "Place sources" there is
+          // no one source to select, and leaving them all in the resting colour
+          // buried in the anatomy made a level's worth of sources look like
+          // nothing had happened.
+          const lit = sel || justPlaced;
           return (
             <group key={i} position={[s.x, s.y, s.z]}>
+              {lit && (
+                // A halo, so a lit marker reads at a glance against busy
+                // anatomy rather than only when you already know where to look.
+                <mesh renderOrder={11}>
+                  <sphereGeometry args={[markerR * 2.4, 20, 20]} />
+                  <meshBasicMaterial
+                    color="#ff7a5c"
+                    transparent
+                    opacity={sel ? 0.28 : 0.18}
+                    depthTest={false}
+                    depthWrite={false}
+                  />
+                </mesh>
+              )}
               <mesh
-                renderOrder={11}
+                renderOrder={12}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(i);
                 }}
               >
-                <sphereGeometry args={[markerR * (sel ? 1.45 : 1), 24, 24]} />
+                <sphereGeometry args={[markerR * (sel ? 1.45 : lit ? 1.25 : 1), 24, 24]} />
+                {/* `transparent` is doing real work at opacity 1: it moves the
+                    marker into the transparent render pass, where renderOrder
+                    is honoured against the translucent tissues. As an opaque
+                    material it drew in the earlier pass and every marker ended
+                    up painted over by the muscle in front of it — depthTest
+                    was already off, so they were being hidden by draw order
+                    alone. */}
                 <meshStandardMaterial
-                  color={sel ? "#ff7a5c" : "#df472a"}
-                  emissive={sel ? "#c0361a" : "#7d2410"}
-                  emissiveIntensity={sel ? 1.1 : 0.6}
+                  color={lit ? "#ff7a5c" : "#df472a"}
+                  emissive={lit ? "#c0361a" : "#7d2410"}
+                  emissiveIntensity={lit ? 1.1 : 0.6}
+                  transparent
+                  opacity={1}
                   depthTest={false}
+                  depthWrite={false}
                 />
               </mesh>
               {sel && (
@@ -481,6 +569,13 @@ export default function Viewer3D({
             </group>
           );
         })}
+
+        {dipoleCloud && dipoleCloud.length > 0 && (
+          <DipoleCloud
+            positions={dipoleCloud}
+            size={Math.max(modelSize * 0.004, 1.2)}
+          />
+        )}
 
         {sensorCloud && sensorCloud.positions.length > 0 && (
           <SensorCloud
