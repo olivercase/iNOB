@@ -31,7 +31,8 @@ port_free() { ! lsof -ti "tcp:$1" -sTCP:LISTEN >/dev/null 2>&1; }
 # (see _pipeline_python in gui/backend/app.py), so all we need here is a
 # Python that can serve.
 pick_backend_python() {
-  local candidates=("${INOB_PYTHON:-}" python3 python3.14 python3.13 python3.12 python3.11)
+  local candidates=("${INOB_PYTHON:-}" "$ROOT/.venv/bin/python"
+                    python3 python3.14 python3.13 python3.12 python3.11)
   for py in "${candidates[@]}"; do
     [[ -z "$py" ]] && continue
     if command -v "$py" >/dev/null 2>&1 &&

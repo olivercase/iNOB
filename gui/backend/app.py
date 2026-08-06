@@ -250,8 +250,11 @@ def _stop_child(proc: subprocess.Popen[str] | None) -> None:
 def _can_solve(python: str, duneuro_path: str | None) -> bool:
     """Can ``python`` run a real solve, with ``duneuro_path`` on sys.path?
 
-    Three things have to be true, and each has bitten us. The interpreter must
-    load the compiled ``duneuropy`` (it is built for one Python version); its
+    Four things have to be true, and each has bitten us. The interpreter must
+    load the compiled ``duneuropy`` (it is built for one Python version); it
+    must also import the pipeline entry point, because a bare ``pythonX.Y`` can
+    reach a build's site-packages through ``duneuro_path`` while having none of
+    numpy/scipy/trimesh of its own, and the child dies on its first import; its
     ``inob`` must be the source in this checkout (a stale editable install
     elsewhere silently ran a different copy of the pipeline); and the pair must
     be tried in a subprocess, because an ABI mismatch segfaults rather than
@@ -262,11 +265,16 @@ def _can_solve(python: str, duneuro_path: str | None) -> bool:
         if duneuro_setup._tags_conflict(build_tag, _interpreter_tag(python)):
             return False
 
+    # Ordered the way the child starts: the pipeline is imported with nothing
+    # but PYTHONPATH, and ``duneuro_path`` only joins sys.path later, inside
+    # the forward stage. Probing it the other way round lends the interpreter
+    # a site-packages it will not actually have when the run begins.
     probe = (
         "import sys\n"
+        "import inob, inob.cli.pipeline\n"
         f"p = {duneuro_path or ''!r}\n"
         "if p: sys.path.insert(0, p)\n"
-        "import duneuropy, inob\n"
+        "import duneuropy\n"
         "print(inob.__file__)\n"
     )
     try:
