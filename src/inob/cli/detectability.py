@@ -11,13 +11,14 @@ import numpy as np
 
 from inob.anatomy import VERTEBRA_LEVELS, vertebra_z_band
 from inob.cli._common import add_common_args, setup
-from inob.config import Config
+from inob.config import Config, source_target_tag
 from inob.io.npz import load_leadfield
 from inob.viz.detectability import (
     _compatible_eeg_leadfield,
     _optional_leadfield,
     default_source_idx,
     detectability_summary,
+    fixed_q_scenarios,
     render_detectability,
 )
 from inob.viz.surface_topoplot import render_surface_topoplots
@@ -88,6 +89,12 @@ def main(argv: list[str] | None = None) -> int:
         "--max-trials", type=int, default=1_000_000,
         help="Upper bound for the trials axis.",
     )
+    p.add_argument(
+        "--q-nAm", type=float, default=None, dest="q_nAm", metavar="Q",
+        help="Run at one explicit source strength instead of the target's own "
+             "Q ladder — e.g. --source-target vagus --q-nAm 5.11 puts the "
+             "vagus at the spine's magnetospinography anchor.",
+    )
     p.add_argument("--out-surface", type=Path, default=None)
     p.add_argument("--out-detect", type=Path, default=None)
     p.add_argument("--dpi", type=int, default=300)
@@ -98,6 +105,11 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="detectability")
     source_idx = _resolve_source_idx(cfg, args.level, args.source_idx)
+    scenarios = fixed_q_scenarios(args.q_nAm) if args.q_nAm is not None else None
+    if scenarios is not None:
+        logger.info("source strength fixed at %g nA·m (--q-nAm); the %s "
+                    "physiology ladder is not used", args.q_nAm,
+                    source_target_tag(cfg) or "default")
 
     if args.target in ("surface", "all"):
         render_surface_topoplots(
@@ -107,12 +119,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.target in ("detect", "all"):
         render_detectability(
             cfg, source_idx=source_idx, out_path=args.out_detect,
-            dpi=args.dpi,
+            dpi=args.dpi, scenarios=scenarios,
             snr_threshold=args.snr_threshold, max_trials=args.max_trials,
         )
 
     if args.print_summary or args.target in ("detect", "all"):
-        summary = detectability_summary(cfg, source_idx=source_idx)
+        summary = detectability_summary(
+            cfg, source_idx=source_idx, scenarios=scenarios)
         sys.stdout.write(json.dumps(summary, indent=2) + "\n")
     return 0
 

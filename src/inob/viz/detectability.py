@@ -149,6 +149,23 @@ def spine_scenarios() -> tuple[DetectabilityScenario, ...]:
     )
 
 
+def fixed_q_scenarios(Q_nAm: float) -> tuple[DetectabilityScenario, ...]:
+    """A one-rung ladder at an explicit Q, for cross-target comparisons.
+
+    Each target's own ladder is anchored to its own literature (see
+    :func:`scenarios_for_target`), so the ladders are not comparable rung for
+    rung. Running one target at another's anchor — e.g. the vagus at the
+    spine's 5.11 nA·m magnetospinography figure — asks the different question
+    "how does this geometry do at *that* source strength?", and needs the Q
+    stated explicitly rather than pulled from a profile.
+    """
+    return (
+        DetectabilityScenario(f"Q = {Q_nAm:g} nA·m", float(Q_nAm),
+                              "Explicit source strength (--q-nAm), not the "
+                              "target's own physiology anchor."),
+    )
+
+
 def scenarios_for_target(cfg: Config) -> tuple[DetectabilityScenario, ...]:
     """Pick the source-strength scenario set matching the forward target.
 
@@ -747,8 +764,16 @@ def render_detectability(
 
 # ── headline numbers (printed in the CLI) ──────────────────────────────────
 
-def detectability_summary(cfg: Config, *, source_idx: int = -1) -> dict:
-    """Compute headline detectability numbers as a JSON-serialisable dict."""
+def detectability_summary(
+    cfg: Config, *, source_idx: int = -1,
+    scenarios: tuple[DetectabilityScenario, ...] | None = None,
+) -> dict:
+    """Compute headline detectability numbers as a JSON-serialisable dict.
+
+    ``scenarios`` defaults to the target-appropriate ladder, exactly as
+    :func:`render_detectability` does — pass the same tuple to both so the
+    figure and the JSON never describe different source strengths.
+    """
     floors = compute_noise_floors(cfg)
     sigma_meg = floors.meg_per_channel_fT
     sigma_eeg = floors.eeg_per_channel_uV
@@ -767,7 +792,7 @@ def detectability_summary(cfg: Config, *, source_idx: int = -1) -> dict:
     prop = propagation_correction(cfg, meg_lf, eeg_lf, source_idx=source_idx)
 
     rows = {}
-    for sc in scenarios_for_target(cfg):
+    for sc in (scenarios if scenarios is not None else scenarios_for_target(cfg)):
         sig_meg = meg_peak * sc.Q_nAm
         row = {
             "Q_nAm": sc.Q_nAm,
