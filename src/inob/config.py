@@ -11,7 +11,7 @@ Any code that needs them imports the loaded ``Config`` rather than redefining.
 from __future__ import annotations
 
 import logging
-from dataclasses import MISSING, dataclass, field, fields, is_dataclass
+from dataclasses import MISSING, dataclass, field, fields, is_dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -109,8 +109,28 @@ class SensorCfg:
     z_crop_low_factor: float
 
 
+#: FEM discretisations DUNEuro compiles for tetrahedra.
+SOLVER_TYPES: tuple[str, ...] = ("cg", "dg")
+
+
 @dataclass(frozen=True)
 class SolverCfg:
+    """The FEM discretisation and the linear solve on top of it.
+
+    ``type`` picks continuous (``cg``) or discontinuous (``dg``) Galerkin.
+    CG is the default and what every leadfield here was solved with: one
+    unknown per node, the potential continuous across element faces. DG puts
+    the unknowns inside each element and couples neighbours through numerical
+    fluxes, so a conductivity jump is represented *as* a jump instead of being
+    smeared across the elements either side of it — the standard argument for
+    DG in a mesh with a thin, high-contrast compartment, which is exactly what
+    a nerve inside muscle is. It costs roughly 4x the degrees of freedom of CG
+    on the same mesh.
+
+    ``edge_norm_type``, ``penalty``, ``scheme`` and ``weights`` configure the
+    DG interior-penalty formulation; CG ignores them (they are sent either way,
+    which is harmless).
+    """
     type: str = "cg"
     reduction: float = 1.0e-10
     edge_norm_type: str = "houston"
@@ -120,6 +140,126 @@ class SolverCfg:
     intorderadd: int = 5
     post_process_meg: bool = True
     subtract_mean: bool = True
+    # TBB threads each *worker process* may use. DUNEuro defaults to
+    # tbb::task_arena::automatic, i.e. a full-machine thread pool per process —
+    # so the local multi-core path (one process per coil chunk) had every one of
+    # its workers claiming every core, ~100 threads each. On a 12-core machine
+    # that is ~1200 threads for 12 cores: each worker got half a core and the
+    # rest went to contention. 1 is right whenever the parallelism is already
+    # across processes; raise it to the cores-per-task the scheduler granted
+    # (Myriad requests 4 with -pe smp 4). 0 restores DUNEuro's automatic.
+    threads_per_process: int = 1
+
+    def __post_init__(self) -> None:
+        if self.threads_per_process < 0:
+            raise ConfigError(
+                "[forward.solver] threads_per_process must be >= 0 "
+                "(0 = let DUNEuro decide)"
+            )
+        if self.type not in SOLVER_TYPES:
+            raise ConfigError(
+                f"[forward.solver] type must be one of {list(SOLVER_TYPES)}; "
+                f"got {self.type!r}"
+            )
+
+
+#: DUNEuro CG source models this pipeline knows how to configure. DUNEuro's
+#: ``CGSourceModelFactory`` also accepts ``subtraction``, ``local_subtraction``,
+#: ``whitney``, ``patch_based_venant``, ``spatial_venant`` and
+#: ``truncated_spatial_venant``; those need parameters this config does not
+#: carry, so they are rejected here rather than failing deep inside C++.
+SOURCE_MODEL_TYPES: tuple[str, ...] = (
+    "partial_integration", "venant", "multipolar_venant",
+)
+
+#: Of those, the ones DUNEuro's *DG* source-model factory also accepts. Its
+#: full list is ``partial_integration``, ``patch_based_venant``,
+#: ``subtraction``, ``local_subtraction`` and ``truncated_spatial_venant`` —
+#: notably not the vertex-based ``venant``, whose monopoles live on vertices
+#: that a DG space has no unknowns on.
+DG_SOURCE_MODELS: tuple[str, ...] = ("partial_integration",)
+
+
+@dataclass(frozen=True)
+class SourceModelCfg:
+    """How a point dipole is realised as a FEM right-hand side.
+
+    A mathematical point dipole is a singularity: it has no representation in
+    a finite-dimensional FE space, so every FEM forward solver needs a rule for
+    turning it into a load vector. Two are wired up here:
+
+      * ``partial_integration`` (default) — integrate the divergence by parts
+        onto the test functions, giving a load only on the vertices of the
+        element containing the dipole. Cheapest; the historical default of this
+        pipeline and the model every leadfield in ``outputs/`` was solved with.
+      * ``venant`` — the St. Venant condition (Buchner et al. 1997): replace
+        the dipole by monopoles on the vertices of an element patch around it,
+        with strengths fitted (least squares, distance-weighted regularisation)
+        so the patch reproduces the dipole's moments up to
+        ``number_of_moments``. Spreads the source over more nodes, which is
+        better behaved for sources sitting close to a conductivity jump.
+        ``multipolar_venant`` is the same machinery with a multipolar rather
+        than monopolar load.
+
+    The Venant fields below map onto DUNEuro's parameter names
+    (``numberOfMoments``, ``referenceLength``, …) and are ignored by
+    ``partial_integration``. ``reference_length_mm`` is in millimetres because
+    DUNEuro runs in mm-mode here (see ``sigma_unit_scale``), as are the patch
+    extents implied by ``initialization``/``extensions``.
+
+    ``restrict: true`` keeps the monopole patch inside the tissue compartment
+    the dipole sits in, so monopoles never leak across a conductivity jump.
+    That is usually what you want — but for a *thin* compartment (a vagus nerve
+    only one or two elements across) it can leave too few vertices to fit the
+    moments well; if a Venant run looks noisy on nerve sources, that is the
+    first knob to check.
+    """
+    type: str = "partial_integration"
+    number_of_moments: int = 3
+    reference_length_mm: float = 20.0
+    weighting_exponent: int = 1
+    relaxation_factor: float = 1.0e-6
+    mixed_moments: bool = True
+    restrict: bool = True
+    initialization: str = "closest_vertex"   # or "single_element"
+    extensions: str = "vertex"               # "vertex", "intersection", or ""
+    intorderadd: int = 2
+
+    def __post_init__(self) -> None:
+        if self.type not in SOURCE_MODEL_TYPES:
+            raise ConfigError(
+                f"[forward.source_model] type must be one of "
+                f"{list(SOURCE_MODEL_TYPES)}; got {self.type!r}"
+            )
+        if self.initialization not in ("closest_vertex", "single_element"):
+            raise ConfigError(
+                "[forward.source_model] initialization must be 'closest_vertex' "
+                f"or 'single_element'; got {self.initialization!r}"
+            )
+        # An empty `extensions:` in YAML (and `--set ...extensions=`) arrives as
+        # None, which the str coercer renders "None" — spell every way of
+        # saying "no patch extension" as the empty string DUNEuro expects.
+        if self.extensions is None or str(self.extensions).strip() in ("", "None", "none", "null"):
+            object.__setattr__(self, "extensions", "")
+        for ext in self.extensions.split():
+            if ext not in ("vertex", "intersection"):
+                raise ConfigError(
+                    "[forward.source_model] extensions must be a space-separated "
+                    "list of 'vertex'/'intersection' (or empty); got "
+                    f"{self.extensions!r}"
+                )
+        if self.number_of_moments < 1:
+            raise ConfigError("[forward.source_model] number_of_moments must be >= 1")
+        if self.weighting_exponent >= self.number_of_moments:
+            # DUNEuro asserts this internally; catching it here gives a message
+            # instead of an abort inside C++.
+            raise ConfigError(
+                "[forward.source_model] weighting_exponent must be < "
+                f"number_of_moments; got {self.weighting_exponent} >= "
+                f"{self.number_of_moments}"
+            )
+        if self.reference_length_mm <= 0:
+            raise ConfigError("[forward.source_model] reference_length_mm must be > 0")
 
 
 @dataclass(frozen=True)
@@ -204,6 +344,24 @@ class ForwardCfg:
     solver: SolverCfg
     validate: ForwardValidate
     muscle_anisotropy: MuscleAnisotropyCfg = field(default_factory=MuscleAnisotropyCfg)
+    source_model: SourceModelCfg = field(default_factory=SourceModelCfg)
+
+    def __post_init__(self) -> None:
+        # CG and DG have *different* source-model factories in DUNEuro, and the
+        # DG one has no vertex-based Venant (its unknowns are not on vertices).
+        # Caught here because otherwise it is a C++ throw — after the mesh is
+        # loaded and the transfer matrix has started, which on the cluster means
+        # an hour of an array job to find out.
+        if (self.solver.type == "dg"
+                and self.source_model.type not in DG_SOURCE_MODELS):
+            raise ConfigError(
+                f"[forward] solver.type='dg' cannot use "
+                f"source_model.type={self.source_model.type!r}. DUNEuro's DG "
+                f"source-model factory supports {list(DG_SOURCE_MODELS)} of the "
+                "models this pipeline configures (the vertex-based Venant models "
+                "are CG-only). Use solver.type='cg', or "
+                "source_model.type='partial_integration'."
+            )
     # Optional explicit dipole positions (mm). When non-empty, the forward
     # solve uses these instead of geometry-derived ``vagus_sources`` sampling
     # — this is how the GUI's clicked source points reach the solver.
@@ -393,6 +551,17 @@ def source_target_tag(cfg: Config) -> str:
         if stem.startswith(prefix):
             return stem[len(prefix):].lstrip("_")
     return ""
+
+
+def replace_source_model(cfg: Config, **changes: Any) -> Config:
+    """Return ``cfg`` with ``forward.source_model`` fields replaced.
+
+    Lets a caller sweep source models over one loaded config — an A/B on the
+    same mesh, same sensors, same conductivities — without re-reading YAML or
+    reaching into two levels of frozen dataclass by hand.
+    """
+    sm = replace(cfg.forward.source_model, **changes)
+    return replace(cfg, forward=replace(cfg.forward, source_model=sm))
 
 
 def tag_path(path: Path, tag: str) -> Path:
@@ -624,8 +793,11 @@ def _build_forward(d: dict[str, Any]) -> ForwardCfg:
     aniso = _build_dataclass(
         MuscleAnisotropyCfg, d.get("muscle_anisotropy", {}), "forward.muscle_anisotropy"
     )
+    src_model = _build_dataclass(
+        SourceModelCfg, d.get("source_model", {}), "forward.source_model"
+    )
     body = {k: v for k, v in d.items()
-            if k not in ("solver", "validate", "muscle_anisotropy")}
+            if k not in ("solver", "validate", "muscle_anisotropy", "source_model")}
     duneuro_path = body.get("duneuro_path")
     body["duneuro_path"] = Path(duneuro_path).expanduser() if duneuro_path else None
     if body.get("point_sources"):
@@ -636,7 +808,8 @@ def _build_forward(d: dict[str, Any]) -> ForwardCfg:
     # the other forward fields have no defaults and so remain required.
     return _build_dataclass(
         ForwardCfg,
-        {**body, "solver": solver, "validate": val, "muscle_anisotropy": aniso},
+        {**body, "solver": solver, "validate": val, "muscle_anisotropy": aniso,
+         "source_model": src_model},
         "forward", allow_defaults=True,
     )
 

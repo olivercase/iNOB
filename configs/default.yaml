@@ -90,6 +90,24 @@ forward:
   local_workers: 0             # forward solve parallelism: 0 = all CPU cores
                                # (coil array split into per-core chunks, then
                                # stitched); 1 = serial single process.
+  source_model:
+    # How a point dipole becomes a FEM right-hand side.
+    #   partial_integration - load on the containing element's vertices only
+    #                         (cheapest; every leadfield in outputs/ used this)
+    #   venant              - St. Venant: monopoles on an element patch, fitted
+    #                         to the dipole moments (Buchner et al. 1997)
+    #   multipolar_venant   - as venant, multipolar load
+    # The venant.* parameters below are ignored by partial_integration.
+    type: partial_integration
+    number_of_moments: 3
+    reference_length_mm: 20.0    # mm-mode, same units as the mesh
+    weighting_exponent: 1        # must be < number_of_moments
+    relaxation_factor: 1.0e-6
+    mixed_moments: true
+    restrict: true               # keep the monopole patch inside one tissue
+    initialization: closest_vertex   # or single_element
+    extensions: vertex           # patch growth: vertex | intersection | ""
+    intorderadd: 2
   solver:
     type: cg
     reduction: 1.0e-10

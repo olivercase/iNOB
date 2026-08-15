@@ -103,3 +103,52 @@ def test_setup_applies_log_level(tmp_path: Path) -> None:
     assert logging.getLogger().level == logging.WARNING
     # restore a sane level for subsequent tests in the same process
     logging.getLogger().setLevel(logging.INFO)
+
+
+def test_source_model_flag_is_sugar_for_the_config_field(tmp_path: Path) -> None:
+    args = _parser().parse_args([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--source-model", "venant",
+    ])
+    cfg = setup(args, log_prefix="unittest")
+    assert cfg.forward.source_model.type == "venant"
+    # The Venant fit parameters keep their config defaults — the flag only
+    # picks the model.
+    assert cfg.forward.source_model.number_of_moments == 3
+
+
+def test_muscle_anisotropy_flag_forces_the_mode(tmp_path: Path) -> None:
+    args = _parser().parse_args([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--muscle-anisotropy", "on",
+    ])
+    cfg = setup(args, log_prefix="unittest")
+    assert cfg.forward.muscle_anisotropy.mode == "on"
+    # Forced on means on even for a non-muscle source, which is the whole point
+    # of being able to force it.
+    assert cfg.forward.muscle_anisotropy.active_for("vagus_left") is True
+
+
+def test_forward_physics_flags_default_to_leaving_the_config_alone(
+    tmp_path: Path,
+) -> None:
+    args = _parser().parse_args([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+    ])
+    assert args.source_model is None
+    assert args.muscle_anisotropy is None
+    cfg = setup(args, log_prefix="unittest")
+    assert cfg.forward.source_model.type == "partial_integration"
+    assert cfg.forward.muscle_anisotropy.mode == "auto"
+
+
+def test_later_set_override_wins_over_the_flag(tmp_path: Path) -> None:
+    # --set is appended after the sugar, so an explicit --set is the last word.
+    args = _parser().parse_args([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--source-model", "venant",
+        "--set", "forward.source_model.number_of_moments=4",
+    ])
+    cfg = setup(args, log_prefix="unittest")
+    assert cfg.forward.source_model.type == "venant"
+    assert cfg.forward.source_model.number_of_moments == 4

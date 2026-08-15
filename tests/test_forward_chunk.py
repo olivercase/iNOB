@@ -99,12 +99,18 @@ def test_run_chunk_saves_slice_of_full_coil_array(tmp_path: Path, monkeypatch) -
     n_chunks = 2
     fake_driver = _FakeDriver(n_coils=n_chan // n_chunks)
     monkeypatch.setattr(chunk_mod, "import_duneuro", lambda cfg: _FakeDp)
-    monkeypatch.setattr(
-        chunk_mod, "build_driver",
-        lambda cfg, fem: (fake_driver, {"volume_conductor": {}}, np.array([3e-4, 4.3e-4])),
-    )
+    driver_calls = {}
+
+    def fake_build_driver(cfg, fem, *, limit_threads=False):
+        driver_calls["limit_threads"] = limit_threads
+        return fake_driver, {"volume_conductor": {}}, np.array([3e-4, 4.3e-4])
+
+    monkeypatch.setattr(chunk_mod, "build_driver", fake_build_driver)
 
     out_L, out_idx = run_chunk(cfg, chunk_id=0, n_chunks=n_chunks)
+    # A chunk worker is one process of many, so it must cap its own TBB pool —
+    # otherwise every worker claims every core and they fight for the machine.
+    assert driver_calls["limit_threads"] is True
     assert out_L.is_file() and out_idx.is_file()
     L = np.load(out_L)
     idx = np.load(out_idx)

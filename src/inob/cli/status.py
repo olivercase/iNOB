@@ -79,6 +79,36 @@ def collect(cfg: Config) -> tuple[list[Artifact], list[Artifact]]:
     return stages, extras
 
 
+def forward_physics(cfg: Config) -> list[tuple[str, str]]:
+    """The forward-solve choices a leadfield on disk cannot tell you about.
+
+    Source model and muscle anisotropy change the numbers in the NPZ without
+    changing its shape, name or schema, so two leadfields solved with different
+    settings are indistinguishable once written. Showing them here means the
+    setting is visible next to the artefact it produced.
+    """
+    sm = cfg.forward.source_model
+    detail = sm.type.replace("_", " ")
+    if sm.type.endswith("venant"):
+        patch = "one tissue" if sm.restrict else "across tissues"
+        detail += f" ({sm.number_of_moments} moments, {patch})"
+
+    aniso = cfg.forward.muscle_anisotropy
+    active = aniso.active_for(cfg.forward.source_tissue)
+    ratio = aniso.sigma_long_sm / max(aniso.sigma_trans_sm, 1e-12)
+    aniso_detail = (
+        f"{aniso.mode} — {'on' if active else 'off'} for {cfg.forward.source_tissue}"
+    )
+    if active:
+        aniso_detail += f", {ratio:.1f}:1"
+
+    return [
+        ("source model", detail),
+        ("muscle anisotropy", aniso_detail),
+        ("solver", f"{cfg.forward.solver.type}, reduction {cfg.forward.solver.reduction:g}"),
+    ]
+
+
 def next_step(stages: list[Artifact]) -> str | None:
     """The command that makes the most progress from here, if any."""
     for stage in stages:
@@ -131,6 +161,12 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
                   else _ui.paint(f"not built — {extra.command}", "dim"))
         print(f"  {glyph} {extra.name:<{pad}}{detail}", file=out)
 
+    print(f"\n{_ui.heading('Forward physics')}", file=out)
+    physics = forward_physics(cfg)
+    phys_pad = max(len(label) for label, _ in physics) + 2
+    for label, detail in physics:
+        print(f"    {label:<{phys_pad}}{detail}", file=out)
+
     step = next_step(stages)
     if step is None:
         print(f"\nEverything is built. Analyse it with "
@@ -157,6 +193,7 @@ def _as_json(cfg: Config, config_path: Path, stages: list[Artifact],
         "stages": [encode(s) for s in stages],
         "optional": [encode(e) for e in extras],
         "next": next_step(stages),
+        "forward_physics": dict(forward_physics(cfg)),
     }
 
 

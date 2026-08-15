@@ -18,6 +18,7 @@ from inob.forward.duneuro_driver import (
     attach_coils,
     build_driver,
     build_orthogonal_dipoles,
+    build_source_model_config,
     compute_meg_leadfield,
     import_duneuro,
 )
@@ -61,7 +62,8 @@ def run_forward(cfg: Config) -> Path:
     logger.info("  T: %s (%.0f s)", T.shape, time.time() - t0)
 
     dipoles_du = build_orthogonal_dipoles(dp, src_pos_mm)
-    driver_cfg["source_model"] = {"type": "partial_integration"}
+    driver_cfg["source_model"] = build_source_model_config(cfg)
+    logger.info("Source model: %s", cfg.forward.source_model.type)
 
     logger.info("Applying transfer to %d dipoles (3 per source)…", len(dipoles_du))
     t0 = time.time()

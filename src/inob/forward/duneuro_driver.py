@@ -123,9 +123,45 @@ def build_conductivity_tensors(
     return labels, tensors
 
 
+def build_source_model_config(cfg: Config) -> dict[str, str]:
+    """Return the DUNEuro ``source_model`` sub-config from the YAML.
+
+    This is the entry that turns a point dipole into a FEM right-hand side —
+    see :class:`inob.config.SourceModelCfg` for what the models are and when
+    each is appropriate. It is passed to ``applyEEGTransfer`` /
+    ``applyMEGTransfer`` / ``computeMEGPrimaryField``, *not* to the transfer
+    matrix computation: the transfer matrix depends only on the solver, the
+    volume conductor and the sensors, so one transfer matrix can be re-applied
+    with several source models. That makes an A/B between source models cheap
+    — only the (fast) apply step repeats.
+
+    Every value is stringified: DUNEuro parses this dict into a
+    ``Dune::ParameterTree``, whose typed ``get<T>`` accepts strings, and whose
+    ``get<bool>`` accepts ``"true"``/``"false"``. The Venant keys have no
+    defaults on the C++ side, so all of them must be present or the driver
+    throws.
+    """
+    s = cfg.forward.source_model
+    out: dict[str, str] = {"type": s.type}
+    if s.type in ("venant", "multipolar_venant"):
+        out.update({
+            "numberOfMoments":   str(s.number_of_moments),
+            "referenceLength":   str(s.reference_length_mm),
+            "weightingExponent": str(s.weighting_exponent),
+            "relaxationFactor":  str(s.relaxation_factor),
+            "mixedMoments":      str(s.mixed_moments).lower(),
+            "restrict":          str(s.restrict).lower(),
+            "initialization":    s.initialization,
+            "extensions":        s.extensions,
+            "intorderadd":       str(s.intorderadd),
+        })
+    return out
+
+
 def build_driver_config(
     cfg: Config, fem: FemMesh, cond: np.ndarray,
     *, aniso_tensors: tuple[np.ndarray, list[np.ndarray]] | None = None,
+    limit_threads: bool = False,
 ) -> dict[str, Any]:
     """Return the MEEGDriver3d configuration dictionary.
 
@@ -162,10 +198,18 @@ def build_driver_config(
             "tensors": vc_tensors,
         },
         "meg": {"intorderadd": str(s.intorderadd), "type": "physical"},
+        # Only set when this process is one of many: DUNEuro reads
+        # ``numberOfThreads`` for its TBB arenas and otherwise takes the whole
+        # machine, which is right for a serial solve and ruinous for a chunked
+        # one. See SolverCfg.threads_per_process.
+        **({"numberOfThreads": str(s.threads_per_process)}
+           if limit_threads and s.threads_per_process > 0 else {}),
     }
 
 
-def build_driver(cfg: Config, fem: FemMesh) -> tuple[Any, dict[str, Any], np.ndarray]:
+def build_driver(
+    cfg: Config, fem: FemMesh, *, limit_threads: bool = False,
+) -> tuple[Any, dict[str, Any], np.ndarray]:
     """Construct a fully-configured ``MEEGDriver3d``.
 
     Returns ``(driver, driver_cfg, cond)`` so callers can pass ``driver_cfg``
@@ -187,7 +231,8 @@ def build_driver(cfg: Config, fem: FemMesh) -> tuple[Any, dict[str, Any], np.nda
             a.sigma_long_sm / max(a.sigma_trans_sm, 1e-12),
             n_muscle_stl, int((fem.tissue == fem.label_to_id["muscle"]).sum()),
         )
-    driver_cfg = build_driver_config(cfg, fem, cond, aniso_tensors=aniso_tensors)
+    driver_cfg = build_driver_config(cfg, fem, cond, aniso_tensors=aniso_tensors,
+                                     limit_threads=limit_threads)
     driver = dp.MEEGDriver3d(driver_cfg)
     return driver, driver_cfg, cond
 

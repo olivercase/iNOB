@@ -10,7 +10,14 @@ from pathlib import Path
 
 import numpy as np
 
-from inob.config import SOURCE_TARGETS, Config, load_config, tag_path
+from inob.config import (
+    SOLVER_TYPES,
+    SOURCE_MODEL_TYPES,
+    SOURCE_TARGETS,
+    Config,
+    load_config,
+    tag_path,
+)
 from inob.logging_setup import configure_logging, run_log_path
 
 logger = logging.getLogger(__name__)
@@ -45,6 +52,36 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
              "panel offers; equivalent to --set forward.local_workers=N.",
     )
     p.add_argument(
+        "--source-model", default=None, metavar="MODEL",
+        choices=list(SOURCE_MODEL_TYPES),
+        help="How a point dipole becomes a FEM right-hand side. "
+             "'partial_integration' (default) loads only the containing "
+             "element's nodes; 'venant' / 'multipolar_venant' spread it over a "
+             "patch of neighbouring nodes fitted to the dipole moment (St. "
+             "Venant), which behaves better near a conductivity jump. "
+             "Equivalent to --set forward.source_model.type=MODEL; the fit "
+             "parameters stay on --set. "
+             f"One of: {', '.join(SOURCE_MODEL_TYPES)}.",
+    )
+    p.add_argument(
+        "--solver-type", default=None, metavar="TYPE", choices=list(SOLVER_TYPES),
+        help="FEM discretisation: 'cg' (default, continuous — what every "
+             "leadfield here was solved with) or 'dg' (discontinuous Galerkin, "
+             "which represents a conductivity jump as a jump instead of "
+             "smearing it across the elements either side, at ~4x the degrees "
+             "of freedom). DG works only with the partial-integration source "
+             "model. Equivalent to --set forward.solver.type=TYPE.",
+    )
+    p.add_argument(
+        "--muscle-anisotropy", default=None, metavar="MODE",
+        choices=("auto", "on", "off"),
+        help="Fibre-aligned muscle conductivity tensor. 'auto' (default) turns "
+             "it on exactly when muscle is a source tissue, keeping vagus and "
+             "spine runs comparable with ones already solved; force 'on'/'off' "
+             "for a like-for-like A/B. Equivalent to "
+             "--set forward.muscle_anisotropy.mode=MODE.",
+    )
+    p.add_argument(
         "--project-root", type=Path, default=None,
         help="Override the project root used to resolve relative paths.",
     )
@@ -74,6 +111,17 @@ def setup(
         if workers < 0:
             raise SystemExit("--workers must be 0 (all cores) or a positive count")
         overrides.append(f"forward.local_workers={workers}")
+    # Same sugar for the two forward-physics choices. Both go through --set so
+    # the config loader validates them exactly once, in one place.
+    source_model = getattr(args, "source_model", None)
+    if source_model:
+        overrides.append(f"forward.source_model.type={source_model}")
+    solver_type = getattr(args, "solver_type", None)
+    if solver_type:
+        overrides.append(f"forward.solver.type={solver_type}")
+    muscle_aniso = getattr(args, "muscle_anisotropy", None)
+    if muscle_aniso:
+        overrides.append(f"forward.muscle_anisotropy.mode={muscle_aniso}")
 
     cfg = load_config(
         args.config, overrides=overrides, project_root=args.project_root,

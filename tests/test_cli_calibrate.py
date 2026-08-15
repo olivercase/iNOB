@@ -59,3 +59,73 @@ def test_main_overrides_are_forwarded(tmp_path, monkeypatch) -> None:
     assert calls["source_radius_mm"] == 40.0
     assert calls["n_electrodes"] == 50
     assert calls["out_dir"] == tmp_path / "calib"
+
+
+class _FakeMeg:
+    """Stand-in for MegSphereValidation — only the reported fields matter."""
+
+    def __init__(self, rdm: float = 0.01, mag: float = 1.0) -> None:
+        self.rdm = rdm
+        self.mag = mag
+        self.fem_peak_fT_per_nAm = 1.23
+        self.sarvas_peak_fT_per_nAm = 1.24
+        self.n_coils = 60
+        self.n_tets = 42
+        self.radius_mm = 100.0
+
+
+def test_meg_flag_validates_against_sarvas(tmp_path, monkeypatch, capsys) -> None:
+    calls = {}
+
+    def fake_validate(**kwargs):
+        calls.update(kwargs)
+        return _FakeMeg()
+
+    monkeypatch.setattr(cli_mod, "validate_meg_sphere", fake_validate)
+    rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path),
+                       "--meg"])
+    assert rc == 0
+    # The source model must reach DUNEuro, not be silently dropped.
+    assert calls["source_model"] == {"type": "partial_integration"}
+    out = capsys.readouterr().out
+    assert "MEG sphere" in out and "RDM" in out
+
+
+def test_compare_source_models_runs_one_per_model(tmp_path, monkeypatch, capsys) -> None:
+    seen: list[str] = []
+
+    def fake_validate(**kwargs):
+        model = kwargs["source_model"]["type"]
+        seen.append(model)
+        # Make Venant the winner so the "lowest RDM" line is checkable.
+        return _FakeMeg(rdm=0.005 if model == "venant" else 0.02)
+
+    monkeypatch.setattr(cli_mod, "validate_meg_sphere", fake_validate)
+    rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path),
+                       "--compare-source-models"])
+    assert rc == 0
+    assert seen == ["partial_integration", "venant", "multipolar_venant"]
+    out = capsys.readouterr().out
+    assert "Lowest RDM: venant" in out
+
+
+def test_compare_source_models_accepts_an_explicit_subset(
+    tmp_path, monkeypatch,
+) -> None:
+    seen: list[dict] = []
+
+    def fake_validate(**kwargs):
+        seen.append(kwargs["source_model"])
+        return _FakeMeg()
+
+    monkeypatch.setattr(cli_mod, "validate_meg_sphere", fake_validate)
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--compare-source-models", "partial_integration", "venant",
+    ])
+    assert rc == 0
+    assert [s["type"] for s in seen] == ["partial_integration", "venant"]
+    # The Venant row must carry the parameters DUNEuro has no defaults for —
+    # sweeping the type alone would throw inside C++.
+    assert "numberOfMoments" in seen[1] and "restrict" in seen[1]
+    assert "numberOfMoments" not in seen[0]

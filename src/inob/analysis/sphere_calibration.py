@@ -132,12 +132,20 @@ def run_sphere_eeg_forward(
     sphere_fem: FemMesh, electrodes: SensorArray,
     *, source_pos_mm: np.ndarray, sigma_S_per_m: float = 0.43,
     duneuro_path: Path | None = None,
+    source_model: dict[str, str] | None = None,
 ) -> np.ndarray:
     """Run DUNEuro EEG forward on the sphere FEM. Returns raw L (3, N_elec).
 
     The 3 columns are the X, Y, Z moment projections — same convention as
     the rest of the pipeline. ``raw`` means *no* unit conversion applied.
+
+    ``source_model`` overrides the DUNEuro source-model sub-config (build it
+    with :func:`inob.forward.duneuro_driver.build_source_model_config`). The
+    default is partial integration, which is what the calibration constants in
+    this module were measured with — pass another model to check it against
+    the same analytic reference before switching a production solve to it.
     """
+    source_model = source_model or {"type": "partial_integration"}
     import sys
     if duneuro_path is not None:
         if str(duneuro_path) not in sys.path:
@@ -179,7 +187,7 @@ def run_sphere_eeg_forward(
     T = np.array(T_raw)
     eye3 = np.eye(3)
     dipoles = [dp.Dipole3d(source_pos_mm, eye3[k]) for k in range(3)]
-    driver_cfg["source_model"] = {"type": "partial_integration"}
+    driver_cfg["source_model"] = source_model
     fields_raw, _ = driver.applyEEGTransfer(T, dipoles, driver_cfg)
     L = np.column_stack([np.asarray(f) for f in fields_raw])
     L = L - L.mean(axis=0, keepdims=True)        # common-average reference
@@ -311,13 +319,21 @@ def run_sphere_meg_forward(
     sphere_fem: FemMesh, coilpos_mm: np.ndarray, coilori: np.ndarray,
     *, source_pos_mm: np.ndarray, moment: np.ndarray,
     sigma_S_per_m: float = 0.33, duneuro_path: Path | None = None,
+    source_model: dict[str, str] | None = None,
 ) -> np.ndarray:
     """DUNEuro MEG forward on the sphere. Returns the SI field (n_coils,) fT/nAm.
 
     Uses the same :func:`inob.forward.duneuro_driver.compute_meg_leadfield`
     the production solve uses (secondary transfer + primary Biot–Savart,
     mm-mode → SI), so this validates the real pipeline, not a parallel path.
+
+    ``source_model`` overrides the DUNEuro source-model sub-config; default is
+    partial integration. Note the primary (Biot–Savart) field DUNEuro returns
+    is the analytic field of the ideal point dipole whatever the source model
+    is — only the secondary field changes — so an A/B here isolates exactly the
+    part of the MEG leadfield the source model controls.
     """
+    source_model = source_model or {"type": "partial_integration"}
     import sys
     if duneuro_path is not None and str(duneuro_path) not in sys.path:
         sys.path.insert(0, str(duneuro_path))
@@ -345,7 +361,7 @@ def run_sphere_meg_forward(
     )
     T_raw, _ = driver.computeMEGTransferMatrix(driver_cfg)
     T = np.array(T_raw)
-    driver_cfg["source_model"] = {"type": "partial_integration"}
+    driver_cfg["source_model"] = source_model
     dipole = [dp.Dipole3d(np.asarray(source_pos_mm, float), np.asarray(moment, float))]
     L_si = compute_meg_leadfield(driver, T, dipole, driver_cfg)   # (n_coils, 1), T/(A·m)
     return L_si[:, 0] * 1e6                                        # → fT/nAm
@@ -362,6 +378,7 @@ def validate_meg_sphere(
     seed: int = 0,
     duneuro_path: Path | None = None,
     out_dir: Path = Path("outputs/calibration"),
+    source_model: dict[str, str] | None = None,
 ) -> MegSphereValidation:
     """Validate the MEG forward against the Sarvas analytic sphere.
 
@@ -371,6 +388,12 @@ def validate_meg_sphere(
     :func:`calibrate_eeg_factor`; it also reports the empirical mm-mode → SI
     constant so a regression in :data:`~inob.forward.duneuro_driver.MEG_MM_MODE_TO_SI`
     is caught.
+
+    ``source_model`` selects how the dipole becomes a FEM right-hand side
+    (default: partial integration, the pipeline default). Passing a Venant
+    config here is the cheapest honest way to decide whether to switch a
+    production solve to it — same mesh, same analytic reference, only the
+    source model differs.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     fem = build_sphere_fem(radius_mm=radius_mm, pitch_mm=pitch_mm,
@@ -389,6 +412,7 @@ def validate_meg_sphere(
     fem_fT = run_sphere_meg_forward(
         fem, coilpos, coilori, source_pos_mm=src, moment=moment,
         sigma_S_per_m=sigma_S_per_m, duneuro_path=duneuro_path,
+        source_model=source_model,
     )
     B = sarvas_meg_field(src * 1e-3, moment * 1e-9, coilpos * 1e-3)
     sarvas_fT = np.einsum("ij,ij->i", B, coilori) * 1e15

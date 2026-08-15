@@ -59,6 +59,7 @@ from inob.forward.duneuro_driver import (
     attach_coils,
     build_driver,
     build_orthogonal_dipoles,
+    build_source_model_config,
     compute_meg_leadfield,
     import_duneuro,
 )
@@ -103,7 +104,9 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
                 len(chunk_idx), int(chunk_idx[0]), int(chunk_idx[-1]))
 
     dp = import_duneuro(cfg)
-    driver, driver_cfg, _cond = build_driver(cfg, fem)
+    # limit_threads: this worker is one of `n_chunks` processes, so it must not
+    # also claim every core for TBB (see SolverCfg.threads_per_process).
+    driver, driver_cfg, _cond = build_driver(cfg, fem, limit_threads=True)
     attach_coils(driver, dp, coilpos, coilori)
 
     logger.info("computing transfer matrix…")
@@ -113,7 +116,8 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
     logger.info("  T %s (%.0fs)", T.shape, time.time() - t_T)
 
     dipoles_du = build_orthogonal_dipoles(dp, src_pos_mm)
-    driver_cfg["source_model"] = {"type": "partial_integration"}
+    driver_cfg["source_model"] = build_source_model_config(cfg)
+    logger.info("source model: %s", cfg.forward.source_model.type)
 
     logger.info("applying transfer to dipoles…")
     t_a = time.time()

@@ -33,6 +33,7 @@ from inob.config import Config
 from inob.forward.duneuro_driver import (
     build_driver,
     build_orthogonal_dipoles,
+    build_source_model_config,
     import_duneuro,
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
@@ -69,12 +70,20 @@ def attach_electrodes(
 
 def compute_eeg_leadfield(
     driver, dp, driver_cfg: dict, src_pos_mm: np.ndarray,
+    source_model_cfg: dict | None = None,
 ) -> np.ndarray:
     """Compute the EEG leadfield using DUNEuro's transfer-matrix path.
 
     Returns ``(n_electrodes, 3*n_src)`` of V per A·m, common-average
     referenced.
+
+    ``source_model_cfg`` is the DUNEuro ``source_model`` sub-config (see
+    :func:`inob.forward.duneuro_driver.build_source_model_config`); it is
+    needed only for the *apply* step, not for the transfer matrix. Defaults to
+    partial integration so callers without a :class:`Config` keep the historic
+    behaviour.
     """
+    source_model_cfg = source_model_cfg or {"type": "partial_integration"}
     logger.info("Computing EEG transfer matrix (slow)…")
     t0 = time.time()
     T_raw, _ = driver.computeEEGTransferMatrix(driver_cfg)
@@ -82,7 +91,7 @@ def compute_eeg_leadfield(
     logger.info("  T: %s (%.0f s)", T.shape, time.time() - t0)
 
     dipoles_du = build_orthogonal_dipoles(dp, src_pos_mm)
-    driver_cfg = {**driver_cfg, "source_model": {"type": "partial_integration"}}
+    driver_cfg = {**driver_cfg, "source_model": source_model_cfg}
 
     logger.info("Applying transfer to %d dipoles (3 per source)…", len(dipoles_du))
     t0 = time.time()
@@ -114,7 +123,9 @@ def run_eeg_forward(cfg: Config) -> Path:
     driver, driver_cfg, cond = build_driver(cfg, fem)
     attach_electrodes(driver, dp, electrodes.coilpos)
 
-    L = compute_eeg_leadfield(driver, dp, driver_cfg, src_pos_mm)
+    logger.info("Source model: %s", cfg.forward.source_model.type)
+    L = compute_eeg_leadfield(driver, dp, driver_cfg, src_pos_mm,
+                              build_source_model_config(cfg))
     # DUNEuro mm-mode EEG → µV/(nA·m): ×EEG_CALIBRATION_FACTOR (see constant
     # above; derivation in docs/VALIDATION.md §2).
     L_uV_per_nAm = L * EEG_CALIBRATION_FACTOR
