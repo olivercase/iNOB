@@ -228,7 +228,16 @@ different tag so you keep both.
 ## 6. Physics captured (and a caveat)
 
 Solves quasi-static `∇·(σ∇φ) = ∇·Jᵖ`.
-- **Primary current** Jᵖ = the dipole, via the `partial_integration` source model.
+- **Primary current** Jᵖ = the dipole, realised on the mesh by the source model
+  set in `forward.source_model.type` — `partial_integration` (default, and what
+  every leadfield in `outputs/` was solved with) or `venant` /
+  `multipolar_venant` (St. Venant: monopoles spread over an element patch,
+  fitted to the dipole's moments). A point dipole is a singularity with no
+  exact representation in a finite element space, so some such rule is
+  unavoidable; which one is best is an empirical question, answered on the
+  homogeneous sphere by `pytest -m duneuro tests/test_venant_sphere_validation.py`.
+  Switch with `--set forward.source_model.type=venant`; the transfer matrix is
+  source-model independent, so only the (fast) apply step differs.
 - **Volume/return currents** −σ∇φ = implicit in the σ-weighted PDE solution over
   the heterogeneous conductivities (bone/muscle/skin/…) — this is the field being
   attenuated/smeared as it penetrates tissue.
@@ -297,3 +306,107 @@ work for any region. Notes:
 
 Figure filenames are not auto-tagged by target — pass explicit `--out` paths per
 region so vagus/spine outputs don't overwrite each other.
+
+---
+
+## 8. Choosing the source model
+
+`forward.source_model.type` decides how a point dipole — a singularity with no
+exact representation in a finite element space — becomes a FEM right-hand side.
+Three are wired up: `partial_integration` (default), `venant`,
+`multipolar_venant`. Switch anywhere with `--source-model venant`, or per-field
+with `--set forward.source_model.number_of_moments=4`.
+
+Two facts from the DUNEuro source that shape how you use this:
+
+- **The transfer matrix does not depend on the source model.** It is a function
+  of solver, volume conductor and sensors only; the source model enters at
+  `applyEEGTransfer` / `applyMEGTransfer`. So an A/B costs one transfer matrix
+  and N cheap applies, not N solves.
+- **`computeMEGPrimaryField` returns the analytic Biot–Savart field of the
+  ideal point dipole regardless of source model** (`volume_conductor_interface.hh`
+  builds it straight from `dipole.position()` / `dipole.moment()`). Only the
+  secondary field changes. An A/B therefore isolates exactly the part of the
+  MEG leadfield the source model governs.
+
+Decide it empirically, not by preference:
+
+```bash
+inob calibrate --compare-source-models          # every model, one sphere, RDM/MAG table
+inob calibrate --meg --source-model venant      # one model, full report
+pytest -m duneuro tests/test_venant_sphere_validation.py
+```
+
+Caveat the sphere cannot answer: `restrict: true` keeps the Venant monopole
+patch inside the dipole's own tissue, which is right in principle but can leave
+a *thin* compartment (a vagus nerve one or two elements across) with too few
+vertices to fit the moments. A homogeneous sphere has no thin compartment. Check
+a real mesh before switching a production solve, and try `restrict: false`
+first if a Venant run looks noisy on nerve sources.
+
+Note also that the patch size is set by `initialization` + `extensions`, i.e. by
+local vertex valence — it is not a fixed node count.
+
+---
+
+## 9. What DUNEuro can do that this pipeline does not use
+
+Surveyed against the pinned build (`DUNEURO_COMMIT` in `build_duneuro.sh`) and
+the duneuro-py bindings. Listed because knowing the ceiling changes what is
+worth building here versus what is already sitting in the library.
+
+**Available in our build, not wired up**
+
+- **More source models.** `CGSourceModelFactory` also takes `subtraction`,
+  `local_subtraction`, `whitney` (Raviart–Thomas / Bauer et al.),
+  `patch_based_venant`, `spatial_venant`, `truncated_spatial_venant`. Each needs
+  parameters `SourceModelCfg` does not carry, so `inob.config` rejects them by
+  name rather than letting them throw inside C++. `subtraction` is the
+  interesting one — it is the accuracy reference in most FEM comparison papers,
+  at a large cost per dipole.
+- **DG instead of CG.** `solver_type: dg` is compiled for tetrahedra. It handles
+  conductivity jumps discontinuously rather than smearing them across an
+  element boundary, which is the standard argument for it in a mesh with a thin
+  high-contrast compartment. Costs ~4x the DOFs of CG on the same mesh.
+- **Hexahedral meshes.** `element_type: hexahedron`, including the geometry-
+  adapted variant. Our pipeline is tet-only end to end (CGAL), so this would be
+  a meshing change, not a solver flag.
+- **tDCS / stimulation.** `solveTDCSForward` exists, and in this version it
+  *is* `computeEEGTransferMatrix` — the same reciprocity map, read the other
+  way. Combined with `evaluateMultipleFunctionsAtPositions` and
+  `evaluation_return_type: current` (= −σ∇u) or `gradient` (= E field), that is
+  a VNS/stimulation field model built from machinery this pipeline already runs
+  every solve. Probably the largest capability we own and have never used.
+- **Field anywhere in the volume, not just at sensors.**
+  `evaluateMultipleFunctionsAtPositions`, `evaluateMultipleFunctionsAtElementCenters`,
+  `evaluateAtElectrodes`, `makeDomainFunction`. We only ever read the solution
+  at coils and electrodes.
+- **VTK export of the solved field.** `volumeConductorVTKWriter` +
+  `addVertexData` / `addCellData` / `addVertexDataGradient` / `write`. The 3-D
+  viewer currently shows geometry and sensors; it could show the potential or
+  current-density field itself.
+- **Gradiometers.** `setMEGChannelTransform` combines coil projections into
+  channels. We attach one projection per coil, i.e. magnetometers only, so any
+  gradiometer array (and the common-mode rejection that motivates one) is
+  currently unmodelled.
+- **Direct solves.** `solveEEGForward` / `solveMEGForward` return the field
+  itself rather than a transfer matrix — the right call when sources vastly
+  outnumber sensors, which is the inverse of our current regime but exactly the
+  source-first cluster mode sketched at the top of `inob/forward/chunk.py`.
+- **`createSourceSpace`** places dipoles on a regular grid inside the volume
+  conductor, and `DipoleStatistics` / `elementStatistics` report per-dipole
+  element diagnostics. We roll our own sampling in `inob.sources`.
+- **Electrode projection `normal`** as an alternative to
+  `closest_subentity_center`.
+- **MEG flux `numerical`** as an alternative to `physical`.
+
+**Not in our build**
+
+- **Unfitted FEM (UDG / CutFEM).** Level-set geometry with no conforming mesh —
+  `#if HAVE_DUNE_UDG`, and `DUNE_MODS` in `build_duneuro.sh` does not include
+  `dune-udg`, so it is compiled out. Would remove the meshing stage entirely for
+  smooth interfaces; a real build change, not a config flag.
+- **TBB.** The Dockerfile installs `libtbb-dev`, so the CI image parallelises
+  `computeMEGPrimaryField` and the transfer applies over dipoles. The Myriad
+  build script never asks for it — worth checking whether the module environment
+  supplies it, since it is free speed on the apply step.

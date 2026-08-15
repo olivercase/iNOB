@@ -132,9 +132,20 @@ def test_detectability_scenarios_follow_source_target() -> None:
         spine = scenarios_for_target(cfg_for(target))
         assert spine is not DEFAULT_SCENARIOS
         assert any(s.Q_nAm == SPINE_PROFILE.default_strength_nAm for s in spine)
-        assert max(s.Q_nAm for s in spine) < max(s.Q_nAm for s in DEFAULT_SCENARIOS)
+
+    # Vagus and spine now plan over the same 1-20 nA·m range, so a difference
+    # between the two figures is geometry rather than a different assumed
+    # source. The vagus ladder used to top out at 70 nA·m (Bu et al. 2024 full
+    # A+C summation) — an upper bound, not a planning figure, and it flattered
+    # every vagus result against the cord's.
+    assert max(s.Q_nAm for s in DEFAULT_SCENARIOS) == 20.0
+    assert max(s.Q_nAm for s in scenarios_for_target(cfg_for("spine"))) == 20.0
+    assert {s.Q_nAm for s in DEFAULT_SCENARIOS} == {
+        s.Q_nAm for s in scenarios_for_target(cfg_for("spine"))
+    }
     # Muscle sources are far stronger than vagal CAPs. The ranges overlap at the
     # bottom (a single MUAP is comparable to a modest CAP), but muscle is shifted
     # up throughout and tops out an order of magnitude higher.
     assert min(s.Q_nAm for s in MUSCLE_SCENARIOS) > min(s.Q_nAm for s in DEFAULT_SCENARIOS)
-    assert max(s.Q_nAm for s in MUSCLE_SCENARIOS) > 10 * max(s.Q_nAm for s in DEFAULT_SCENARIOS)
+    assert max(s.Q_nAm for s in MUSCLE_SCENARIOS) >= 10 * max(
+        s.Q_nAm for s in DEFAULT_SCENARIOS)

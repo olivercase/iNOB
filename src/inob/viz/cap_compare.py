@@ -26,7 +26,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
-from inob.analysis.propagation import compute_propagation_signals, is_ordered_polyline
+from inob.analysis.propagation import (
+    MIN_WAVEFRONT_SOURCES,
+    compute_propagation_signals,
+    is_ordered_polyline,
+)
 from inob.config import Config, source_region_label, source_target_tag, target_output
 from inob.io.npz import load_leadfield
 from inob.physiology.profiles import profile_for_tag
@@ -153,6 +157,18 @@ def render_cap_compare(
     seg_len_label = (f"{seg_len_m * 1000:.0f} mm" if ordered_sources
                      else "n/a (volume-fill sources, not an ordered path)")
     seg_len_legend = f"{seg_len_m * 1000:.0f} mm" if ordered_sources else "arc length n/a"
+    # A segment holding fewer than a few sources is not resolving a wavefront —
+    # it is one dipole with a delay (see MIN_WAVEFRONT_SOURCES). Say so on the
+    # figure: the curve is still drawn, because hiding it would be worse, but
+    # nobody should read its ratio as a propagation effect.
+    undersampled = sig.n_segment_sources < MIN_WAVEFRONT_SOURCES
+    segment_line = f"Active segment: {seg_len_label}\n"
+    if undersampled:
+        plural = "" if sig.n_segment_sources == 1 else "s"
+        seg_len_legend += f", only {sig.n_segment_sources} source{plural}"
+        segment_line = (f"Active segment: {seg_len_label}"
+                        f"  [UNDER-SAMPLED: {sig.n_segment_sources} "
+                        f"source{plural}]\n")
     transit_seg_label = (f"{transit_seg_ms:.2f} ms" if ordered_sources else "n/a")
     Q_total_nAm = sig.Q_total_nAm
     mean_diameter_um = float(np.sum(profile.fibres.diameters_um * profile.fibres.weights))
@@ -297,7 +313,7 @@ def render_cap_compare(
         f"Generator: {profile.generator}\n\n"
         f"Event: {n_fibres} fibres, mean d={mean_diameter_um:.1f} µm\n"
         f"Total moment Q_total: {Q_total_nAm:.2f} nA·m\n"
-        f"Active segment: {seg_len_label}\n"
+        f"{segment_line}"
         f"{whole_lines}"
         f"Mean fibre CV: {cv_mean:.1f} m/s\n"
         f"Transit, active segment: {transit_seg_label}\n"

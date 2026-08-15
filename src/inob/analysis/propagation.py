@@ -92,6 +92,11 @@ def is_ordered_polyline(
     return (arc / diag) <= max_tortuosity
 
 
+#: Below this many source positions inside the active segment, a "propagating"
+#: trace is not resolving a wavefront — it is one dipole with a delay.
+MIN_WAVEFRONT_SOURCES: int = 3
+
+
 @dataclass(frozen=True)
 class PropagationSignals:
     """Per-channel time traces for one event under both source models.
@@ -114,6 +119,12 @@ class PropagationSignals:
     cv_mean_m_per_s: float
     segment_mm: float           # active-segment length actually simulated
     total_span_mm: float        # whole-polyline arc length
+    # How many source positions fall inside the active segment. A propagating
+    # model needs several to be a wavefront rather than a point: if the source
+    # spacing is coarser than the segment, the window collapses onto one source
+    # and the "propagating" trace is really a stationary one at a different
+    # place. Reported so a caller can say so rather than plot it as physiology.
+    n_segment_sources: int
     transit_segment_ms: float
     transit_whole_ms: float
     duration_ms: float
@@ -212,6 +223,15 @@ def compute_propagation_signals(
     seg_m = segment_mm * 1e-3
     seg_idx = np.where(arc_m >= (arc_m[hot_idx] - seg_m))[0]
     seg_len_m = float(arc_m[seg_idx[-1]] - arc_m[seg_idx[0]])
+    if len(seg_idx) < MIN_WAVEFRONT_SOURCES:
+        spacing_mm = total_span_mm / max(len(arc_m) - 1, 1)
+        logger.warning(
+            "active segment (%.0f mm) holds only %d source position(s): the "
+            "sources are ~%.0f mm apart, so the propagating trace over it is a "
+            "point, not a wavefront. Re-solve at a finer forward.source_spacing_mm "
+            "(or widen the segment) before reading the segment ratio.",
+            segment_mm, len(seg_idx), spacing_mm,
+        )
 
     def stationary_signal() -> np.ndarray:
         """Lumped approximation: all N fibres at a single point.
@@ -293,6 +313,7 @@ def compute_propagation_signals(
         cv_mean_m_per_s=cv_mean,
         segment_mm=seg_len_m * 1000.0,
         total_span_mm=arc_total_m * 1000.0,
+        n_segment_sources=len(seg_idx),
         transit_segment_ms=seg_len_m / cv_mean * 1000.0,
         transit_whole_ms=arc_total_m / cv_mean * 1000.0,
         duration_ms=float(duration_ms),

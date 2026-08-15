@@ -221,7 +221,7 @@ def _draw_paddle_silhouette(ax, uv: np.ndarray, *, contact_radius: float = 1.6,
 
 
 def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
-                          vmin: float, vmax: float) -> None:
+                          vmin: float, vmax: float, colorbar: bool = True) -> None:
     """Render the EEG patch as a 2-D topoplot.
 
     Auto-detects layout from the channel labels: paddle32 → bicubic
@@ -286,9 +286,11 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
         ax.set_aspect("equal")
         ax.set_xlabel(f"u  (mm, patch frame)  ·  pitch {pitch:.1f} mm")
         ax.set_ylabel("v  (mm, along-body)")
-        cb = ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04, pad=0.03)
-        cb.set_label("µV  (1 nA·m source)", fontsize=8)
-        cb.outline.set_visible(False)
+        cb = (ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04,
+                                 pad=0.03) if colorbar else None)
+        if cb is not None:
+            cb.set_label("µV  (1 nA·m source)", fontsize=8)
+            cb.outline.set_visible(False)
         return
 
     # Rectangular path
@@ -302,9 +304,11 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
         )
         ax.set_xlabel(f"Column  ·  {cols} contacts @ {pitch:.1f} mm pitch")
         ax.set_ylabel(f"Row  ·  {rows} contacts")
-        cb = ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04, pad=0.03)
-        cb.set_label("µV  (1 nA·m source)", fontsize=8)
-        cb.outline.set_visible(False)
+        cb = (ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04,
+                                 pad=0.03) if colorbar else None)
+        if cb is not None:
+            cb.set_label("µV  (1 nA·m source)", fontsize=8)
+            cb.outline.set_visible(False)
         return
 
     im = ax.scatter(
@@ -315,9 +319,11 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Z (mm)")
     ax.set_aspect("equal")
-    cb = ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04, pad=0.03)
-    cb.set_label("µV  (1 nA·m source)", fontsize=8)
-    cb.outline.set_visible(False)
+    cb = (ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04,
+                             pad=0.03) if colorbar else None)
+    if cb is not None:
+        cb.set_label("µV  (1 nA·m source)", fontsize=8)
+        cb.outline.set_visible(False)
 
 
 def _format_3d_axis(ax, *, src: np.ndarray, pos_for_lim: np.ndarray | None = None) -> None:

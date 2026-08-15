@@ -75,16 +75,30 @@ class DetectabilityScenario:
     description: str = ""
 
 
-# Default scenarios spanning the realistic vagus-CAP range.
+# Vagus source-strength ladder, deliberately 1-20 nA·m — the same rungs the
+# cord takes (see spine_scenarios), so the two targets can be read on one axis
+# and any difference between them is geometry rather than a different assumed
+# source.
+#
+# The ladder used to top out at 70 nA·m, Bu et al. 2024's full A+C-fibre
+# summation. That figure is real but it is an upper bound on a maximally
+# synchronous nerve-wide event, an order of magnitude above the cord's
+# magnetospinography anchor and two orders above one 200-fibre baroreceptor
+# burst (0.74 nA·m, VAGUS_PROFILE). Planning against it flattered every vagus
+# result. It is kept in the top rung's description rather than as a rung, so
+# the reference is not lost; `--q-nAm 70` still runs it explicitly.
 DEFAULT_SCENARIOS: tuple[DetectabilityScenario, ...] = (
     DetectabilityScenario("Q = 1 nA·m  (calibration unit)", 1.0,
                            "Reference scale, leadfield calibration."),
-    DetectabilityScenario("Q = 5 nA·m  (sparse activation)", 5.0,
-                           "~7% of full summation; spontaneous baseline."),
-    DetectabilityScenario("Q = 20 nA·m  (modest CAP)", 20.0,
+    DetectabilityScenario("Q = 5.11 nA·m  (cord anchor)", 5.11,
+                           "The cervical-cord magnetospinography figure, run "
+                           "here so vagus and spine share a rung exactly."),
+    DetectabilityScenario("Q = 10 nA·m  (modest CAP)", 10.0,
                            "Reflex / mild evoked activation."),
-    DetectabilityScenario("Q = 70 nA·m  (full A+C summation)", 70.0,
-                           "Per Bu et al. 2024 Hämäläinen summation."),
+    DetectabilityScenario("Q = 20 nA·m  (strong CAP)", 20.0,
+                           "Top of the planning range. Full A+C summation "
+                           "(70 nA·m, Bu et al. 2024) is 3.5x higher again and "
+                           "is an upper bound, not a planning figure."),
 )
 
 # Muscle (magnetomyography) source-strength range. Muscle fibres are ~60 µm —
@@ -149,8 +163,8 @@ def spine_scenarios() -> tuple[DetectabilityScenario, ...]:
     )
 
 
-def fixed_q_scenarios(Q_nAm: float) -> tuple[DetectabilityScenario, ...]:
-    """A one-rung ladder at an explicit Q, for cross-target comparisons.
+def fixed_q_scenarios(*Q_nAm: float) -> tuple[DetectabilityScenario, ...]:
+    """A ladder at explicit source strengths, for cross-target comparisons.
 
     Each target's own ladder is anchored to its own literature (see
     :func:`scenarios_for_target`), so the ladders are not comparable rung for
@@ -158,11 +172,18 @@ def fixed_q_scenarios(Q_nAm: float) -> tuple[DetectabilityScenario, ...]:
     spine's 5.11 nA·m magnetospinography figure — asks the different question
     "how does this geometry do at *that* source strength?", and needs the Q
     stated explicitly rather than pulled from a profile.
+
+    Several values give several rungs, which is how the vagus gets plotted over
+    the cord's 1–20 nA·m range: same rungs, same axes, only the geometry and
+    the sensor distance differ.
     """
-    return (
-        DetectabilityScenario(f"Q = {Q_nAm:g} nA·m", float(Q_nAm),
+    if not Q_nAm:
+        raise ValueError("fixed_q_scenarios needs at least one source strength")
+    return tuple(
+        DetectabilityScenario(f"Q = {q:g} nA·m", float(q),
                               "Explicit source strength (--q-nAm), not the "
-                              "target's own physiology anchor."),
+                              "target's own physiology anchor.")
+        for q in sorted(float(q) for q in Q_nAm)
     )
 
 

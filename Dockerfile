@@ -78,15 +78,29 @@ WORKDIR ${DUNE_SRC}
 # problem and buried the real (compile) error in the log. A module that never
 # clones is a hard failure here rather than a confusing one much later.
 ENV GIT_TERMINAL_PROMPT=0
+# Shallow (--depth 1). dunecontrol builds a working tree; it never reads the
+# history, and the full history of eleven DUNE modules is most of the download.
+# On a slow link to gitlab.dune-project.org that difference is the difference
+# between a build that finishes and one that does not.
+#
+# The namespace search below tries each namespace in turn, and a miss costs a
+# full connection timeout. --depth 1 does not help a miss, so the namespace each
+# module actually lives in is pinned instead; the search is kept only as a
+# fallback for a module that moves.
 RUN set -eux; \
-    for m in dune-common dune-geometry dune-grid dune-istl dune-localfunctions \
-             dune-typetree dune-functions dune-uggrid dune-alugrid \
-             dune-pdelab dune-subgrid; do \
-        for ns in core staging extensions pdelab; do \
-            if git clone -q -b releases/2.10 \
-                 "https://gitlab.dune-project.org/${ns}/${m}.git" 2>/dev/null; then break; fi; \
-        done; \
-        test -d "${m}" || { echo "could not clone ${m} from any namespace" >&2; exit 1; }; \
+    clone() { git clone -q --depth 1 -b releases/2.10 "$1" "$2"; }; \
+    for spec in core:dune-common core:dune-geometry core:dune-grid \
+                core:dune-istl core:dune-localfunctions staging:dune-typetree \
+                staging:dune-functions staging:dune-uggrid \
+                extensions:dune-alugrid pdelab:dune-pdelab \
+                extensions:dune-subgrid; do \
+        ns="${spec%%:*}"; m="${spec#*:}"; \
+        clone "https://gitlab.dune-project.org/${ns}/${m}.git" "${m}" || { \
+            for alt in core staging extensions pdelab; do \
+                if clone "https://gitlab.dune-project.org/${alt}/${m}.git" "${m}" 2>/dev/null; then break; fi; \
+            done; \
+        }; \
+        test -d "${m}" || { echo "could not clone ${m}" >&2; exit 1; }; \
     done
 
 # Pinned duneuro + the source patch (separate layer → fast patch iteration).
@@ -95,10 +109,16 @@ RUN set -eux; \
 # cluster/build_duneuro.sh, so there's one source of truth.
 ARG DUNEURO_COMMIT=8f344b4da9c128ddf3e47af5ec136d05a3aeb162
 ARG DUNEURO_BUILD_TAG=v1.0.1
+# duneuro is pinned to a commit, so it is fetched shallowly *at that commit*
+# rather than cloned whole and then checked out — same result, a fraction of
+# the transfer.
 RUN set -eux; \
-    git clone -q https://gitlab.dune-project.org/duneuro/duneuro.git; \
-    git clone -q https://gitlab.dune-project.org/duneuro/duneuro-py.git; \
-    git -C duneuro checkout -q "${DUNEURO_COMMIT}"; \
+    mkdir duneuro; \
+    git -C duneuro init -q; \
+    git -C duneuro remote add origin https://gitlab.dune-project.org/duneuro/duneuro.git; \
+    git -C duneuro fetch -q --depth 1 origin "${DUNEURO_COMMIT}"; \
+    git -C duneuro checkout -q FETCH_HEAD; \
+    git clone -q --depth 1 https://gitlab.dune-project.org/duneuro/duneuro-py.git; \
     curl -fsSL -o /tmp/duneuro.patch \
         "https://raw.githubusercontent.com/olivercase/duneuro-build/${DUNEURO_BUILD_TAG}/scripts/patches/duneuro-eigen5-dune210.patch"; \
     git -C duneuro apply /tmp/duneuro.patch

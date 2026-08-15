@@ -91,9 +91,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument(
         "--q-nAm", type=float, default=None, dest="q_nAm", metavar="Q",
-        help="Run at one explicit source strength instead of the target's own "
-             "Q ladder — e.g. --source-target vagus --q-nAm 5.11 puts the "
-             "vagus at the spine's magnetospinography anchor.",
+        nargs="+",
+        help="Run at explicit source strengths instead of the target's own Q "
+             "ladder — e.g. --source-target vagus --q-nAm 5.11 puts the vagus "
+             "at the spine's magnetospinography anchor, and --q-nAm 1 5.11 10 "
+             "20 plots it over the cord's whole reported range.",
     )
     p.add_argument("--out-surface", type=Path, default=None)
     p.add_argument("--out-detect", type=Path, default=None)
@@ -105,10 +107,11 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="detectability")
     source_idx = _resolve_source_idx(cfg, args.level, args.source_idx)
-    scenarios = fixed_q_scenarios(args.q_nAm) if args.q_nAm is not None else None
+    scenarios = fixed_q_scenarios(*args.q_nAm) if args.q_nAm else None
     if scenarios is not None:
-        logger.info("source strength fixed at %g nA·m (--q-nAm); the %s "
-                    "physiology ladder is not used", args.q_nAm,
+        logger.info("source strengths fixed at %s nA·m (--q-nAm); the %s "
+                    "physiology ladder is not used",
+                    ", ".join(f"{q:g}" for q in sorted(args.q_nAm)),
                     source_target_tag(cfg) or "default")
 
     if args.target in ("surface", "all"):
