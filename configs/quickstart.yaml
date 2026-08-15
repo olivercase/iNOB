@@ -1,0 +1,160 @@
+# Quickstart — the config `inob quickstart` runs on a fresh clone.
+#
+# The job of this file is to prove, in minutes rather than hours, that this
+# machine can actually run iNOB: real anatomy, the real geometry/FEM/sensor
+# code paths, real output files you can look at. Everything is turned down as
+# far as it can go while still being the genuine pipeline.
+#
+# It is NOT a scientific configuration. Two tissues (vagus + skin, so no bone,
+# muscle, vessel or cord), a 4 mm voxel grid, a 50 mm sensor pitch and dipoles
+# every 20 mm are all far too coarse for a result you would report — use
+# configs/default.yaml for that. Every line that differs is marked below.
+#
+# Outputs go to outputs/quickstart/ so a first run can never overwrite work
+# done with default.yaml.
+
+project_root: .
+
+data:
+  bone_dir: data/bone
+  torso_skin: data/torso/FJ2810_BP22617_FMA7163_Skin.stl
+  vagus_left_glob: "data/vagus/*left*.stl"
+  vagus_right_glob: "data/vagus/*right*.stl"
+  muscle_dir: data/muscle
+  vessel_dir: data/vessel
+  spinal_cord_dir: data/spinal_cord
+
+outputs:
+  base: outputs/quickstart
+  geometry_mat: outputs/quickstart/geometry/geometry.mat
+  geometry_png: outputs/quickstart/geometry/geometry.png
+  fem_mat: outputs/quickstart/fem/fem.mat
+  fem_png: outputs/quickstart/fem/fem.png
+  sensors_mat: outputs/quickstart/sensors/sensor_array.mat
+  sensors_png: outputs/quickstart/sensors/sensor_array.png
+  electrodes_mat: outputs/quickstart/sensors/electrode_array.mat
+  electrodes_png: outputs/quickstart/sensors/electrode_array.png
+  forward_npz: outputs/quickstart/forward/duneuro_leadfield_vagus.npz
+  forward_chunks_dir: outputs/quickstart/forward/chunks
+  forward_eeg_npz: outputs/quickstart/forward/duneuro_eeg_leadfield_vagus.npz
+  sensitivity_dir: outputs/quickstart/forward/sensitivity
+  intermediate_bone_clean: outputs/quickstart/intermediate/bone/clean
+  intermediate_bone_union: outputs/quickstart/intermediate/bone/union.stl
+  logs_dir: outputs/logs
+
+geometry:
+  # Coarse shrinkwrap: enough to produce a watertight surface, not enough to
+  # resolve anatomy properly. default.yaml uses a much finer pitch and 10-50x
+  # the sample counts.
+  #
+  # Every compartment with data on disk gets built, not just the ones listed in
+  # fem.tissues below, so every compartment needs parameters here.
+  shrinkwrap:
+    mesh_skin:         {pitch: 6.0, n_samples: 60000,  close_iter: 2, decimate_target: 8000, smooth_iter: 4}
+    mesh_bone:         {pitch: 4.0, n_samples: 80000,  close_iter: 2, decimate_target: 8000, smooth_iter: 4}
+    mesh_vagus_left:   {pitch: 1.0, n_samples: 30000,  close_iter: 1, decimate_target: 3000, smooth_iter: 3}
+    mesh_vagus_right:  {pitch: 1.0, n_samples: 30000,  close_iter: 1, decimate_target: 3000, smooth_iter: 3}
+    mesh_muscle:       {pitch: 2.0, n_samples: 60000,  close_iter: 1, decimate_target: 6000, smooth_iter: 4}
+    mesh_blood_vessel: {pitch: 1.0, n_samples: 30000,  close_iter: 1, decimate_target: 3000, smooth_iter: 3}
+    mesh_spinal_cord:  {pitch: 1.5, n_samples: 200000, close_iter: 1, decimate_target: 6000, smooth_iter: 3}
+  validate:
+    # A coarse shrinkwrap can leave a genus-1 surface that the production gate
+    # would reject. The quickstart's job is to prove the pipeline runs, so it
+    # warns instead of failing; default.yaml keeps all three gates on.
+    require_watertight: true
+    require_winding_consistent: true
+    require_euler_2: false
+
+fem:
+  pitch_mm: 4.0            # default.yaml: 3.0
+  pad_mm: 20.0
+  radbound: 2.5            # default.yaml: 2.5
+  maxvol: 25.0             # default.yaml: 20.0
+  vagus_dilate_voxels: 2
+  bone_closing_mm: 10.0
+  tissues: ["vagus_left", "skin"]   # default.yaml adds bone, vessel, muscle, cord
+  validate:
+    min_mesh_quality: 0.0   # a coarse mesh will not clear the production 0.05 gate
+    require_contiguous_tissue_ids: true
+    require_units_mm: true
+
+sensors:
+  resolution_mm: 50.0       # default.yaml: 30.0
+  depth_mm: 10.0
+  angular_margin_deg: 90.0
+  cylinder_radius_factor: 0.75
+  z_crop_low_factor: 0.55
+
+forward:
+  conductivities_sm:
+    vagus_left:   0.30
+    vagus_right:  0.30
+    blood_vessel: 0.70
+    spinal_cord:  0.23
+    muscle:       0.35
+    bone:         0.0042
+    skin:         0.43
+  sigma_unit_scale: 1.0e-3
+  muscle_anisotropy:
+    mode: auto
+    sigma_long_sm:  0.40
+    sigma_trans_sm: 0.10
+  source_spacing_mm: 20.0   # default.yaml: 5.0 — few sources keeps a demo solve short
+  source_tissue: vagus_left
+  duneuro_path: null
+  local_workers: 0
+  source_model:
+    type: partial_integration
+    number_of_moments: 3
+    reference_length_mm: 20.0
+    weighting_exponent: 1
+    relaxation_factor: 1.0e-6
+    mixed_moments: true
+    restrict: true
+    initialization: closest_vertex
+    extensions: vertex
+    intorderadd: 2
+  solver:
+    type: cg
+    reduction: 1.0e-10
+    edge_norm_type: houston
+    penalty: 20
+    scheme: sipg
+    weights: tensorOnly
+    intorderadd: 5
+    post_process_meg: true
+    subtract_mean: true
+  validate:
+    require_finite: true
+    max_abs_fT_per_nAm: 1.0e+6
+
+electrodes:
+  shape: paddle32
+  rows: 6
+  cols: 5
+  contact_pitch_mm: 5.0
+  head_offset_mm: 15.0
+  foot_offset_mm: 15.0
+  target_tissue: vagus_left
+  target_z_low_factor: 0.65
+  target_z_high_factor: 0.95
+  label_prefix: elec
+  n_contacts: 1000
+  sample_seed: 0
+
+noise:
+  opm_intrinsic_fT_sqrtHz: 7.0
+  eeg_amplifier_uV_sqrtHz: 0.1
+  eeg_electrode_skin_kohm: 10.0
+  band_lo_hz: 30.0
+  band_hi_hz: 500.0
+
+cluster:
+  n_chunks: 8
+
+sensitivity:
+  perturbations: [0.8, 1.0, 1.25]
+  tissues: ["bone", "skin"]
+
+reproducibility:
+  seed: 0

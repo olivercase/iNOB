@@ -9,6 +9,10 @@ from inob.forward.eeg import run_eeg_forward
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        # `inob-eeg` console script — see inob.cli.run_forward for why.
+        from inob.duneuro_env import reexec_with_duneuro
+        reexec_with_duneuro()
     p = argparse.ArgumentParser(description=run_eeg_forward.__doc__)
     add_common_args(p)
     args = p.parse_args(argv)

@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 
 from inob.config import Config
-from inob.io.hdf5 import FemMesh, save_fem, validate_fem
+from inob.io.hdf5 import FemMesh, SchemaError, save_fem, validate_fem
 from inob.io.stl import load_stl, load_stl_glob
 from inob.mesh.quality import (
     assert_mesh_ok,
@@ -175,11 +175,14 @@ def _assemble_label_volume(
     cfg: Config, *,
     skin_occ, bone_occ, vl_occ, vr_occ, muscle_occ=None, vessel_occ=None,
     spinal_cord_occ=None,
-) -> tuple[np.ndarray, list[str]]:
+) -> tuple[np.ndarray, list[str], list[str]]:
     """Compose a labelled image; tissue order matches ``cfg.fem.tissues``.
 
     Tissues are painted in declaration order so later (innermost) tissues
-    overwrite earlier ones. Returns the volume + the actual order used.
+    overwrite earlier ones. Returns ``(label_vol, declared, painted)`` — the
+    volume, the declared tissue order, and the tissues that actually got
+    voxels. A tissue with no voxels is skipped, and only *painted* tissues are
+    required to survive meshing.
     """
     label_vol = np.zeros(skin_occ.shape, dtype=np.uint8)
     zero = np.zeros_like(skin_occ)
@@ -199,32 +202,116 @@ def _assemble_label_volume(
                    if t in cfg.fem.tissues]
     # The CGAL region IDs we want match ``cfg.fem.tissues`` order (1..K).
     label_to_id = {lab: i + 1 for i, lab in enumerate(cfg.fem.tissues)}
+    painted: list[str] = []
     for lab in paint_order:
         occ = tissue_to_occ[lab]
         if occ is None or not occ.any():
             logger.warning("  tissue %r is empty — check inputs", lab)
             continue
         label_vol[occ] = label_to_id[lab]
+        painted.append(lab)
         logger.info("  painted %s → id %d (%d voxels)", lab, label_to_id[lab], int(occ.sum()))
-    return label_vol, list(cfg.fem.tissues)
+    # Report in declared (id) order rather than paint order, so the list reads
+    # the same way every other tissue list in the pipeline does.
+    painted = [lab for lab in cfg.fem.tissues if lab in painted]
+    return label_vol, list(cfg.fem.tissues), painted
 
 
-def _remap_region_ids(
-    elem_regions: np.ndarray, declared: list[str],
+def _label_regions(
+    label_vol: np.ndarray,
+    node_voxels: np.ndarray,
+    tets_0idx: np.ndarray,
+    raw_regions: np.ndarray,
+    declared: list[str],
 ) -> tuple[np.ndarray, list[str]]:
-    """Map raw CGAL region IDs (whatever values they emit) to contiguous 1..K.
+    """Label each CGAL output region by where its tets sit in ``label_vol``.
 
-    ``declared`` is the desired tissue order; output IDs follow that order
-    over the regions actually present in the mesh, dropping declared tissues
-    that did not survive the meshing step.
+    Returns ``(tissue_ids, labels)``: ``tissue_ids`` is contiguous 1..K in
+    ``declared`` order over the labels actually present, and ``labels`` names
+    them.
+
+    Why not just reuse the region IDs
+    ---------------------------------
+    ``cgalv2m`` does not promise to return the subdomain indices it was given:
+    it renumbers its output regions in its own order. This code used to assume
+    it did, which is silently wrong whenever the two orders differ — and they
+    differ exactly when a painted tissue fails to survive meshing, because the
+    surviving regions close up the gap. On a coarse grid where a thin structure
+    dropped out, that mislabelled the *entire* volume conductor as the missing
+    tissue and assigned it that tissue's conductivity, with every downstream
+    schema check still passing.
+
+    So the mapping is measured instead of assumed: each output region is
+    assigned the painted label that the majority of its tets' centroids land
+    on. That is robust to any renumbering, and it also merges two output
+    regions that describe one anatomical tissue (CGAL can split a compartment
+    into disconnected components) rather than inventing a tissue for the
+    second one.
     """
-    present = sorted(set(int(r) for r in np.unique(elem_regions)))
-    # Trust the painter: each declared id 1..K either appears in `present` or not.
-    order = [r for r in range(1, len(declared) + 1) if r in present]
-    remap = {r: i + 1 for i, r in enumerate(order)}
-    new_ids = np.array([remap[int(r)] for r in elem_regions], dtype=np.int32)
-    new_labels = [declared[r - 1] for r in order]
-    return new_ids, new_labels
+    # Tet centroids in voxel-index space; label_vol is indexed [x, y, z].
+    centroids = node_voxels[tets_0idx].mean(axis=1)
+    idx = np.rint(centroids).astype(np.int64)
+    for axis in range(3):
+        np.clip(idx[:, axis], 0, label_vol.shape[axis] - 1, out=idx[:, axis])
+    per_tet = label_vol[idx[:, 0], idx[:, 1], idx[:, 2]].astype(np.int64)
+
+    raw = np.asarray(raw_regions, dtype=np.int64)
+    n_declared = len(declared)
+    region_label_id: dict[int, int] = {}
+    for r in np.unique(raw):
+        sel = per_tet[raw == r]
+        # Background (0) is not a tissue: a centroid can land just outside its
+        # own voxel on a boundary tet. Ignore those when voting.
+        votes = np.bincount(sel[sel > 0], minlength=n_declared + 1)
+        if votes.sum() == 0:
+            # cgalv2m only meshes non-zero voxels, so every output region must
+            # sit inside some painted tissue. If none does, the label volume and
+            # the mesh are not in the same coordinate frame and any labelling
+            # from here would be fiction.
+            raise SchemaError(
+                f"CGAL region {int(r)} has no tetrahedra inside any painted "
+                "tissue, so its tissue cannot be identified. The labelled "
+                "image and the returned mesh appear to disagree — rebuild the "
+                "FEM, and report this if it persists."
+            )
+        region_label_id[int(r)] = int(np.argmax(votes))
+
+    present_ids = sorted(set(region_label_id.values()))
+    labels = [declared[i - 1] for i in present_ids]
+    new_of_old = {old: i + 1 for i, old in enumerate(present_ids)}
+
+    tissue_ids = np.zeros(len(raw), dtype=np.int32)
+    for r, label_id in region_label_id.items():
+        tissue_ids[raw == r] = new_of_old[label_id]
+    return tissue_ids, labels
+
+
+def _assert_painted_tissues_survived(
+    painted: list[str], present_labels: list[str], fcfg,
+) -> None:
+    """Fail when a tissue that went into the mesher did not come back out.
+
+    A compartment can be painted into the labelled image and still produce no
+    tetrahedra: if it is thinner than the mesher's own size criteria it simply
+    disappears. The result is a volume conductor missing a tissue the config
+    asked for — the vagus, say — which then gets solved and analysed as though
+    it were there. Nothing downstream can notice: the mesh is valid, the schema
+    checks pass, and the leadfield is finite. So the check has to be here.
+    """
+    missing = [lab for lab in painted if lab not in present_labels]
+    if not missing:
+        return
+    raise SchemaError(
+        f"{len(missing)} tissue(s) were voxelised but produced no tetrahedra, "
+        f"so the FEM does not contain them: {', '.join(missing)}.\n"
+        f"They are too small to survive meshing at fem.pitch_mm="
+        f"{fcfg.pitch_mm:g}, fem.radbound={fcfg.radbound:g}, "
+        f"fem.maxvol={fcfg.maxvol:g}.\n"
+        "Fix by resolving them (lower fem.pitch_mm, fem.radbound and "
+        "fem.maxvol), by raising fem.vagus_dilate_voxels for thread-like "
+        "structures, or by removing them from fem.tissues if you did not mean "
+        "to model them."
+    )
 
 
 def build_fem(cfg: Config) -> Path:
@@ -272,7 +359,7 @@ def build_fem(cfg: Config) -> Path:
                               dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ) \
         if "vagus_right" in fcfg.tissues else np.zeros_like(skin_occ)
 
-    label_vol, declared = _assemble_label_volume(
+    label_vol, declared, painted = _assemble_label_volume(
         cfg, skin_occ=skin_occ, bone_occ=bone_occ, vl_occ=vl_occ, vr_occ=vr_occ,
         muscle_occ=muscle_occ, vessel_occ=vessel_occ, spinal_cord_occ=spinal_cord_occ,
     )
@@ -280,17 +367,21 @@ def build_fem(cfg: Config) -> Path:
     logger.info("Running iso2mesh.cgalv2m (radbound=%g, maxvol=%g)",
                 fcfg.radbound, fcfg.maxvol)
     node, elem, _face = im.cgalv2m(label_vol, fcfg.radbound, fcfg.maxvol)
-    node_mm = node[:, :3] * pitch + mn
+    node_voxels = np.asarray(node[:, :3], dtype=np.float64)
+    node_mm = node_voxels * pitch + mn
     elem_int = np.asarray(elem, dtype=np.int64)
     tets_0idx = elem_int[:, :4] - 1
     raw_regions = elem_int[:, 4]
 
-    tissue_ids, present_labels = _remap_region_ids(raw_regions, declared)
+    tissue_ids, present_labels = _label_regions(
+        label_vol, node_voxels, tets_0idx, raw_regions, declared,
+    )
     logger.info("CGAL output: %d nodes, %d tets, regions=%s",
                 len(node_mm), len(tets_0idx), present_labels)
     for r in range(1, len(present_labels) + 1):
         cnt = int((tissue_ids == r).sum())
         logger.info("  region %d (%-11s): %d tets", r, present_labels[r - 1], cnt)
+    _assert_painted_tissues_survived(painted, present_labels, fcfg)
 
     mesh = FemMesh(
         nodes=np.asarray(node_mm, dtype=np.float64),

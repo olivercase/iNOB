@@ -67,14 +67,33 @@ def check_core_deps() -> Check:
 
 
 def check_duneuro() -> Check:
-    """Optional: only ``inob forward`` and ``inob eeg`` need it."""
+    """Optional: only ``inob forward`` and ``inob eeg`` need it.
+
+    "Not importable here" is not the same as "not built". A DUNEuro build
+    targets one interpreter, which is rarely the one on your PATH, so this
+    looks for an interpreter that *can* import it before reporting a problem —
+    otherwise it tells people to spend half an hour building something they
+    already have.
+    """
+    from inob.duneuro_env import find_duneuro_python
+
     if _importable("duneuropy"):
-        return Check("DUNEuro (duneuropy)", OK, "importable")
+        return Check("DUNEuro (duneuropy)", OK, "importable here")
+
+    python = find_duneuro_python()
+    if python is not None:
+        return Check(
+            "DUNEuro (duneuropy)", OK,
+            f"built for {python}",
+            ["`inob forward` / `inob eeg` switch to that interpreter "
+             "automatically — nothing to do."],
+        )
     return Check(
         "DUNEuro (duneuropy)", WARN,
-        "not importable — every stage works except `inob forward` / `inob eeg`",
+        "not found — every stage works except `inob forward` / `inob eeg`",
         ["Build it: https://github.com/olivercase/duneuro-build",
-         "Then run inob from that venv's interpreter."],
+         "Already built it? Point at it with "
+         "INOB_DUNEURO_PYTHON=/path/to/venv/bin/python"],
     )
 
 
