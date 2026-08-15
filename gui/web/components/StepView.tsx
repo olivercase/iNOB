@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Icon, Note, Select, Tag } from "@/components/ui";
+import { Button, Icon, Note, Select, Tag, Toggle } from "@/components/ui";
 import type { IconName } from "@/components/ui/Icon";
 import { getPath, setPath, type Cfg } from "@/lib/config";
 import {
@@ -9,6 +9,7 @@ import {
   getLevels,
   getSampledSources,
   getSensorArray,
+  getVolumeField,
   runLadder,
   suggestSources,
   type LadderResult,
@@ -18,6 +19,7 @@ import {
   type SampledSources,
   type SensorArrayInfo,
   type SuggestedSources,
+  type VolumeFieldCloud,
 } from "@/lib/api";
 import type {
   DetectResult,
@@ -214,6 +216,110 @@ function NumField({
   );
 }
 
+/* One labelled choice from a fixed set, laid out like NumField so a panel can
+   mix "how big" and "which one" questions without changing shape. */
+function ChoiceField({
+  label,
+  help,
+  path,
+  config,
+  onChange,
+  options,
+}: {
+  label: string;
+  help: string;
+  path: string;
+  config: Cfg;
+  onChange: (c: Cfg) => void;
+  options: { value: string; label: string }[];
+}) {
+  const value = getPath<string>(config, path, options[0]?.value ?? "");
+  return (
+    <div className="stepfield">
+      <div className="stepfield-head">
+        <label htmlFor={path}>{label}</label>
+        <Select
+          id={path}
+          value={value}
+          ariaLabel={label}
+          options={options}
+          onChange={(v) => onChange(setPath(config, path, v))}
+        />
+      </div>
+      <p className="stepfield-help">{help}</p>
+    </div>
+  );
+}
+
+/* One labelled yes/no. */
+function ToggleField({
+  label,
+  help,
+  path,
+  config,
+  onChange,
+}: {
+  label: string;
+  help: string;
+  path: string;
+  config: Cfg;
+  onChange: (c: Cfg) => void;
+}) {
+  const value = getPath<boolean>(config, path, false);
+  return (
+    <div className="stepfield">
+      <div className="stepfield-head">
+        <Toggle
+          checked={Boolean(value)}
+          label={label}
+          onChange={(v) => onChange(setPath(config, path, v))}
+        />
+      </div>
+      <p className="stepfield-help">{help}</p>
+    </div>
+  );
+}
+
+/* The DUNEuro source models this pipeline can configure. Kept in step with
+   SOURCE_MODEL_TYPES in inob/config.py — the backend validates the choice, so
+   an option missing here is only invisible, never silently wrong. */
+/* What each evaluation type means, for the one place a user meets the word. */
+const EVALUATION_LABEL: Record<string, string> = {
+  direct: "potential",
+  gradient: "field strength",
+  current: "current density",
+};
+
+const SOURCE_MODEL_OPTIONS = [
+  { value: "partial_integration", label: "Partial integration" },
+  { value: "venant", label: "St. Venant" },
+  { value: "multipolar_venant", label: "St. Venant (multipolar)" },
+];
+
+const SOURCE_MODEL_HELP: Record<string, string> = {
+  partial_integration:
+    "Integrates the dipole by parts onto the test functions, loading only the " +
+    "nodes of the element it sits in. Cheapest, and what every leadfield here " +
+    "was solved with.",
+  venant:
+    "Replaces the dipole with monopoles spread over neighbouring nodes, fitted " +
+    "to reproduce its moment. Spreads the source over more of the mesh, which " +
+    "is better behaved for sources close to a conductivity jump.",
+  multipolar_venant:
+    "The same patch fit, loaded multipolar rather than monopolar.",
+};
+
+const isVenant = (cfg: Cfg): boolean =>
+  getPath<string>(cfg, "forward.source_model.type", "").endsWith("venant");
+
+/* "4.0:1" — the number that actually matters about the muscle tensor. */
+function anisotropyRatio(cfg: Cfg): string {
+  const l = getPath<number>(cfg, "forward.muscle_anisotropy.sigma_long_sm", NaN);
+  const t = getPath<number>(cfg, "forward.muscle_anisotropy.sigma_trans_sm", NaN);
+  if (!Number.isFinite(l) || !Number.isFinite(t) || t <= 0) return "—";
+  return `${(l / t).toFixed(1)}:1`;
+}
+
 export default function StepView(p: Props) {
   const { node, config } = p;
   const [saving, setSaving] = useState(false);
@@ -255,6 +361,7 @@ export default function StepView(p: Props) {
     "eeg",
     "noise",
     "anisotropy",
+    "sourcemodel",
     "solve",
     "detect",
   ]);
@@ -669,6 +776,10 @@ export default function StepView(p: Props) {
             />
           )}
 
+          {node.kind === "volumefield" && (
+            <VolumeFieldStep onCloud={p.onSensorCloud} />
+          )}
+
           {/* ── analytic rungs (optional nodes) ────────────────────────── */}
           {(node.kind === "biot" || node.kind === "sarvas") && (
             <LadderRungStep kind={node.kind} />
@@ -685,6 +796,31 @@ export default function StepView(p: Props) {
               {config ? (
                 <div style={{ marginTop: 14 }}>
                   <ComputePanel config={config} onChange={p.onConfigChange} />
+                  <ChoiceField
+                    label="Galerkin method"
+                    path="forward.solver.type"
+                    config={config}
+                    onChange={p.onConfigChange}
+                    options={[
+                      { value: "cg", label: "Continuous (CG)" },
+                      { value: "dg", label: "Discontinuous (DG)" },
+                    ]}
+                    help={
+                      "CG holds the potential continuous across element faces; " +
+                      "DG lets it jump, so a conductivity boundary is represented " +
+                      "as a boundary rather than smeared across the elements " +
+                      "either side. Worth trying for a thin, high-contrast " +
+                      "compartment; costs roughly 4x the unknowns."
+                    }
+                  />
+                  {getPath<string>(config, "forward.solver.type", "") === "dg" && (
+                    <Note tone="info" title="DG needs partial integration">
+                      DUNEuro&rsquo;s DG source-model factory has no vertex-based
+                      St. Venant — its unknowns are not on the vertices the
+                      monopoles would sit on. Saving DG alongside a Venant source
+                      model is refused rather than left to fail mid-solve.
+                    </Note>
+                  )}
                   <NumField
                     label="Solver tolerance"
                     path="forward.solver.reduction"
@@ -702,6 +838,172 @@ export default function StepView(p: Props) {
               <Button variant="ghost" icon="cog" onClick={p.onOpenAdvanced}>
                 Solver engine and cluster
               </Button>
+            </>
+          )}
+
+          {/* ── source model ───────────────────────────────────────────── */}
+          {node.kind === "sourcemodel" && config && (
+            <>
+              <p className="jlead">
+                A point dipole is a singularity: it has no exact representation
+                in a finite-element space, so the solver needs a rule for
+                turning it into a load on the mesh. This is that rule. It
+                changes the volume-current (secondary) field only — the
+                dipole’s own Biot–Savart field is analytic either way.
+              </p>
+              <ChoiceField
+                label="Source model"
+                path="forward.source_model.type"
+                config={config}
+                onChange={p.onConfigChange}
+                options={SOURCE_MODEL_OPTIONS}
+                help={
+                  SOURCE_MODEL_HELP[
+                    getPath<string>(config, "forward.source_model.type",
+                                    "partial_integration")
+                  ] ?? ""
+                }
+              />
+              {isVenant(config) && (
+                <>
+                  <h2 className="jsub">St. Venant fit</h2>
+                  <p className="jlead">
+                    The monopole strengths are a least-squares fit: reproduce
+                    the dipole’s moments over the patch, while a
+                    distance-weighted penalty keeps far-away nodes quiet.
+                  </p>
+                  <div className="jstack">
+                    <ToggleField
+                      label="Keep the patch inside one tissue"
+                      path="forward.source_model.restrict"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      help={
+                        "Stops monopoles leaking across a conductivity jump — " +
+                        "usually right. But a thin compartment (a nerve one or " +
+                        "two elements across) may then have too few nodes to " +
+                        "fit the moments well. Turn this off first if a Venant " +
+                        "run looks noisy on nerve sources."
+                      }
+                    />
+                    <NumField
+                      label="Moments matched"
+                      path="forward.source_model.number_of_moments"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      help="How many moments of the dipole the patch reproduces. 3 is standard."
+                    />
+                    <NumField
+                      label="Reference length"
+                      unit="mm"
+                      path="forward.source_model.reference_length_mm"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      help="Length the moment fit is scaled by. Roughly the spatial scale the patch spans."
+                    />
+                    <NumField
+                      label="Weighting exponent"
+                      path="forward.source_model.weighting_exponent"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      help="How sharply the penalty grows with distance from the dipole. Must be below the moment count."
+                    />
+                    <NumField
+                      label="Relaxation factor"
+                      path="forward.source_model.relaxation_factor"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      help="Weight on that penalty. Larger trades moment accuracy for a smoother, better-conditioned fit."
+                    />
+                    <ToggleField
+                      label="Mixed moments"
+                      path="forward.source_model.mixed_moments"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      help="Include cross terms (xy, xz, …) in the moment conditions, not just the pure ones."
+                    />
+                    <ChoiceField
+                      label="Patch starts from"
+                      path="forward.source_model.initialization"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      options={[
+                        { value: "closest_vertex", label: "Elements at the nearest node" },
+                        { value: "single_element", label: "The containing element only" },
+                      ]}
+                      help="Which elements the monopole patch is seeded with before it is grown."
+                    />
+                    <ChoiceField
+                      label="Patch grown by"
+                      path="forward.source_model.extensions"
+                      config={config}
+                      onChange={p.onConfigChange}
+                      options={[
+                        { value: "vertex", label: "Elements sharing a node" },
+                        { value: "intersection", label: "Elements sharing a face" },
+                        { value: "", label: "Not grown" },
+                      ]}
+                      help="How far the patch spreads from that seed. Wider spreads the source over more nodes."
+                    />
+                  </div>
+                </>
+              )}
+              <Note tone="info" title="Changing this changes your leadfields">
+                Every leadfield already solved used partial integration, so a
+                switch is only comparable against runs re-solved with the same
+                model. The transfer matrix does not depend on the source model,
+                though — only the fast apply step is redone.
+              </Note>
+            </>
+          )}
+
+          {/* ── muscle anisotropy ──────────────────────────────────────── */}
+          {node.kind === "anisotropy" && config && (
+            <>
+              <p className="jlead">
+                Skeletal muscle carries current several times better along its
+                fibres than across them. When this is active every muscle
+                element gets its own conductivity tensor, aligned to that
+                muscle’s fibre axis, instead of one scalar; every other tissue
+                stays isotropic.
+              </p>
+              <ChoiceField
+                label="When to apply it"
+                path="forward.muscle_anisotropy.mode"
+                config={config}
+                onChange={p.onConfigChange}
+                options={[
+                  { value: "auto", label: "Automatic — on for muscle sources" },
+                  { value: "on", label: "Always on" },
+                  { value: "off", label: "Always off" },
+                ]}
+                help={
+                  "Automatic keeps vagus and spine runs identical to previously " +
+                  "solved ones, and switches the tensor on whenever muscle is a " +
+                  "source tissue. Force it on or off for a like-for-like A/B."
+                }
+              />
+              <div className="jstack">
+                <NumField
+                  label="Along the fibre"
+                  unit="S/m"
+                  path="forward.muscle_anisotropy.sigma_long_sm"
+                  config={config}
+                  onChange={p.onConfigChange}
+                  help="Conductivity parallel to the fibre direction."
+                />
+                <NumField
+                  label="Across the fibre"
+                  unit="S/m"
+                  path="forward.muscle_anisotropy.sigma_trans_sm"
+                  config={config}
+                  onChange={p.onConfigChange}
+                  help="Conductivity perpendicular to it. The ratio of the two is what the solver actually feels."
+                />
+              </div>
+              <p className="jmeta mono">
+                {anisotropyRatio(config)} anisotropy
+              </p>
             </>
           )}
 
@@ -1338,6 +1640,99 @@ function SensorArrayPreview({
  * orbited, and a hot spot can be traced to the sensor that reads it. Nothing is
  * rendered server-side.
  */
+/* The FEM solution inside the tissue, painted into the 3-D well. Read from the
+   artefact `inob volume-field` writes: a transfer-matrix solve is minutes, so
+   this step shows a result rather than starting one. */
+function VolumeFieldStep({
+  onCloud,
+}: {
+  onCloud: (
+    cloud: { positions: [number, number, number][]; values?: number[] } | null,
+  ) => void;
+}) {
+  const [cloud, setCloud] = useState<VolumeFieldCloud | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ msg: string; hint?: string } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setBusy(true);
+    setError(null);
+    getVolumeField().then(({ result, error: err, hint }) => {
+      if (!live) return;
+      if (result) {
+        setCloud(result);
+        onCloud({ positions: result.positions, values: result.values });
+      } else {
+        setCloud(null);
+        onCloud(null);
+        setError({ msg: err ?? "could not be read", hint });
+      }
+      setBusy(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [onCloud]);
+
+  useEffect(() => () => onCloud(null), [onCloud]);
+
+  return (
+    <>
+      <p className="jlead">
+        Every other view here reads the solution at a sensor. This is the
+        solution in the body itself — the potential, or the current density
+        carrying it, at points inside the mesh. It is what explains a
+        topography: which tissue the current takes, and what it goes around.
+      </p>
+
+      {busy && <p className="ui-dim">reading the volume field…</p>}
+
+      {error && !busy && (
+        <Note tone="warn" title="No volume field yet">
+          <p>{error.msg}</p>
+          {error.hint && <p className="ui-dim">{error.hint}</p>}
+        </Note>
+      )}
+
+      {cloud && !busy && (
+        <>
+          <StatTile
+            value={cloud.peak.toPrecision(3)}
+            unit={`peak ${EVALUATION_LABEL[cloud.evaluation_type] ?? cloud.evaluation_type}`}
+          />
+          <dl className="fieldfacts mono">
+            <div>
+              <dt>points drawn</dt>
+              <dd>{cloud.count}</dd>
+            </div>
+            <div>
+              <dt>points solved</dt>
+              <dd>{cloud.total}</dd>
+            </div>
+            <div>
+              <dt>median</dt>
+              <dd>{cloud.median.toPrecision(3)}</dd>
+            </div>
+          </dl>
+          {cloud.total > cloud.count && (
+            <p className="jmeta">
+              Thinned by a fixed stride to keep the cloud drawable — the shape is
+              the whole field, the density is not.
+            </p>
+          )}
+          <p className="jmeta mono">{cloud.description}</p>
+          <Note tone="info" title="Relative magnitudes">
+            The solve runs in DUNEuro&rsquo;s mm-mode units, which the leadfields
+            are calibrated out of and this is not. Read the pattern, not the
+            absolute number.
+          </Note>
+        </>
+      )}
+    </>
+  );
+}
+
 function FieldMapStep({
   modality,
   sourceCount,

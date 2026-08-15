@@ -28,6 +28,15 @@ class Command:
     group: str
     summary: str
     aliases: tuple[str, ...] = ()
+    needs_duneuro: bool = False
+    """Whether this stage calls into the compiled ``duneuropy`` extension.
+
+    A DUNEuro build only works with the one interpreter it was compiled for,
+    which is usually not the one on your PATH. Commands flagged here re-run
+    themselves under a capable interpreter when the current one cannot import
+    it (see :func:`inob.duneuro_env.reexec_with_duneuro`), so "which Python am
+    I using" stops being something the user has to track.
+    """
 
 
 # Ordered: the groups render in this sequence, and so do commands within them.
@@ -39,7 +48,7 @@ COMMANDS: tuple[Command, ...] = (
             "Show what's built and what to run next"),
     Command("run", "inob.cli.pipeline", "Start here",
             "Run the whole pipeline (geometry to leadfield)",
-            aliases=("pipeline",)),
+            aliases=("pipeline",), needs_duneuro=True),
 
     # --- Build the model --------------------------------------------------
     Command("build-geom", "inob.cli.build_geom", "Build the model",
@@ -53,9 +62,12 @@ COMMANDS: tuple[Command, ...] = (
 
     # --- Solve ------------------------------------------------------------
     Command("forward", "inob.cli.run_forward", "Solve",
-            "MEG leadfield via DUNEuro"),
+            "MEG leadfield via DUNEuro", needs_duneuro=True),
     Command("eeg", "inob.cli.run_eeg", "Solve",
-            "EEG leadfield via DUNEuro"),
+            "EEG leadfield via DUNEuro", needs_duneuro=True),
+    Command("volume-field", "inob.cli.volume_field", "Solve",
+            "The solved field inside the body, not just at the sensors",
+            needs_duneuro=True),
 
     # --- Analyse ----------------------------------------------------------
     Command("detect", "inob.cli.detectability", "Analyse",
@@ -81,11 +93,14 @@ COMMANDS: tuple[Command, ...] = (
     Command("sarvas", "inob.cli.sarvas", "Validate",
             "Benchmark the FEM against the analytic sphere"),
     Command("calibrate", "inob.cli.calibrate", "Validate",
-            "Calibrate DUNEuro EEG output to absolute units"),
+            "Calibrate DUNEuro EEG output to absolute units",
+            needs_duneuro=True),
 
     # --- Figures ----------------------------------------------------------
     Command("topoplot", "inob.cli.topoplot", "Figures",
             "MEG/EEG field maps on the body surface"),
+    Command("torso", "inob.cli.torso", "Figures",
+            "Four-panel field map painted on the body itself"),
     Command("visualise", "inob.cli.visualise", "Figures",
             "Render geometry and FEM mesh PNGs"),
     Command("muscle-sources", "inob.cli.muscle_sources", "Figures",
@@ -184,11 +199,32 @@ def _dispatch(cmd: Command, argv: list[str]) -> int:
         sys.argv[0] = original
 
 
+def _maybe_reexec(cmd: Command, rest: list[str]) -> None:
+    """Hand a DUNEuro stage to an interpreter that can actually run it.
+
+    Does nothing for commands that never touch ``duneuropy``, for ``--help``
+    (which must stay instant and must not depend on a build existing), and
+    whenever the current interpreter can already import the extension — which
+    is the common case and costs one ``find_spec``.
+    """
+    if not cmd.needs_duneuro:
+        return
+    if any(a in ("-h", "--help") for a in rest):
+        return
+    from inob.duneuro_env import reexec_with_duneuro
+
+    reexec_with_duneuro()      # replaces this process when a switch is needed
+
+
 def _debug_enabled(argv: list[str]) -> bool:
     return "--debug" in argv or bool(os.environ.get("INOB_DEBUG"))
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Only a real command line may re-exec (see _maybe_reexec): when a caller
+    # passes argv explicitly — a test, the GUI backend — sys.argv belongs to
+    # something else, and replacing that process would be wrong.
+    from_command_line = argv is None
     argv = list(sys.argv[1:] if argv is None else argv)
     debug = _debug_enabled(argv)
     argv = [a for a in argv if a != "--debug"]
@@ -211,6 +247,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if head not in BY_NAME:
         return _unknown(head, sys.stderr)
+
+    if from_command_line:
+        _maybe_reexec(BY_NAME[head], rest)
 
     try:
         return _dispatch(BY_NAME[head], rest)

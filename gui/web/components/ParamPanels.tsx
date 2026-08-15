@@ -1,6 +1,6 @@
 "use client";
 
-import { Disclosure, TextInput } from "@/components/ui";
+import { Disclosure, Select, TextInput, Toggle } from "@/components/ui";
 import { Cfg, getPath, setPath } from "@/lib/config";
 import {
   PARAM_GROUPS,
@@ -15,14 +15,48 @@ interface Props {
   onChange: (c: Cfg) => void;
 }
 
-// One labelled numeric field with its explanation underneath — the help text
-// is the whole reason this panel exists, so it is always visible, not a tooltip.
-function Field({
-  config,
-  onChange,
-  param,
-}: Props & { param: Param }) {
+// One labelled field with its explanation underneath — the help text is the
+// whole reason this panel exists, so it is always visible, not a tooltip.
+// Numbers are the common case; a "which one" or a yes/no keeps the same shape
+// so a group can mix them without the layout changing under the reader.
+function Control({ config, onChange, param }: Props & { param: Param }) {
+  if (param.kind === "choice") {
+    return (
+      <Select
+        value={getPath<string>(config, param.path, param.choices?.[0]?.value ?? "")}
+        ariaLabel={param.label}
+        options={param.choices ?? []}
+        onChange={(v) => onChange(setPath(config, param.path, v))}
+      />
+    );
+  }
+  if (param.kind === "toggle") {
+    return (
+      <Toggle
+        checked={Boolean(getPath<boolean>(config, param.path, false))}
+        label=""
+        onChange={(v) => onChange(setPath(config, param.path, v))}
+      />
+    );
+  }
   const value = getPath<number>(config, param.path, 0);
+  return (
+    <TextInput
+      mono
+      width={92}
+      value={String(Number.isFinite(value) ? value : 0)}
+      ariaLabel={param.label}
+      onChange={(v) => {
+        const n = Number(v);
+        if (v.trim() !== "" && Number.isFinite(n)) {
+          onChange(setPath(config, param.path, n));
+        }
+      }}
+    />
+  );
+}
+
+function Field({ config, onChange, param }: Props & { param: Param }) {
   return (
     <div className="adv-field">
       <div className="adv-field-head">
@@ -30,18 +64,7 @@ function Field({
           {param.label}
           {param.unit && <span className="adv-unit"> ({param.unit})</span>}
         </label>
-        <TextInput
-          mono
-          width={92}
-          value={String(Number.isFinite(value) ? value : 0)}
-          ariaLabel={param.label}
-          onChange={(v) => {
-            const n = Number(v);
-            if (v.trim() !== "" && Number.isFinite(n)) {
-              onChange(setPath(config, param.path, n));
-            }
-          }}
-        />
+        <Control config={config} onChange={onChange} param={param} />
       </div>
       <p className="adv-help">{param.help}</p>
     </div>
@@ -62,9 +85,11 @@ export default function ParamPanels({ config, onChange }: Props) {
           icon={group.icon}
           summary={group.summary?.(config)}
         >
-          {group.params.map((param) => (
-            <Field key={param.path} config={config} onChange={onChange} param={param} />
-          ))}
+          {group.params
+            .filter((param) => param.visibleIf?.(config) ?? true)
+            .map((param) => (
+              <Field key={param.path} config={config} onChange={onChange} param={param} />
+            ))}
         </Disclosure>
       ))}
 

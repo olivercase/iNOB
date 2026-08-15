@@ -331,6 +331,36 @@ export async function getFieldMap(
   }
 }
 
+export interface VolumeFieldCloud {
+  evaluation_type: string;
+  description: string;
+  count: number;
+  total: number;
+  peak: number;
+  median: number;
+  positions: [number, number, number][];
+  values: number[];
+}
+
+/** The FEM solution inside the volume, thinned to something a browser can draw. */
+export async function getVolumeField(): Promise<{
+  result?: VolumeFieldCloud;
+  error?: string;
+  hint?: string;
+}> {
+  try {
+    const r = await fetch("/api/volumefield", { cache: "no-store" });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) return { result: body };
+    return {
+      error: body.detail?.errors?.[0] ?? `request failed: ${r.status}`,
+      hint: body.detail?.hint,
+    };
+  } catch {
+    return { error: "could not reach the backend" };
+  }
+}
+
 export interface RunHandlers {
   onLog: (line: string) => void;
   onStatuses?: (statuses: Record<string, string>) => void;

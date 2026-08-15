@@ -27,6 +27,8 @@ export type NodeKind =
   | "fieldmap"
   | "noise"
   | "anisotropy"
+  | "sourcemodel"
+  | "volumefield"
   | "engine"
   | "cluster";
 
@@ -305,6 +307,34 @@ export const ADDABLE: AddableSpec[] = [
     icon: "mesh",
     from: "conductivity",
     x: COL,
+    y: BAND_OPTIONAL,
+  },
+  {
+    id: "sourcemodel",
+    group: "physics",
+    kind: "sourcemodel",
+    title: "Source model",
+    caption: "Dipole onto the mesh",
+    blurb:
+      "A point dipole is a singularity — this is the rule that turns it into a " +
+      "finite-element right-hand side",
+    icon: "solve",
+    from: "sources",
+    x: COL * 3,
+    y: BAND_OPTIONAL,
+  },
+  {
+    id: "volumefield",
+    group: "model",
+    kind: "volumefield",
+    title: "Field in the volume",
+    caption: "Inside the body, not at the sensors",
+    blurb:
+      "The solved potential or current density through the tissue itself — " +
+      "where the current goes on its way to the skin",
+    icon: "bolt",
+    from: "solve",
+    x: COL * 6,
     y: BAND_OPTIONAL,
   },
   {

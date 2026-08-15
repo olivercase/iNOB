@@ -16,6 +16,14 @@ export interface Param {
   min?: number;
   max?: number;
   step?: number;
+  /** Numbers are the common case, so "number" is the default. */
+  kind?: "number" | "choice" | "toggle";
+  /** kind "choice" only: the fixed set of values. */
+  choices?: { value: string; label: string }[];
+  /** Rendered only when this holds — e.g. St. Venant knobs are meaningless
+   *  unless a Venant source model is selected, and showing them anyway would
+   *  imply they do something. */
+  visibleIf?: (cfg: Cfg) => boolean;
 }
 
 export interface ParamGroup {
@@ -32,6 +40,10 @@ const num = (cfg: Cfg, path: string): number | undefined => {
   const v = getPath<number>(cfg, path, NaN);
   return Number.isFinite(v) ? v : undefined;
 };
+
+const SOURCE_MODEL = "forward.source_model";
+const isVenant = (cfg: Cfg): boolean =>
+  getPath<string>(cfg, `${SOURCE_MODEL}.type`, "").endsWith("venant");
 
 export const PARAM_GROUPS: ParamGroup[] = [
   {
@@ -167,6 +179,218 @@ export const PARAM_GROUPS: ParamGroup[] = [
         min: 1,
         max: 200,
         step: 1,
+      },
+    ],
+  },
+  {
+    title: "Discretisation",
+    blurb:
+      "How the FEM represents the potential. Changes the numbers, not the " +
+      "geometry — every leadfield here was solved continuous (CG).",
+    icon: "mesh",
+    summary: (c) => {
+      const t = getPath<string>(c, "forward.solver.type", "");
+      return t ? t.toUpperCase() : undefined;
+    },
+    params: [
+      {
+        path: "forward.solver.type",
+        label: "Galerkin method",
+        kind: "choice",
+        choices: [
+          { value: "cg", label: "Continuous (CG)" },
+          { value: "dg", label: "Discontinuous (DG)" },
+        ],
+        help:
+          "CG puts one unknown on each node and holds the potential continuous " +
+          "across element faces. DG puts them inside the elements and couples " +
+          "neighbours by flux, so a conductivity jump stays a jump instead of " +
+          "being smeared over the elements either side — the argument for it in " +
+          "a mesh with a thin, high-contrast compartment like a nerve inside " +
+          "muscle. Costs roughly 4x the degrees of freedom. DG only works with " +
+          "partial integration here.",
+      },
+      {
+        path: "forward.solver.penalty",
+        label: "Interior penalty",
+        visibleIf: (c) => getPath<string>(c, "forward.solver.type", "") === "dg",
+        help: "How hard DG penalises a jump across a face. Too low loses stability, too high stiffens the system.",
+        min: 1,
+        step: 1,
+      },
+      {
+        path: "forward.solver.reduction",
+        label: "Solver tolerance",
+        help: "Residual reduction the iterative solve must reach. Smaller is stricter and slower.",
+        min: 0,
+      },
+    ],
+  },
+  {
+    title: "Source model",
+    blurb:
+      "How a point dipole — a singularity with no exact representation on a " +
+      "mesh — becomes a finite-element load. Affects the volume-current field " +
+      "only; the dipole's own field is analytic either way.",
+    icon: "solve",
+    summary: (c) => {
+      const t = getPath<string>(c, `${SOURCE_MODEL}.type`, "");
+      return t ? t.replace(/_/g, " ") : undefined;
+    },
+    params: [
+      {
+        path: `${SOURCE_MODEL}.type`,
+        label: "Model",
+        kind: "choice",
+        choices: [
+          { value: "partial_integration", label: "Partial integration" },
+          { value: "venant", label: "St. Venant" },
+          { value: "multipolar_venant", label: "St. Venant (multipolar)" },
+        ],
+        help:
+          "Partial integration loads only the containing element's nodes and is " +
+          "what every leadfield here was solved with. St. Venant spreads the " +
+          "dipole over a patch of neighbouring nodes fitted to its moment, which " +
+          "behaves better near a conductivity jump.",
+      },
+      {
+        path: `${SOURCE_MODEL}.restrict`,
+        label: "Keep patch inside one tissue",
+        kind: "toggle",
+        visibleIf: isVenant,
+        help:
+          "Stops monopoles crossing a conductivity jump. Watch it on thin " +
+          "structures: restricting to a nerve two elements across can leave too " +
+          "few nodes to fit the moments.",
+      },
+      {
+        path: `${SOURCE_MODEL}.number_of_moments`,
+        label: "Moments matched",
+        visibleIf: isVenant,
+        help: "How many moments of the dipole the patch reproduces. 3 is standard.",
+        min: 1,
+        max: 6,
+        step: 1,
+      },
+      {
+        path: `${SOURCE_MODEL}.reference_length_mm`,
+        label: "Reference length",
+        unit: "mm",
+        visibleIf: isVenant,
+        help: "Length scale the moment fit is normalised by.",
+        min: 0.1,
+        step: 1,
+      },
+      {
+        path: `${SOURCE_MODEL}.weighting_exponent`,
+        label: "Weighting exponent",
+        visibleIf: isVenant,
+        help:
+          "How sharply the regularisation penalises nodes far from the dipole. " +
+          "Must be below the moment count.",
+        min: 0,
+        max: 5,
+        step: 1,
+      },
+      {
+        path: `${SOURCE_MODEL}.relaxation_factor`,
+        label: "Relaxation factor",
+        visibleIf: isVenant,
+        help:
+          "Weight on that penalty. Larger trades moment accuracy for a smoother, " +
+          "better-conditioned fit.",
+        min: 0,
+      },
+      {
+        path: `${SOURCE_MODEL}.mixed_moments`,
+        label: "Mixed moments",
+        kind: "toggle",
+        visibleIf: isVenant,
+        help: "Include cross terms (xy, xz, …) in the moment conditions.",
+      },
+      {
+        path: `${SOURCE_MODEL}.initialization`,
+        label: "Patch starts from",
+        kind: "choice",
+        visibleIf: isVenant,
+        choices: [
+          { value: "closest_vertex", label: "Elements at the nearest node" },
+          { value: "single_element", label: "The containing element only" },
+        ],
+        help: "Which elements seed the monopole patch before it is grown.",
+      },
+      {
+        path: `${SOURCE_MODEL}.extensions`,
+        label: "Patch grown by",
+        kind: "choice",
+        visibleIf: isVenant,
+        choices: [
+          { value: "vertex", label: "Elements sharing a node" },
+          { value: "intersection", label: "Elements sharing a face" },
+          { value: "", label: "Not grown" },
+        ],
+        help:
+          "How far the patch spreads from that seed — this, not a fixed count, " +
+          "is what sets how many nodes the dipole lands on.",
+      },
+      {
+        path: `${SOURCE_MODEL}.intorderadd`,
+        label: "Extra quadrature order",
+        visibleIf: isVenant,
+        help: "Integration order added when assembling the patch. Raise only if the fit looks under-integrated.",
+        min: 0,
+        max: 10,
+        step: 1,
+      },
+    ],
+  },
+  {
+    title: "Muscle fibre anisotropy",
+    blurb:
+      "Muscle carries current better along its fibres than across them. When " +
+      "active, each muscle element gets a conductivity tensor aligned to its " +
+      "muscle's fibre axis; every other tissue stays isotropic.",
+    icon: "mesh",
+    summary: (c) => {
+      const mode = getPath<string>(c, "forward.muscle_anisotropy.mode", "");
+      const l = num(c, "forward.muscle_anisotropy.sigma_long_sm");
+      const t = num(c, "forward.muscle_anisotropy.sigma_trans_sm");
+      if (!mode) return undefined;
+      const ratio = l && t ? ` · ${(l / t).toFixed(1)}:1` : "";
+      return `${mode}${ratio}`;
+    },
+    params: [
+      {
+        path: "forward.muscle_anisotropy.mode",
+        label: "When to apply it",
+        kind: "choice",
+        choices: [
+          { value: "auto", label: "Automatic — on for muscle sources" },
+          { value: "on", label: "Always on" },
+          { value: "off", label: "Always off" },
+        ],
+        help:
+          "Automatic switches the tensor on exactly when muscle is a source " +
+          "tissue, so vagus and spine runs stay comparable with ones already " +
+          "solved. Force it for a like-for-like A/B.",
+      },
+      {
+        path: "forward.muscle_anisotropy.sigma_long_sm",
+        label: "Along the fibre",
+        unit: "S/m",
+        help: "Conductivity parallel to the fibre direction.",
+        min: 0,
+        step: 0.05,
+      },
+      {
+        path: "forward.muscle_anisotropy.sigma_trans_sm",
+        label: "Across the fibre",
+        unit: "S/m",
+        help:
+          "Conductivity perpendicular to it. The ratio of the two is what the " +
+          "solver actually feels.",
+        min: 0,
+        step: 0.05,
       },
     ],
   },

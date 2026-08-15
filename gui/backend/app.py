@@ -913,6 +913,55 @@ def field_map(source: int = 0, modality: str = "meg") -> dict[str, Any]:
     }
 
 
+@app.get("/api/volumefield")
+def volume_field(max_points: int = 20000) -> dict[str, Any]:
+    """The solved field *inside* the body, as a coloured point cloud.
+
+    Everything else the viewer shows is read at a sensor. This is the FEM
+    solution in the volume itself — what the current actually does between the
+    source and the skin. Read from the artefact ``inob volume-field`` writes
+    rather than solved here: it needs a transfer-matrix solve, which is minutes,
+    not a click.
+    """
+    from inob.forward.volume_field import load_volume_field
+
+    try:
+        cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
+    except ConfigError as e:
+        raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
+
+    path = cfg.outputs.base / "volume_field" / "stimulation_field.npz"
+    try:
+        field = load_volume_field(path)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"errors": [str(e)],
+                    "hint": "Run `inob volume-field --stimulation` — the cloud "
+                            "is read from the NPZ it writes."},
+        ) from e
+
+    pos = np.asarray(field.positions_mm, dtype=float)
+    mag = np.asarray(field.magnitude, dtype=float)
+    # A whole-neck field is hundreds of thousands of points; a browser wants
+    # thousands. Thin by a stride rather than by value, so the cloud keeps its
+    # shape instead of collapsing onto the hot spot.
+    if max_points > 0 and len(pos) > max_points:
+        stride = int(np.ceil(len(pos) / max_points))
+        pos, mag = pos[::stride], mag[::stride]
+
+    return {
+        "evaluation_type": field.evaluation_type,
+        "description": field.description,
+        "count": len(pos),
+        "total": len(field.positions_mm),
+        "peak": round(float(mag.max()), 6) if len(mag) else 0.0,
+        "median": round(float(np.median(mag)), 6) if len(mag) else 0.0,
+        "positions": [[round(float(v), 2) for v in q] for q in pos],
+        "values": [round(float(v), 6) for v in mag],
+    }
+
+
 # ── source suggestions ────────────────────────────────────────────────────────
 #
 # Clicking anatomy in the 3-D view is how a source gets placed, and the way it
