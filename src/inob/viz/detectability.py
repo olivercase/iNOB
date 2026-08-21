@@ -478,7 +478,11 @@ def render_detectability(
         "MEG: best-channel peak |L| per source. EEG: best bipolar pair, which "
         "is reference-independent and is what an electrode array measures "
         "(after Hämäläinen et al. 1993; "
-        "OPM noise floor from QuSpin Gen-3 spec, "
+        f"OPM noise floor from the {cfg.noise.sensor.label} spec "
+        f"({cfg.noise.opm_intrinsic_fT_sqrtHz:g} fT/√Hz, {cfg.noise.opm_bandwidth_hz:g} Hz "
+        f"pole → σ_eff {floors.meg_per_channel_fT:.0f} fT: the sensor passes only "
+        f"{floors.meg_sensor_gain * 100:.0f}% of a {floors.signal_hz:.0f} Hz CAP, "
+        "and that loss is charged to the noise floor), "
         "Malliaras-group PEDOT:PSS textile-electrode noise = amplifier + Johnson "
         f"(R = {cfg.noise.eeg_electrode_skin_kohm:g} kΩ), integrated over the "
         f"{cfg.noise.band_label} recording band). "
@@ -856,6 +860,11 @@ def detectability_summary(
         "noise_eeg_uV": float(sigma_eeg),
         "bandwidth_hz": float(cfg.noise.effective_bandwidth_hz),
         "band_label": cfg.noise.band_label,
+        "opm_sensor": cfg.noise.opm_sensor,
+        "opm_bandwidth_hz": float(cfg.noise.opm_bandwidth_hz),
+        "opm_noise_bandwidth_hz": float(floors.meg_noise_bandwidth_hz),
+        "opm_sensor_gain": float(floors.meg_sensor_gain),
+        "cap_signal_hz": float(floors.signal_hz),
         "clinical_average_budget": list(budget) if budget else None,
         "propagation_factor_meg": None if prop is None else prop.meg,
         "propagation_factor_eeg": None if prop is None else prop.eeg,

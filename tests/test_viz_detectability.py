@@ -102,7 +102,14 @@ def test_detectability_summary_structure(tmp_path: Path) -> None:
         "source_idx", "source_z_mm", "noise_meg_fT", "noise_eeg_uV",
         "bandwidth_hz", "band_label", "clinical_average_budget",
         "propagation_factor_meg", "propagation_factor_eeg", "scenarios",
+        "opm_sensor", "opm_bandwidth_hz", "opm_noise_bandwidth_hz",
+        "opm_sensor_gain", "cap_signal_hz",
     }
+    # The sensor's own bandwidth is part of the recorded answer, not a config
+    # detail: a summary that quotes a noise floor without it invites exactly
+    # the QZFM-3-at-500-Hz mistake this metadata exists to make visible.
+    assert 0.0 < summary["opm_sensor_gain"] <= 1.0
+    assert summary["opm_noise_bandwidth_hz"] <= summary["bandwidth_hz"]
     # The clinical averaging budget is an evoked-paradigm notion; this fixture
     # is not a spine target, so it must not claim one.
     assert summary["clinical_average_budget"] is None

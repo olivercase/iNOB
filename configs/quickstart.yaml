@@ -143,7 +143,7 @@ electrodes:
   sample_seed: 0
 
 noise:
-  opm_intrinsic_fT_sqrtHz: 7.0
+  opm_sensor: quspin_qzfm3
   eeg_amplifier_uV_sqrtHz: 0.1
   eeg_electrode_skin_kohm: 10.0
   band_lo_hz: 30.0

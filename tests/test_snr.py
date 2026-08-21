@@ -14,7 +14,8 @@ from inob.analysis.snr import (
     per_source_peak,
     snr_per_source,
 )
-from inob.config import load_config
+from inob.config import ConfigError, load_config
+from dataclasses import replace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -22,7 +23,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def test_noise_floors_have_expected_orders() -> None:
     cfg = load_config(REPO_ROOT / "configs" / "default.yaml")
     nf = compute_noise_floors(cfg)
-    # OPM 7 fT/√Hz × √470 (the 30–500 Hz recording band) ≈ 152 fT
+    # OPM: 7 fT/√Hz over the sensor-weighted band (a 135 Hz pole turns the
+    # nominal 470 Hz into ~147 Hz) ≈ 85 fT, then divided by the 0.39 gain the
+    # sensor has at the 318 Hz CAP peak → ~217 fT effective.
     assert 50 < nf.meg_per_channel_fT < 500
     # EEG amplifier 0.1 µV/√Hz dominates over Johnson@10 kΩ ≈ 0.013 µV/√Hz
     # → ~0.1 µV/√Hz × √470 ≈ 2.2 µV
@@ -105,3 +108,52 @@ def test_best_bipolar_at_least_peak_for_zero_mean_array() -> None:
     L = rng.standard_normal((12, 3 * 6))
     L = L - L.mean(axis=0, keepdims=True)
     assert (per_source_best_bipolar(L) >= per_source_peak(L) - 1e-12).all()
+
+
+def test_opm_bandwidth_rolls_off_both_signal_and_noise() -> None:
+    """A narrow-band sensor must not profit from the noise its pole removes.
+
+    This is the bug Gareth flagged: pairing a QZFM-3 with a 30–500 Hz band
+    integrated noise the sensor cannot deliver, while charging nothing for the
+    CAP energy it cannot pass. Both effects are now modelled, so shrinking the
+    pole always makes the effective floor worse, never better.
+    """
+    cfg = load_config(REPO_ROOT / "configs" / "default.yaml")
+    base = compute_noise_floors(cfg)
+
+    narrow = replace(cfg, noise=replace(cfg.noise, opm_bandwidth_hz=30.0))
+    wide = replace(cfg, noise=replace(cfg.noise, opm_bandwidth_hz=5000.0))
+    sigma_narrow = compute_noise_floors(narrow).meg_per_channel_fT
+    sigma_wide = compute_noise_floors(wide).meg_per_channel_fT
+    assert sigma_narrow > base.meg_per_channel_fT > sigma_wide
+
+    # A pole far above the band is the old flat-window arithmetic.
+    n = wide.noise
+    flat = float(n.opm_intrinsic_fT_sqrtHz) * np.sqrt(n.effective_bandwidth_hz)
+    assert sigma_wide == pytest.approx(flat, rel=0.05)
+
+    # The QZFM-3 default passes well under half of a 0.5 ms vagal CAP.
+    assert 0.2 < base.meg_sensor_gain < 0.5
+    assert base.signal_hz == pytest.approx(318.3, rel=0.01)
+
+
+def test_wideband_preset_swaps_noise_and_bandwidth_together() -> None:
+    from inob.sensors.opm_presets import OPM_SENSORS
+
+    cfg = load_config(REPO_ROOT / "configs" / "default.yaml",
+                      overrides=["noise.opm_sensor=he4_wideband"])
+    assert cfg.noise.opm_intrinsic_fT_sqrtHz == OPM_SENSORS["he4_wideband"].noise_fT_sqrtHz
+    assert cfg.noise.opm_bandwidth_hz == OPM_SENSORS["he4_wideband"].bandwidth_hz
+    nf = compute_noise_floors(cfg)
+    # Wide enough to pass the CAP essentially intact...
+    assert nf.meg_sensor_gain > 0.95
+    # ...but its noise density costs more than the QZFM-3's roll-off does.
+    assert nf.meg_per_channel_fT > compute_noise_floors(
+        load_config(REPO_ROOT / "configs" / "default.yaml")
+    ).meg_per_channel_fT
+
+
+def test_unknown_opm_preset_is_rejected() -> None:
+    with pytest.raises((KeyError, ConfigError)):
+        load_config(REPO_ROOT / "configs" / "default.yaml",
+                    overrides=["noise.opm_sensor=no_such_sensor"])

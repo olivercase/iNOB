@@ -140,10 +140,25 @@ electrodes:
 
 noise:
   # Per-modality noise floors used by analysis/snr.py.
-  # OPMs: QuSpin Gen-3 (QZFM-3) typical ≈ 7 fT/√Hz (spec range 7-10).
-  # Gen-2 baseline was 15 fT/√Hz; pass --set noise.opm_intrinsic_fT_sqrtHz=15
-  # to recover the older Gen-2 prediction.
-  opm_intrinsic_fT_sqrtHz: 7.0
+  #
+  # OPM: named preset from inob/sensors/opm_presets.py, which carries a noise
+  # density AND a bandwidth, because quoting one without the other is how a
+  # 7 fT/√Hz sensor ends up credited with a 500 Hz recording band it cannot
+  # deliver. Known presets: quspin_qzfm3 (7 fT/√Hz, 135 Hz — the default),
+  # quspin_qzfm2 (15, 135), fieldline_v3 (15, 500), he4_wideband (30, 2000).
+  # The preset supplies both numbers; write opm_intrinsic_fT_sqrtHz or
+  # opm_bandwidth_hz here (or pass --set) only to override one of them, and
+  # note that pinning a number here stops a later --set noise.opm_sensor=...
+  # from carrying its own value in.
+  #
+  # The bandwidth is a single pole applied to signal and noise alike: noise
+  # integrates over f3dB·[atan(hi/f3dB) - atan(lo/f3dB)] instead of (hi - lo),
+  # and the CAP is scaled by 1/sqrt(1 + (f_CAP/f3dB)^2) at its spectral peak
+  # f_CAP = 1/(2*pi*ap_width_ms). For the 0.5 ms vagal CAP (f_CAP ~ 318 Hz)
+  # that makes the QZFM-3's effective floor ~217 fT, not the 152 fT the old
+  # flat-band arithmetic reported. The narrow-band sensor still beats the
+  # wide-band helium-4 preset (~650 fT) here — but now by a stated margin.
+  opm_sensor: quspin_qzfm3
   # PEDOT:PSS HD-EMG-style front end. A low-noise biopotential amplifier
   # (e.g. TI ADS129x class, or the discrete front ends used in the OPM-MEG
   # literature) reaches ~0.05-0.1 µV/√Hz referred to input; the 0.3-1 µV/√Hz

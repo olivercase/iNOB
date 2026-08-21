@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 
 from inob.paths import find_project_root, resolve_path
+from inob.sensors.opm_presets import DEFAULT_OPM_SENSOR, OpmSensor, opm_sensor
 
 logger = logging.getLogger(__name__)
 
@@ -407,9 +408,19 @@ class ElectrodeCfg:
 
 @dataclass(frozen=True)
 class NoiseCfg:
-    # Defaults match QuSpin Gen-3 OPM and Malliaras-group PEDOT:PSS textile
-    # electrode hardware. See ``configs/default.yaml`` for citations.
+    # Defaults match the QuSpin Gen-3 OPM preset and Malliaras-group PEDOT:PSS
+    # textile electrode hardware. See ``configs/default.yaml`` for citations,
+    # and ``inob.sensors.opm_presets`` for the sensor table.
+    #
+    # ``opm_sensor`` names a preset in ``inob.sensors.opm_presets.OPM_SENSORS``;
+    # the two numbers below default to that preset's figures and may be
+    # overridden individually (a YAML key or ``--set`` wins over the preset).
+    opm_sensor: str = DEFAULT_OPM_SENSOR
     opm_intrinsic_fT_sqrtHz: float = 7.0
+    # Single-pole (3-dB) sensor bandwidth. It is NOT decoration: it bounds the
+    # noise integral AND rolls the signal off, because a magnetometer that
+    # cannot pass 300 Hz cannot see a 0.5 ms compound action potential.
+    opm_bandwidth_hz: float = 135.0
     eeg_amplifier_uV_sqrtHz: float = 0.1
     eeg_electrode_skin_kohm: float = 10.0
     # Recording passband. Noise integrates over ``band_hi - band_lo``, so the
@@ -422,18 +433,58 @@ class NoiseCfg:
     band_hi_hz: float = 500.0
     bandwidth_hz: float | None = None
 
-    @property
-    def effective_bandwidth_hz(self) -> float:
-        """Noise-integration bandwidth in Hz."""
-        if self.bandwidth_hz is not None:
-            return float(self.bandwidth_hz)
-        bw = float(self.band_hi_hz) - float(self.band_lo_hz)
-        if bw <= 0:
+    def __post_init__(self) -> None:
+        opm_sensor(self.opm_sensor)          # raises on an unknown preset
+        if self.opm_bandwidth_hz <= 0:
+            raise ConfigError(
+                f"[noise] opm_bandwidth_hz must be positive, got "
+                f"{self.opm_bandwidth_hz}"
+            )
+        if self.bandwidth_hz is None and self.band_hi_hz <= self.band_lo_hz:
             raise ConfigError(
                 f"[noise] band_hi_hz ({self.band_hi_hz}) must exceed "
                 f"band_lo_hz ({self.band_lo_hz})"
             )
-        return bw
+
+    @property
+    def sensor(self) -> OpmSensor:
+        """The OPM preset, with any per-field overrides applied."""
+        base = opm_sensor(self.opm_sensor)
+        return replace(
+            base,
+            noise_fT_sqrtHz=float(self.opm_intrinsic_fT_sqrtHz),
+            bandwidth_hz=float(self.opm_bandwidth_hz),
+        )
+
+    @property
+    def effective_bandwidth_hz(self) -> float:
+        """Noise-integration bandwidth in Hz, ignoring the sensor response.
+
+        This is the *nominal* filter width — what the recording passband would
+        integrate given an infinitely wide sensor. For the number the OPM
+        actually delivers see :attr:`opm_noise_bandwidth_hz`; EEG, whose front
+        end is wide-band compared with the passband, uses this one.
+        """
+        if self.bandwidth_hz is not None:
+            return float(self.bandwidth_hz)
+        return float(self.band_hi_hz) - float(self.band_lo_hz)
+
+    @property
+    def opm_noise_bandwidth_hz(self) -> float:
+        """Equivalent noise bandwidth of (recording band ∩ sensor pole), Hz.
+
+        For a single pole at ``f₃dB``, ∫|H|²df over ``lo…hi`` evaluates to
+        ``f₃dB·[atan(hi/f₃dB) − atan(lo/f₃dB)]``. Below the pole this is just
+        ``hi − lo``; far above it, it saturates — a 135 Hz sensor does not
+        accumulate noise out to 500 Hz just because the filter is set there.
+        """
+        import math
+        f3 = float(self.opm_bandwidth_hz)
+        if self.bandwidth_hz is not None:
+            lo, hi = 0.0, float(self.bandwidth_hz)
+        else:
+            lo, hi = float(self.band_lo_hz), float(self.band_hi_hz)
+        return f3 * (math.atan(hi / f3) - math.atan(lo / f3))
 
     @property
     def band_label(self) -> str:
@@ -772,6 +823,37 @@ def _build_shrinkwrap(d: dict[str, Any]) -> dict[str, ShrinkwrapParams]:
     return out
 
 
+def _build_noise(d: dict[str, Any]) -> NoiseCfg:
+    """Build :class:`NoiseCfg`, filling the OPM numbers from its preset.
+
+    A key written in the YAML (or via ``--set``) always wins; the preset only
+    supplies what was left out. That way ``opm_sensor: he4_wideband`` alone is
+    enough to swap both the noise density and the bandwidth, and neither can
+    be changed without the other coming along by default.
+    """
+    d = dict(d)
+    preset = opm_sensor(str(d.get("opm_sensor", DEFAULT_OPM_SENSOR)))
+    d.setdefault("opm_intrinsic_fT_sqrtHz", preset.noise_fT_sqrtHz)
+    d.setdefault("opm_bandwidth_hz", preset.bandwidth_hz)
+    cfg = _build_dataclass(NoiseCfg, d, "noise")
+    if not preset.verified:
+        logger.warning(
+            "OPM preset %r carries unverified manufacturer figures (%s) — "
+            "re-check the spec sheet before publishing a number that rests "
+            "on it", preset.name, preset.source,
+        )
+    if cfg.bandwidth_hz is None and cfg.band_hi_hz > cfg.opm_bandwidth_hz:
+        logger.warning(
+            "[noise] recording band reaches %g Hz but the OPM (%s) is a "
+            "single pole at %g Hz: the band above the pole contributes "
+            "little noise and less signal. Both are modelled (see "
+            "inob.analysis.snr), so this is honest rather than wrong — but "
+            "if you meant to record that band, pick a wider sensor preset.",
+            cfg.band_hi_hz, cfg.opm_sensor, cfg.opm_bandwidth_hz,
+        )
+    return cfg
+
+
 def _build_geometry(d: dict[str, Any]) -> GeometryCfg:
     sw = _build_shrinkwrap(d.get("shrinkwrap", {}))
     val = _build_dataclass(GeometryValidate, d.get("validate", {}), "geometry.validate")
@@ -894,7 +976,7 @@ def load_config(
         electrodes=_build_dataclass(
             ElectrodeCfg, raw.get("electrodes", {}), "electrodes",
         ),
-        noise=_build_dataclass(NoiseCfg, raw.get("noise", {}), "noise"),
+        noise=_build_noise(raw.get("noise", {})),
         forward=_build_forward(raw["forward"]),
         cluster=_build_dataclass(ClusterCfg, raw.get("cluster", {}), "cluster"),
         sensitivity=_build_dataclass(

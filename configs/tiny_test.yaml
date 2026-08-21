@@ -115,7 +115,7 @@ electrodes:
   sample_seed: 0
 
 noise:
-  opm_intrinsic_fT_sqrtHz: 15.0
+  opm_sensor: quspin_qzfm2
   eeg_amplifier_uV_sqrtHz: 0.5
   eeg_electrode_skin_kohm: 50.0
   bandwidth_hz: 1000.0

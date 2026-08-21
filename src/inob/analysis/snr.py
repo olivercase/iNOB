@@ -5,12 +5,33 @@ compute the predicted single-CAP SNR (and post-averaging SNR) per source.
 
 Noise floors (set in ``cfg.noise``):
 
-  OPM (magnetic):    σ_n_meg = opm_intrinsic_fT_sqrtHz × √BW   [fT]
-  HD-EMG (electric): σ_n_eeg = √(amp_noise² + Johnson²) × √BW  [µV]
+  OPM (magnetic):    σ_n_meg = opm_intrinsic_fT_sqrtHz × √BW_opm / |H(f_CAP)|
+  HD-EMG (electric): σ_n_eeg = √(amp_noise² + Johnson²) × √BW      [µV]
 
 where BW is the recording passband (``noise.band_lo_hz``…``band_hi_hz``,
 default 30–500 Hz — what evoked-potential recording actually uses) and the
 Johnson term is the thermal noise of the electrode-skin contact impedance.
+
+The OPM is not a flat window on that band. It is modelled as a single pole at
+``noise.opm_bandwidth_hz`` (from the sensor preset — see
+:mod:`inob.sensors.opm_presets`), which does two things:
+
+  * the noise integrates over ``BW_opm = f₃dB·[atan(hi/f₃dB) − atan(lo/f₃dB)]``
+    rather than the nominal ``hi − lo``;
+  * the signal is scaled by ``|H(f_CAP)| = 1/√(1 + (f_CAP/f₃dB)²)`` at the CAP's
+    spectral peak ``f_CAP = 1/(2πσ)``, σ = the profile's ``ap_width_ms``.
+
+Both are folded into the returned MEG σ, so every caller — trials-to-detect,
+detectability figures, source-model comparisons — sees one *effective* noise
+floor and none of them can accidentally reward a narrow-band sensor for the
+noise its own bandwidth removes. Dividing σ by the gain is exactly equivalent
+to attenuating the signal, and keeps the amplitude pipeline untouched.
+
+Concretely, for a 0.5 ms vagal CAP (f_CAP ≈ 318 Hz) over a 30–500 Hz band:
+a QuSpin QZFM-3 (7 fT/√Hz, 135 Hz) gives σ_eff ≈ 217 fT, not the 152 fT the
+un-rolled-off arithmetic used to report; a helium-4 wide-band OPM
+(30 fT/√Hz, 2 kHz) gives ≈ 650 fT. The narrow-band sensor still wins here,
+but by a stated factor rather than by an unstated assumption.
 
 The "signal" we use is the dipole-moment-norm-projected leadfield amplitude:
     |L_eff(s)| = √(L[:, 3s : 3s+3] @ q_unit · |q_unit|²)
@@ -32,15 +53,31 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class NoiseFloors:
-    meg_per_channel_fT: float          # σ_n in fT for one OPM channel × bandwidth
+    meg_per_channel_fT: float          # σ_n in fT for one OPM channel, effective
     eeg_per_channel_uV: float          # σ_n in µV for one HD electrode × bandwidth
+    meg_sensor_gain: float = 1.0       # |H(f_CAP)| — the CAP fraction the OPM passes
+    meg_noise_bandwidth_hz: float = 0.0  # equivalent noise BW of band ∩ sensor
+    signal_hz: float = 0.0             # f_CAP the gain was evaluated at
 
 
-def compute_noise_floors(cfg: Config) -> NoiseFloors:
-    """Compute σ_n in fT (OPM) and µV (HD electrode) over the recording band."""
+def compute_noise_floors(
+    cfg: Config, *, signal_hz: float | None = None,
+) -> NoiseFloors:
+    """Compute σ_n in fT (OPM) and µV (HD electrode) over the recording band.
+
+    The MEG figure is the *effective* floor: noise integrated over the sensor-
+    weighted band and then divided by the sensor's gain at the CAP frequency,
+    so comparing it against an un-filtered signal amplitude gives the SNR the
+    sensor really delivers. ``signal_hz`` overrides the frequency taken from
+    the target's physiology profile (``1/(2π·ap_width_ms)``).
+    """
     n = cfg.noise
     bw = n.effective_bandwidth_hz
-    meg_sigma = float(n.opm_intrinsic_fT_sqrtHz) * np.sqrt(bw)
+    meg_bw = n.opm_noise_bandwidth_hz
+    if signal_hz is None:
+        signal_hz = _cap_frequency(cfg)
+    gain = n.sensor.gain(signal_hz)
+    meg_sigma = float(n.opm_intrinsic_fT_sqrtHz) * np.sqrt(meg_bw) / gain
     # Johnson voltage noise of the contact resistance:
     #   v_n = √(4 k_B T R)  in V/√Hz; with R in kΩ:
     R_ohm = float(n.eeg_electrode_skin_kohm) * 1e3
@@ -51,10 +88,30 @@ def compute_noise_floors(cfg: Config) -> NoiseFloors:
     eeg_per_sqrtHz = np.sqrt(amp ** 2 + v_johnson_per_sqrtHz ** 2)
     eeg_sigma = eeg_per_sqrtHz * np.sqrt(bw)
     logger.info(
-        "Noise floors: OPM=%.2f fT  EEG=%.3f µV (amp=%.2f + Johnson=%.3f µV/√Hz, BW=%g Hz)",
-        meg_sigma, eeg_sigma, amp, v_johnson_per_sqrtHz, bw,
+        "Noise floors: OPM=%.2f fT (%s: %.1f fT/√Hz, pole %g Hz → BW_eff %.0f Hz, "
+        "gain %.2f at f_CAP=%.0f Hz)  EEG=%.3f µV "
+        "(amp=%.2f + Johnson=%.3f µV/√Hz, BW=%g Hz)",
+        meg_sigma, n.opm_sensor, n.opm_intrinsic_fT_sqrtHz, n.opm_bandwidth_hz,
+        meg_bw, gain, signal_hz, eeg_sigma, amp, v_johnson_per_sqrtHz, bw,
     )
-    return NoiseFloors(meg_per_channel_fT=meg_sigma, eeg_per_channel_uV=eeg_sigma)
+    return NoiseFloors(
+        meg_per_channel_fT=meg_sigma,
+        eeg_per_channel_uV=eeg_sigma,
+        meg_sensor_gain=float(gain),
+        meg_noise_bandwidth_hz=float(meg_bw),
+        signal_hz=float(signal_hz),
+    )
+
+
+def _cap_frequency(cfg: Config) -> float:
+    """Spectral peak of the target's CAP, Hz — the frequency the OPM must pass.
+
+    Imported lazily: :mod:`inob.physiology.profiles` pulls in the source model,
+    and the noise floor is wanted by modules that have no other reason to.
+    """
+    from inob.physiology.profiles import profile_for
+    from inob.sensors.opm_presets import cap_dominant_hz
+    return cap_dominant_hz(profile_for(cfg).ap_width_ms)
 
 
 def per_source_amplitude(
