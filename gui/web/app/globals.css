@@ -57,6 +57,214 @@
      with the viewer slot if both read the same numbers from here. */
   --bar-h: 56px;
   --side-w: 380px;
+
+  /* Overlays, as channels rather than colours. Every sheen in this file is a
+     lift off the surface and every drop is a shade under it; naming them that
+     way is what lets the light theme flip a sheen from white to near-black
+     without touching the 68 rules that use one. */
+  --lift: 255 255 255;
+  --shade: 0 0 0;
+
+  /* Control surfaces. These used to be hexes written inline in five rules;
+     they are tokens now for the same reason the sheen is: the light theme has
+     to repaint a button without hunting for its gradient. */
+  --ctl-hi: #1b1c1b;
+  --ctl-lo: #101110;
+  --ctl-signal-hi: #4dff92;
+  --ctl-signal-lo: #23a95c;
+  --ctl-danger-hi: #2a1712;
+  --ctl-danger-lo: #1a0f0b;
+  --ink-danger: #ffd9cd;
+
+  /* Translucent fills. Panels, menus and overlays are washes over whatever is
+     behind them, so they are channels too — a fixed rgba(10,11,10,.92) is a
+     black slab wherever the page is not black. */
+  --scrim: 10 11 10;
+  --scrim-hi: 22 24 22;
+
+  /* Opaque small surfaces: a menu option, a chip, the palette's own fill. */
+  --surf-1: #101210;
+  --surf-2: #141715;
+  --surf-3: #1d1f1d;
+  --surf-4: #131413;
+
+  /* The 3-D well. Its backdrop is matched by the three.js scene in
+     Viewer3D.tsx, which reads these same two values off the document. */
+  --well-hi: #0a0d10;
+  --well-lo: #04060a;
+
+  /* Accent channels, so a wash or a border can be mixed from the accent
+     without freezing the accent's dark-theme hue into 40 rules. */
+  --signal-rgb: 62 224 122;
+  --alarm-rgb: 255 107 107;
+  --warn-rgb: 255 190 90;
+  --stat-rgb: 24 78 47;
+  --signal-deep-rgb: 35 169 92;
+  --signal-hi-rgb: 125 255 171;
+  --on-alarm: #2a0b0b;
+
+  /* Figure plates and their thumbnails. Matplotlib output is a white sheet
+     whatever the app is wearing, so these say how to present it. */
+  --plate-hi: #e9ece9;
+  --plate-lo: #cfd4cf;
+  --plate-sheet: #ffffff;
+  --thumb-filter: brightness(0.5) contrast(1.05) saturate(0.9);
+  --thumb-filter-hover: brightness(0.92) contrast(1.02);
+
+  /* A field is recessed. On black that means darker than the card; on white
+     it means *lighter*, not a 40% grey wash — inverting the fill is what put
+     a mud-grey box behind every select and number input. */
+  --field: rgb(var(--shade) / 0.4);
+
+  color-scheme: dark;
+}
+
+/* ── light theme ──────────────────────────────────────────────────────────
+ * The console was drawn for a dark room. It is also read on paper and in
+ * daylight, where inverting it is not a theme but a cost: white text on black
+ * does not photocopy, does not project, and floods a page with ink. So the
+ * light theme is not the dark one inverted — it is the same instrument on
+ * paper. Surfaces go to warm white, the sheen becomes a shade, and the signal
+ * green darkens far enough to hold 4.5:1 as text on white, because a mid
+ * green that glows on #060706 disappears on #f4f6f4.
+ */
+[data-theme="light"] {
+  --void: #eef1ee;
+  --void-2: #f7f9f7;
+  --hair: #d7dcd7;
+  --hair-2: #c3cac3;
+  --hair-3: #a9b1a9;
+
+  --card-hi: #ffffff;
+  --card-mid: #fbfcfb;
+  --card-lo: #f2f4f2;
+
+  /* Same ladder as dark, measured the same way: each of these clears WCAG AA
+     against --card-lo, the lightest surface a card ever presents. */
+  --ink: #10150f;
+  --ink-2: #454c45;
+  --ink-3: #5c645c;
+
+  --signal: #0f7a3e;
+  --signal-hi: #0b5e30;
+  --signal-deep: #0a5029;
+  --signal-glow: rgba(15, 122, 62, 0.4);
+  --signal-wash: rgba(15, 122, 62, 0.09);
+  --on-signal: #ffffff;
+  --alarm: #c0342f;
+
+  /* The sheen flips to a shade — but a *grey* one, not ink. White at 12%
+     over near-black is a whisper; near-black at 12% over white is a grey
+     slab, which is what turned every select and number field into a dark
+     box. Same alphas, gentler channel. */
+  --lift: 118 130 120;
+  --shade: 88 100 90;
+
+  --ctl-hi: #ffffff;
+  --ctl-lo: #eef0ee;
+  /* White on the gradient's light end measures 4.6:1 — the button label is
+     the reason the fill is this dark, not the fill the reason for the label. */
+  --ctl-signal-hi: #0f7a3e;
+  --ctl-signal-lo: #0a5b2d;
+  --ctl-danger-hi: #fff1ee;
+  --ctl-danger-lo: #ffe0d8;
+  --ink-danger: #8f2216;
+
+  --scrim: 247 249 247;
+  --scrim-hi: 255 255 255;
+
+  --surf-1: #ffffff;
+  --surf-2: #eaeeea;
+  --surf-3: #ffffff;
+  --surf-4: #f0f3f0;
+
+  /* The well stays cooler and a shade darker than the page, so the anatomy
+     still sits in something rather than floating on the background. */
+  --well-hi: #e4eaec;
+  --well-lo: #ccd6d9;
+
+  /* Same channels, darkened: a 0.35 wash of #3ee07a is invisible on white,
+     and its 0.5 border reads as a smudge. */
+  --signal-rgb: 15 122 62;
+  --alarm-rgb: 192 52 47;
+  --warn-rgb: 176 108 12;
+  --stat-rgb: 15 122 62;
+  --signal-deep-rgb: 15 122 62;
+  --signal-hi-rgb: 11 94 48;
+  --on-alarm: #ffffff;
+
+  --plate-hi: #ffffff;
+  --plate-lo: #f2f4f2;
+  --plate-sheet: #ffffff;
+  /* Nothing to dim on paper-white: show the figure as drawn. */
+  --thumb-filter: none;
+  --thumb-filter-hover: contrast(1.04);
+
+  --field: #f7f9f7;
+
+  color-scheme: light;
+}
+
+/* Paper is always light, whatever the screen is set to. */
+@media print {
+  :root {
+    --void: #ffffff;
+    --void-2: #ffffff;
+    --hair: #cfd5cf;
+    --hair-2: #b6bdb6;
+    --hair-3: #98a098;
+    --card-hi: #ffffff;
+    --card-mid: #ffffff;
+    --card-lo: #ffffff;
+    --ink: #000000;
+    --ink-2: #333833;
+    --ink-3: #4a514a;
+    --signal: #0a5029;
+    --signal-hi: #0a5029;
+    --signal-deep: #0a5029;
+    --signal-glow: transparent;
+    --signal-wash: rgba(10, 80, 41, 0.08);
+    --on-signal: #ffffff;
+    --lift: 176 184 178;
+    --shade: 140 150 142;
+    --ctl-hi: #ffffff;
+    --ctl-lo: #ffffff;
+    --ctl-signal-hi: #ffffff;
+    --ctl-signal-lo: #ffffff;
+    --ctl-danger-hi: #ffffff;
+    --ctl-danger-lo: #ffffff;
+    --ink-danger: #7a1d13;
+    /* Printed, a filled button is an outline: the label has to be ink. */
+    --on-signal: #0a5029;
+    --scrim: 255 255 255;
+    --scrim-hi: 255 255 255;
+    --surf-1: #ffffff;
+    --surf-2: #ffffff;
+    --surf-3: #ffffff;
+    --surf-4: #ffffff;
+    --well-hi: #ffffff;
+    --well-lo: #ffffff;
+    --signal-rgb: 10 80 41;
+    --alarm-rgb: 122 29 19;
+    --warn-rgb: 122 74 8;
+    --stat-rgb: 10 80 41;
+    --signal-deep-rgb: 10 80 41;
+    --signal-hi-rgb: 10 80 41;
+    --on-alarm: #ffffff;
+    --plate-hi: #ffffff;
+    --plate-lo: #ffffff;
+    --plate-sheet: #ffffff;
+    --thumb-filter: none;
+    --thumb-filter-hover: none;
+    --field: #ffffff;
+    color-scheme: light;
+  }
+
+  /* Glows are a screen effect; on paper they are grey mud. */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
 }
 
 * {
@@ -92,7 +300,7 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgb(var(--lift) / 0.12);
   border-radius: 99px;
   border: 3px solid transparent;
   background-clip: content-box;
@@ -111,7 +319,7 @@ body {
   padding: 8px 14px;
   border-radius: var(--r-ctl);
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, #1b1c1b, #101110);
+  background: linear-gradient(180deg, var(--ctl-hi), var(--ctl-lo));
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 0.15s, background 0.15s, transform 0.12s, box-shadow 0.15s;
@@ -136,12 +344,12 @@ body {
 .ui-btn--primary {
   color: var(--on-signal);
   font-weight: 600;
-  border-color: rgba(62, 224, 122, 0.55);
-  background: linear-gradient(180deg, #4dff92, #23a95c);
-  box-shadow: 0 6px 24px rgba(35, 169, 92, 0.28);
+  border-color: rgb(var(--signal-rgb) / 0.55);
+  background: linear-gradient(180deg, var(--ctl-signal-hi), var(--ctl-signal-lo));
+  box-shadow: 0 6px 24px rgb(var(--signal-deep-rgb) / 0.28);
 }
 .ui-btn--primary:hover:not(:disabled) {
-  box-shadow: 0 8px 30px rgba(35, 169, 92, 0.42);
+  box-shadow: 0 8px 30px rgb(var(--signal-deep-rgb) / 0.42);
 }
 .ui-btn--ghost {
   background: transparent;
@@ -152,9 +360,9 @@ body {
   color: var(--ink);
 }
 .ui-btn--danger {
-  color: #ffd9cd;
-  border-color: rgba(255, 107, 107, 0.45);
-  background: linear-gradient(180deg, #2a1712, #1a0f0b);
+  color: var(--ink-danger);
+  border-color: rgb(var(--alarm-rgb) / 0.45);
+  background: linear-gradient(180deg, var(--ctl-danger-hi), var(--ctl-danger-lo));
 }
 
 .ui-iconbtn {
@@ -171,11 +379,11 @@ body {
 }
 .ui-iconbtn:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--lift) / 0.05);
 }
 .ui-iconbtn--on {
   color: var(--signal);
-  border-color: rgba(62, 224, 122, 0.4);
+  border-color: rgb(var(--signal-rgb) / 0.4);
 }
 
 .ui-select {
@@ -191,11 +399,11 @@ body {
   padding: 9px 34px 9px 12px;
   border-radius: var(--r-ctl);
   border: 1px solid var(--hair);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--field);
   cursor: pointer;
 }
 .ui-select select option {
-  background: #101210;
+  background: var(--surf-1);
   color: var(--ink);
 }
 .ui-select > svg {
@@ -215,12 +423,12 @@ body {
   padding: 8px 11px;
   border-radius: 10px;
   border: 1px solid var(--hair);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--field);
   outline: none;
   transition: border-color 0.15s;
 }
 .ui-input:focus {
-  border-color: rgba(62, 224, 122, 0.5);
+  border-color: rgb(var(--signal-rgb) / 0.5);
 }
 .ui-input.mono {
   font-size: var(--t-2);
@@ -251,7 +459,7 @@ body {
   margin: 10px 0;
   border-radius: 13px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgb(var(--lift) / 0.025);
   font-size: var(--t-2);
   line-height: 1.55;
   color: var(--ink-2);
@@ -271,21 +479,21 @@ body {
   margin-top: 1px;
 }
 .ui-note--ok {
-  border-color: rgba(62, 224, 122, 0.28);
+  border-color: rgb(var(--signal-rgb) / 0.28);
   background: var(--signal-wash);
 }
 .ui-note--ok .ui-note-icon {
   color: var(--signal);
 }
 .ui-note--warn {
-  border-color: rgba(255, 190, 90, 0.28);
+  border-color: rgb(var(--warn-rgb) / 0.28);
 }
 .ui-note--warn .ui-note-icon {
   color: #ffbe5a;
 }
 .ui-note--danger {
-  border-color: rgba(255, 107, 107, 0.35);
-  background: rgba(255, 107, 107, 0.07);
+  border-color: rgb(var(--alarm-rgb) / 0.35);
+  background: rgb(var(--alarm-rgb) / 0.07);
 }
 .ui-note--danger .ui-note-icon {
   color: var(--alarm);
@@ -304,19 +512,19 @@ body {
 }
 .ui-tag--signal {
   color: var(--signal-hi);
-  border-color: rgba(62, 224, 122, 0.35);
+  border-color: rgb(var(--signal-rgb) / 0.35);
   background: var(--signal-wash);
 }
 .ui-tag--danger {
-  color: #ffc4b3;
-  border-color: rgba(255, 107, 107, 0.4);
-  background: rgba(255, 107, 107, 0.08);
+  color: var(--ink-danger);
+  border-color: rgb(var(--alarm-rgb) / 0.4);
+  background: rgb(var(--alarm-rgb) / 0.08);
 }
 
 .ui-spinner {
   display: inline-block;
   border-radius: 50%;
-  border: 1.6px solid rgba(255, 255, 255, 0.16);
+  border: 1.6px solid rgb(var(--lift) / 0.16);
   border-top-color: var(--signal);
   animation: ui-spin 0.8s linear infinite;
 }
@@ -346,7 +554,7 @@ body {
   width: 32px;
   height: 18px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--lift) / 0.1);
   border: 1px solid var(--hair);
   position: relative;
   transition: background 0.18s;
@@ -363,8 +571,8 @@ body {
   transition: transform 0.18s, background 0.18s;
 }
 .ui-toggle input:checked + .ui-toggle-track {
-  background: rgba(62, 224, 122, 0.3);
-  border-color: rgba(62, 224, 122, 0.5);
+  background: rgb(var(--signal-rgb) / 0.3);
+  border-color: rgb(var(--signal-rgb) / 0.5);
 }
 .ui-toggle input:checked + .ui-toggle-track .ui-toggle-knob {
   transform: translateX(14px);
@@ -383,7 +591,7 @@ body {
   place-items: center;
   border-radius: 5px;
   border: 1px solid var(--hair-2);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--field);
   color: transparent;
   flex: none;
 }
@@ -401,7 +609,7 @@ body {
   background: linear-gradient(
     90deg,
     var(--signal-deep) 0 var(--pct),
-    rgba(255, 255, 255, 0.1) var(--pct) 100%
+    rgb(var(--lift) / 0.1) var(--pct) 100%
   );
   outline: none;
   cursor: pointer;
@@ -412,7 +620,7 @@ body {
   height: 14px;
   border-radius: 50%;
   background: var(--signal);
-  border: 2px solid #0a0c0b;
+  border: 2px solid var(--void);
   box-shadow: 0 0 10px var(--signal-glow);
 }
 
@@ -430,7 +638,7 @@ body {
 }
 .ui-table td {
   padding: 6px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgb(var(--lift) / 0.04);
   color: var(--ink-2);
 }
 
@@ -438,7 +646,7 @@ body {
   margin: 6px 0 0;
   padding: 8px 10px;
   border-radius: 9px;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--field);
   font-size: var(--t-1);
   line-height: 1.5;
   color: var(--ink-2);
@@ -464,7 +672,7 @@ body {
   border: 1px solid var(--hair);
   border-radius: 14px;
   margin-bottom: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
   overflow: hidden;
 }
 .ui-disc--open {
@@ -485,7 +693,7 @@ body {
   cursor: pointer;
 }
 .ui-disc-head:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--lift) / 0.03);
 }
 .ui-disc-head > svg:first-child {
   color: var(--ink-3);
@@ -520,7 +728,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgb(var(--shade) / 0.55);
   backdrop-filter: blur(3px);
   animation: ui-fade 0.16s ease-out;
 }
@@ -537,9 +745,9 @@ body {
   width: min(440px, 92vw);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #101110, var(--void-2));
+  background: linear-gradient(180deg, var(--ctl-lo), var(--void-2));
   border-left: 1px solid var(--hair-2);
-  box-shadow: -30px 0 80px rgba(0, 0, 0, 0.6);
+  box-shadow: -30px 0 80px rgb(var(--shade) / 0.6);
   animation: ui-slide 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
   outline: none;
 }
@@ -595,7 +803,7 @@ body {
   cursor: grab;
   overflow: hidden;
   background:
-    radial-gradient(75% 55% at 50% 44%, rgba(35, 169, 92, 0.08), transparent 72%),
+    radial-gradient(75% 55% at 50% 44%, rgb(var(--signal-deep-rgb) / 0.08), transparent 72%),
     radial-gradient(120% 80% at 50% 0%, var(--void-2), var(--void) 65%);
 }
 .jcanvas--panning {
@@ -604,7 +812,7 @@ body {
 .jcanvas-grid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.075) 1px, transparent 1px);
+  background-image: radial-gradient(rgb(var(--lift) / 0.075) 1px, transparent 1px);
   pointer-events: none;
   mask-image: radial-gradient(80% 70% at 50% 45%, #000 40%, transparent 100%);
 }
@@ -628,7 +836,7 @@ body {
   stroke-width: 8;
 }
 .jwire-line {
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: rgb(var(--lift) / 0.16);
   stroke-width: 1.3;
 }
 .jwire--live .jwire-line {
@@ -636,11 +844,11 @@ body {
   stroke-width: 1.6;
 }
 .jwire--live .jwire-glow {
-  stroke: rgba(62, 224, 122, 0.22);
+  stroke: rgb(var(--signal-rgb) / 0.22);
   filter: blur(5px);
 }
 .jwire-pulse {
-  stroke: #eaffef;
+  stroke: var(--signal-hi);
   stroke-width: 2.4;
   stroke-dasharray: 12 220;
   animation: jflow 2.6s linear infinite;
@@ -678,7 +886,7 @@ body {
   top: 0;
   height: 96px;
   border-radius: var(--r-card);
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  border: 1px solid rgb(var(--lift) / 0.055);
   pointer-events: none;
 }
 .jnode-ghost--1 {
@@ -686,7 +894,7 @@ body {
 }
 .jnode-ghost--2 {
   transform: translate(-13px, -13px);
-  border-color: rgba(255, 255, 255, 0.03);
+  border-color: rgb(var(--lift) / 0.03);
 }
 
 .jnode {
@@ -701,8 +909,8 @@ body {
   border: 1px solid var(--hair-2);
   background: linear-gradient(148deg, var(--card-hi) 0%, var(--card-mid) 46%, var(--card-lo) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 18px 40px rgba(0, 0, 0, 0.6);
+    inset 0 1px 0 rgb(var(--lift) / 0.05),
+    0 18px 40px rgb(var(--shade) / 0.6);
   color: var(--ink);
   cursor: pointer;
   overflow: hidden;
@@ -710,40 +918,40 @@ body {
 }
 .jnode:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.26);
+  border-color: rgb(var(--lift) / 0.26);
 }
 .jnode--ready {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgb(var(--lift) / 0.2);
 }
 .jnode--done {
-  border-color: rgba(62, 224, 122, 0.35);
+  border-color: rgb(var(--signal-rgb) / 0.35);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 18px 40px rgba(0, 0, 0, 0.6),
-    0 0 30px rgba(62, 224, 122, 0.1);
+    inset 0 1px 0 rgb(var(--lift) / 0.05),
+    0 18px 40px rgb(var(--shade) / 0.6),
+    0 0 30px rgb(var(--signal-rgb) / 0.1);
 }
 .jnode--selected {
   border-color: var(--signal);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 0 1px rgba(62, 224, 122, 0.3),
-    0 20px 46px rgba(0, 0, 0, 0.65),
-    0 0 48px rgba(62, 224, 122, 0.22);
+    inset 0 1px 0 rgb(var(--lift) / 0.06),
+    0 0 0 1px rgb(var(--signal-rgb) / 0.3),
+    0 20px 46px rgb(var(--shade) / 0.65),
+    0 0 48px rgb(var(--signal-rgb) / 0.22);
 }
 .jnode--failed {
-  border-color: rgba(255, 107, 107, 0.5);
+  border-color: rgb(var(--alarm-rgb) / 0.5);
 }
 .jnode--active {
-  border-color: rgba(62, 224, 122, 0.7);
+  border-color: rgb(var(--signal-rgb) / 0.7);
   animation: jbreathe 1.9s ease-in-out infinite;
 }
 @keyframes jbreathe {
   0%,
   100% {
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), 0 0 22px rgba(62, 224, 122, 0.18);
+    box-shadow: 0 18px 40px rgb(var(--shade) / 0.6), 0 0 22px rgb(var(--signal-rgb) / 0.18);
   }
   50% {
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), 0 0 52px rgba(62, 224, 122, 0.45);
+    box-shadow: 0 18px 40px rgb(var(--shade) / 0.6), 0 0 52px rgb(var(--signal-rgb) / 0.45);
   }
 }
 
@@ -756,7 +964,7 @@ body {
   height: 54px;
   margin-top: -27px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(62, 224, 122, 0.5), transparent 68%);
+  background: radial-gradient(circle, rgb(var(--signal-rgb) / 0.5), transparent 68%);
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
@@ -783,13 +991,13 @@ body {
   place-items: center;
   border-radius: 11px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.04);
-  color: #dfe6e0;
+  background: rgb(var(--lift) / 0.04);
+  color: var(--ink);
 }
 .jnode--done .jnode-icon,
 .jnode--active .jnode-icon {
   color: var(--signal);
-  border-color: rgba(62, 224, 122, 0.35);
+  border-color: rgb(var(--signal-rgb) / 0.35);
   background: var(--signal-wash);
 }
 
@@ -822,12 +1030,14 @@ body {
   height: 100%;
   object-fit: cover;
   /* Matplotlib writes on white, and at thumbnail size that is a lamp in a
-     dark room. Dimmed at rest, full strength under the pointer. */
-  filter: brightness(0.5) contrast(1.05) saturate(0.9);
+     dark room — so the dark theme dims it at rest and brings it up under the
+     pointer. On a light page there is no lamp to dim: dimming there just
+     turns every thumbnail into a grey box, which is why this is a token. */
+  filter: var(--thumb-filter);
   transition: filter 0.2s;
 }
 .jnode:hover .jnode-thumb {
-  filter: brightness(0.92) contrast(1.02);
+  filter: var(--thumb-filter-hover);
 }
 
 /* The card's status mark. Colour says which state at a glance; fill and glyph
@@ -853,22 +1063,22 @@ body {
 .jnode-mark--skipped {
   color: var(--signal);
   background: transparent;
-  border-color: rgba(62, 224, 122, 0.5);
+  border-color: rgb(var(--signal-rgb) / 0.5);
 }
 .jnode-mark--failed {
-  color: #2a0b0b;
+  color: var(--on-alarm);
   background: var(--alarm);
   border-color: var(--alarm);
 }
 .jnode-mark--active {
-  border-color: rgba(62, 224, 122, 0.3);
+  border-color: rgb(var(--signal-rgb) / 0.3);
   box-shadow: 0 0 12px var(--signal-glow);
 }
 .jnode-mark-spin {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 1.6px solid rgba(62, 224, 122, 0.25);
+  border: 1.6px solid rgb(var(--signal-rgb) / 0.25);
   border-top-color: var(--signal);
   animation: ui-spin 0.8s linear infinite;
 }
@@ -892,7 +1102,7 @@ body {
   place-items: center;
   border-radius: 50%;
   border: 1px solid var(--hair-2);
-  background: #141715;
+  background: var(--surf-2);
   color: var(--ink-3);
   cursor: pointer;
   opacity: 0;
@@ -908,7 +1118,7 @@ body {
 }
 .jnode-remove:hover {
   color: var(--alarm);
-  border-color: rgba(255, 107, 107, 0.5);
+  border-color: rgb(var(--alarm-rgb) / 0.5);
 }
 
 /* A card being dragged lifts off the canvas and stops animating. */
@@ -921,9 +1131,9 @@ body {
   transition: none;
   border-color: var(--signal);
   box-shadow:
-    0 0 0 1px rgba(62, 224, 122, 0.35),
-    0 28px 60px rgba(0, 0, 0, 0.7),
-    0 0 60px rgba(62, 224, 122, 0.2);
+    0 0 0 1px rgb(var(--signal-rgb) / 0.35),
+    0 28px 60px rgb(var(--shade) / 0.7),
+    0 0 60px rgb(var(--signal-rgb) / 0.2);
 }
 .jnode-wrap--dragging .jnode-ghost {
   opacity: 0;
@@ -962,7 +1172,7 @@ body {
   padding: 7px 14px 7px 11px;
   border-radius: 999px;
   border: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.85);
+  background: rgb(var(--scrim) / 0.85);
   backdrop-filter: blur(10px);
 }
 .jbrand-mark {
@@ -970,7 +1180,7 @@ body {
   height: 8px;
   border-radius: 50%;
   background: var(--signal);
-  box-shadow: 0 0 0 3px rgba(62, 224, 122, 0.14), 0 0 14px var(--signal);
+  box-shadow: 0 0 0 3px rgb(var(--signal-rgb) / 0.14), 0 0 14px var(--signal);
 }
 .jbrand-name {
   font-weight: 700;
@@ -993,7 +1203,7 @@ body {
   padding: 7px 12px;
   border: 1px solid var(--hair);
   border-radius: 999px;
-  background: rgba(10, 11, 10, 0.85);
+  background: rgb(var(--scrim) / 0.85);
   backdrop-filter: blur(10px);
 }
 .jhealth-dot {
@@ -1034,9 +1244,9 @@ body {
   padding: 5px;
   border-radius: 14px;
   border: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.88);
+  background: rgb(var(--scrim) / 0.88);
   backdrop-filter: blur(12px);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 14px 40px rgb(var(--shade) / 0.5);
 }
 .jtool {
   display: inline-flex;
@@ -1055,7 +1265,7 @@ body {
 }
 .jtool:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--lift) / 0.06);
 }
 .jtool--on {
   color: var(--signal);
@@ -1078,7 +1288,7 @@ body {
   padding: 5px;
   border-radius: 14px;
   border: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.88);
+  background: rgb(var(--scrim) / 0.88);
   backdrop-filter: blur(12px);
   z-index: 19;
 }
@@ -1095,7 +1305,7 @@ body {
 }
 .jzoom button:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--lift) / 0.06);
 }
 .jzoom-read {
   padding: 0 9px 0 5px;
@@ -1114,7 +1324,7 @@ body {
   color: var(--ink-2);
   border: 1px solid var(--hair);
   border-radius: 999px;
-  background: rgba(10, 11, 10, 0.88);
+  background: rgb(var(--scrim) / 0.88);
   backdrop-filter: blur(10px);
   z-index: 18;
 }
@@ -1134,8 +1344,8 @@ body {
   flex-direction: column;
   border-radius: var(--r-panel);
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, rgba(20, 21, 20, 0.97), rgba(9, 10, 9, 0.97));
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65);
+  background: linear-gradient(180deg, rgb(var(--scrim-hi) / 0.97), rgb(var(--scrim) / 0.97));
+  box-shadow: 0 30px 70px rgb(var(--shade) / 0.65);
   backdrop-filter: blur(16px);
   z-index: 30;
   overflow: hidden;
@@ -1171,7 +1381,7 @@ body {
 }
 .jpanel-x:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--lift) / 0.06);
 }
 .jpanel-scroll {
   flex: 1;
@@ -1193,7 +1403,7 @@ body {
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--hair);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--field);
   color: var(--ink-3);
 }
 .jsearch input {
@@ -1233,8 +1443,8 @@ body {
   transition: border-color 0.15s, background 0.15s;
 }
 .jrow:hover:not(:disabled) {
-  border-color: rgba(62, 224, 122, 0.3);
-  background: rgba(62, 224, 122, 0.05);
+  border-color: rgb(var(--signal-rgb) / 0.3);
+  background: rgb(var(--signal-rgb) / 0.05);
 }
 .jrow--on {
   opacity: 0.5;
@@ -1270,11 +1480,11 @@ body {
   border-radius: 9px;
   border: 1px solid var(--hair);
   color: var(--ink-2);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--lift) / 0.03);
 }
 .jrow:hover:not(:disabled) .jrow-go {
   color: var(--signal);
-  border-color: rgba(62, 224, 122, 0.4);
+  border-color: rgb(var(--signal-rgb) / 0.4);
 }
 
 .jempty {
@@ -1307,7 +1517,7 @@ body {
   gap: 10px;
   padding: 0 16px;
   border-bottom: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.92);
+  background: rgb(var(--scrim) / 0.92);
   backdrop-filter: blur(12px);
   z-index: 2;
 }
@@ -1326,7 +1536,7 @@ body {
   padding: 7px 13px;
   border-radius: var(--r-ctl);
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, #1b1c1b, #101110);
+  background: linear-gradient(180deg, var(--ctl-hi), var(--ctl-lo));
   cursor: pointer;
 }
 .jbtn--ghost {
@@ -1340,9 +1550,9 @@ body {
 .jbtn--go {
   color: var(--on-signal);
   font-weight: 600;
-  border-color: rgba(62, 224, 122, 0.55);
-  background: linear-gradient(180deg, #4dff92, #23a95c);
-  box-shadow: 0 6px 24px rgba(35, 169, 92, 0.28);
+  border-color: rgb(var(--signal-rgb) / 0.55);
+  background: linear-gradient(180deg, var(--ctl-signal-hi), var(--ctl-signal-lo));
+  box-shadow: 0 6px 24px rgb(var(--signal-deep-rgb) / 0.28);
 }
 .jbtn:disabled {
   opacity: 0.5;
@@ -1380,12 +1590,12 @@ body {
 .jstate--done,
 .jstate--active {
   color: var(--signal);
-  border-color: rgba(62, 224, 122, 0.4);
+  border-color: rgb(var(--signal-rgb) / 0.4);
   background: var(--signal-wash);
 }
 .jstate--failed {
   color: var(--alarm);
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: rgb(var(--alarm-rgb) / 0.4);
 }
 
 .jstep-body {
@@ -1400,7 +1610,7 @@ body {
 .jstep-side {
   grid-column: 2;
   border-left: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.96);
+  background: rgb(var(--scrim) / 0.96);
   padding: 18px;
   overflow-y: auto;
   z-index: 2;
@@ -1416,7 +1626,7 @@ body {
   overflow: auto;
 }
 .jstep-main--quiet .jstep-mark {
-  color: rgba(255, 255, 255, 0.06);
+  color: rgb(var(--lift) / 0.06);
 }
 .jstep-caption {
   margin-top: 14px;
@@ -1434,8 +1644,8 @@ body {
   padding: 18px;
   border-radius: 18px;
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, #e9ece9, #cfd4cf);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(180deg, var(--plate-hi), var(--plate-lo));
+  box-shadow: 0 24px 60px rgb(var(--shade) / 0.55);
   max-width: 100%;
   max-height: 100%;
   min-height: 0;
@@ -1444,7 +1654,7 @@ body {
   max-width: 100%;
   max-height: 100%;
   border-radius: 6px;
-  background: #fff;
+  background: var(--plate-sheet);
 }
 
 .jlead {
@@ -1489,7 +1699,7 @@ body {
   right: var(--side-w);
   bottom: 0;
   z-index: 51;
-  background: #04060a;
+  background: var(--well-lo);
 }
 .jwell--hidden {
   visibility: hidden;
@@ -1513,8 +1723,8 @@ body {
   flex-direction: column;
   border-radius: 16px;
   border: 1px solid var(--hair-2);
-  background: rgba(6, 8, 7, 0.97);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+  background: rgb(var(--scrim) / 0.97);
+  box-shadow: 0 24px 60px rgb(var(--shade) / 0.65);
   z-index: 26;
   overflow: hidden;
 }
@@ -1612,7 +1822,7 @@ body {
   border: 1px solid var(--hair);
   border-radius: 14px;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
 }
 .srchdr {
   display: flex;
@@ -1636,10 +1846,10 @@ body {
   cursor: pointer;
 }
 .srcrow:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--lift) / 0.03);
 }
 .srcrow--sel {
-  border-color: rgba(62, 224, 122, 0.4);
+  border-color: rgb(var(--signal-rgb) / 0.4);
   background: var(--signal-wash);
 }
 .srcnum {
@@ -1668,7 +1878,7 @@ body {
   font-weight: 600;
   line-height: 1;
   color: var(--signal-hi);
-  text-shadow: 0 0 26px rgba(62, 224, 122, 0.35);
+  text-shadow: 0 0 26px rgb(var(--signal-rgb) / 0.35);
 }
 .result-range {
   color: var(--ink-2);
@@ -1688,7 +1898,7 @@ body {
   padding: 9px 11px;
   border-radius: 11px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgb(var(--lift) / 0.025);
   font-size: var(--t-1);
   line-height: 1.6;
   color: var(--ink-3);
@@ -1711,7 +1921,7 @@ body {
   box-shadow: 0 0 10px var(--signal);
 }
 .led--off {
-  background: #3a423d;
+  background: var(--hair-3);
 }
 .dun-line {
   font-size: var(--t-3);
@@ -1748,10 +1958,10 @@ body {
   padding: 9px 11px;
   border-radius: 12px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
 }
 .ladder-rung--on {
-  border-color: rgba(62, 224, 122, 0.35);
+  border-color: rgb(var(--signal-rgb) / 0.35);
   background: var(--signal-wash);
 }
 .ladder-rung-name {
@@ -1858,8 +2068,8 @@ body {
   padding: 11px 12px;
   border-radius: 14px;
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, rgba(26, 28, 26, 0.98), rgba(12, 13, 12, 0.98));
-  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(180deg, rgb(var(--scrim-hi) / 0.98), rgb(var(--scrim) / 0.98));
+  box-shadow: 0 20px 46px rgb(var(--shade) / 0.6);
   backdrop-filter: blur(12px);
   animation: jtoast-in 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
@@ -1882,7 +2092,7 @@ body {
   color: var(--alarm);
 }
 .jtoast--danger {
-  border-color: rgba(255, 107, 107, 0.35);
+  border-color: rgb(var(--alarm-rgb) / 0.35);
 }
 .jtoast-text {
   display: flex;
@@ -1908,7 +2118,7 @@ body {
   gap: 5px;
   padding: 5px 10px;
   border-radius: 9px;
-  border: 1px solid rgba(62, 224, 122, 0.4);
+  border: 1px solid rgb(var(--signal-rgb) / 0.4);
   background: var(--signal-wash);
   color: var(--signal);
   font: inherit;
@@ -1917,7 +2127,7 @@ body {
   cursor: pointer;
 }
 .jtoast-act:hover {
-  background: rgba(62, 224, 122, 0.18);
+  background: rgb(var(--signal-rgb) / 0.18);
 }
 .jtoast-x {
   flex: none;
@@ -1933,7 +2143,7 @@ body {
 }
 .jtoast-x:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(var(--lift) / 0.06);
 }
 
 /* ══ command palette and the keyboard contract ═════════════════════════════
@@ -1952,7 +2162,7 @@ body {
   border-radius: 6px;
   border: 1px solid var(--hair-2);
   border-bottom-width: 2px;
-  background: linear-gradient(180deg, #1d1f1d, #131413);
+  background: linear-gradient(180deg, var(--surf-3), var(--surf-4));
   font-family: var(--mono);
   font-size: var(--t-1);
   color: var(--ink-2);
@@ -1966,7 +2176,7 @@ body {
   justify-items: center;
   align-content: start;
   padding-top: 14vh;
-  background: rgba(4, 5, 4, 0.62);
+  background: rgb(var(--scrim) / 0.62);
   backdrop-filter: blur(3px);
   animation: jpal-scrim-in 0.14s ease-out;
 }
@@ -1982,8 +2192,8 @@ body {
   flex-direction: column;
   border-radius: var(--r-panel);
   border: 1px solid var(--hair-3);
-  background: linear-gradient(180deg, rgba(24, 26, 24, 0.98), rgba(10, 11, 10, 0.98));
-  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, rgb(var(--scrim-hi) / 0.98), rgb(var(--scrim) / 0.98));
+  box-shadow: 0 40px 90px rgb(var(--shade) / 0.7);
   overflow: hidden;
   animation: jpal-in 0.16s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
@@ -2035,8 +2245,8 @@ body {
 /* The cursor is keyboard-driven, so the highlight is a real element state and
    not :hover — the mouse only moves it, it never owns it. */
 .jpal-row--active {
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(62, 224, 122, 0.3);
+  background: rgb(var(--lift) / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(var(--signal-rgb) / 0.3);
 }
 .jpal-row--off {
   opacity: 0.45;
@@ -2182,11 +2392,11 @@ body {
   gap: 2px;
   border: 1px solid var(--hair);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
   overflow: hidden;
 }
 .tissue--on {
-  border-color: rgba(62, 224, 122, 0.35);
+  border-color: rgb(var(--signal-rgb) / 0.35);
   background: var(--signal-wash);
 }
 .tissue-main {
@@ -2239,7 +2449,7 @@ body {
 }
 .tissue-eye:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgb(var(--lift) / 0.04);
 }
 
 /* A radio-style choice: one option, its consequence spelled out. */
@@ -2251,7 +2461,7 @@ body {
   padding: 11px 13px;
   border-radius: 13px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
   color: var(--ink);
   font: inherit;
   text-align: left;
@@ -2269,7 +2479,7 @@ body {
   border-color: var(--hair);
 }
 .pick--on {
-  border-color: rgba(62, 224, 122, 0.45);
+  border-color: rgb(var(--signal-rgb) / 0.45);
   background: var(--signal-wash);
 }
 .pick-dot {
@@ -2312,7 +2522,7 @@ body {
   transform: translateX(-50%);
   padding: 3px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(62, 224, 122, 0.5);
+  border: 1px solid rgb(var(--signal-rgb) / 0.5);
   background: var(--void-2);
   font-size: var(--t-1);
   font-weight: 600;
@@ -2322,7 +2532,7 @@ body {
   pointer-events: none;
 }
 .jnode--next {
-  border-color: rgba(62, 224, 122, 0.55);
+  border-color: rgb(var(--signal-rgb) / 0.55);
   animation: jbreathe 2.4s ease-in-out infinite;
 }
 
@@ -2345,7 +2555,7 @@ body {
   padding: 4px 9px;
   border-radius: 999px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
   font-size: var(--t-1);
   color: var(--ink-3);
 }
@@ -2365,7 +2575,7 @@ body {
     background-color: var(--void);
   }
   50% {
-    background-color: #070a08;
+    background-color: var(--surf-1);
   }
 }
 
@@ -2376,7 +2586,7 @@ body {
   filter: drop-shadow(0 0 5px var(--signal-glow));
 }
 .jwire--charging .jwire-glow {
-  stroke: rgba(62, 224, 122, 0.3);
+  stroke: rgb(var(--signal-rgb) / 0.3);
   filter: blur(6px);
 }
 
@@ -2388,7 +2598,7 @@ body {
   background: linear-gradient(
     100deg,
     transparent 30%,
-    rgba(125, 255, 171, 0.16) 50%,
+    rgb(var(--signal-hi-rgb) / 0.16) 50%,
     transparent 70%
   );
   background-size: 260% 100%;
@@ -2428,10 +2638,10 @@ body {
 }
 @keyframes jland {
   0% {
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), 0 0 70px rgba(62, 224, 122, 0.6);
+    box-shadow: 0 18px 40px rgb(var(--shade) / 0.6), 0 0 70px rgb(var(--signal-rgb) / 0.6);
   }
   100% {
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(62, 224, 122, 0.1);
+    box-shadow: 0 18px 40px rgb(var(--shade) / 0.6), 0 0 30px rgb(var(--signal-rgb) / 0.1);
   }
 }
 .jnode--justdone .jnode-mark {
@@ -2467,8 +2677,8 @@ body {
   padding: 14px 16px 12px;
   border-radius: 18px;
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, rgba(20, 22, 20, 0.96), rgba(9, 10, 9, 0.97));
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(180deg, rgb(var(--scrim-hi) / 0.96), rgb(var(--scrim) / 0.97));
+  box-shadow: 0 24px 60px rgb(var(--shade) / 0.6);
   backdrop-filter: blur(14px);
   animation: jrun-in 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
@@ -2479,8 +2689,8 @@ body {
   }
 }
 .jrun-card--live {
-  border-color: rgba(62, 224, 122, 0.35);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 50px rgba(62, 224, 122, 0.12);
+  border-color: rgb(var(--signal-rgb) / 0.35);
+  box-shadow: 0 24px 60px rgb(var(--shade) / 0.6), 0 0 50px rgb(var(--signal-rgb) / 0.12);
 }
 .jrun-card--bad {
   padding: 4px 12px;
@@ -2564,7 +2774,7 @@ body {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  border: 1.5px solid rgba(62, 224, 122, 0.3);
+  border: 1.5px solid rgb(var(--signal-rgb) / 0.3);
   border-top-color: var(--signal);
   animation: ui-spin 0.8s linear infinite;
 }
@@ -2585,7 +2795,7 @@ body {
 .jrun-track {
   height: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--lift) / 0.1);
   overflow: hidden;
 }
 .jrun-fill {
@@ -2616,7 +2826,7 @@ body {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid rgba(62, 224, 122, 0.45);
+  border: 1px solid rgb(var(--signal-rgb) / 0.45);
   background: var(--void-2);
   color: var(--signal);
   cursor: pointer;
@@ -2646,7 +2856,7 @@ body {
   margin-bottom: 16px;
   border-radius: 14px;
   border: 1px solid var(--hair);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
 }
 .solver-head {
   display: flex;
@@ -2700,7 +2910,7 @@ body {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(60% 50% at 50% 45%, rgba(35, 169, 92, 0.09), transparent 70%),
+    radial-gradient(60% 50% at 50% 45%, rgb(var(--signal-deep-rgb) / 0.09), transparent 70%),
     var(--void);
   animation: boot-in 0.4s ease-out;
 }
@@ -2728,7 +2938,7 @@ body {
   background: linear-gradient(
     180deg,
     transparent 42%,
-    rgba(62, 224, 122, 0.07) 50%,
+    rgb(var(--signal-rgb) / 0.07) 50%,
     transparent 58%
   );
   background-size: 100% 220%;
@@ -2749,8 +2959,8 @@ body {
   padding: 26px 26px 20px;
   border-radius: 22px;
   border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, rgba(20, 22, 20, 0.96), rgba(9, 10, 9, 0.97));
-  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgb(var(--scrim-hi) / 0.96), rgb(var(--scrim) / 0.97));
+  box-shadow: 0 40px 90px rgb(var(--shade) / 0.7), inset 0 1px 0 rgb(var(--lift) / 0.05);
   animation: boot-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 @keyframes boot-rise {
@@ -2803,7 +3013,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1px solid rgba(62, 224, 122, 0.5);
+  border: 1px solid rgb(var(--signal-rgb) / 0.5);
   animation: boot-ring 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
 }
 .boot-mark-ring--2 {
@@ -2845,7 +3055,7 @@ body {
 .boot-row--checking {
   opacity: 1;
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgb(var(--lift) / 0.03);
 }
 .boot-row--ok,
 .boot-row--warn,
@@ -2863,14 +3073,14 @@ body {
   color: var(--ink-2);
 }
 .boot-row--warn {
-  background: rgba(255, 190, 90, 0.06);
+  background: rgb(var(--warn-rgb) / 0.06);
 }
 .boot-row--warn .boot-label,
 .boot-row--fail .boot-label {
   color: var(--ink);
 }
 .boot-row--fail {
-  background: rgba(255, 107, 107, 0.07);
+  background: rgb(var(--alarm-rgb) / 0.07);
 }
 
 .boot-dot {
@@ -2887,15 +3097,15 @@ body {
   color: var(--on-signal);
   background: var(--signal);
   border-color: var(--signal);
-  box-shadow: 0 0 16px rgba(62, 224, 122, 0.4);
+  box-shadow: 0 0 16px rgb(var(--signal-rgb) / 0.4);
 }
 .boot-row--warn .boot-dot {
   color: #ffbe5a;
-  border-color: rgba(255, 190, 90, 0.55);
+  border-color: rgb(var(--warn-rgb) / 0.55);
 }
 .boot-row--fail .boot-dot {
   color: var(--alarm);
-  border-color: rgba(255, 107, 107, 0.55);
+  border-color: rgb(var(--alarm-rgb) / 0.55);
 }
 .boot-row--checking .boot-dot {
   border-color: var(--signal);
@@ -2905,7 +3115,7 @@ body {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  border: 1.5px solid rgba(62, 224, 122, 0.25);
+  border: 1.5px solid rgb(var(--signal-rgb) / 0.25);
   border-top-color: var(--signal);
   animation: ui-spin 0.7s linear infinite;
 }
@@ -2929,13 +3139,13 @@ body {
   color: #ffbe5a;
 }
 .boot-row--fail .boot-detail {
-  color: #ffb3a7;
+  color: var(--ink-danger);
 }
 
 .boot-track {
   height: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(var(--lift) / 0.08);
   overflow: hidden;
 }
 .boot-fill {
@@ -3001,7 +3211,7 @@ body {
   padding: 13px 14px;
   border-radius: 14px;
   border: 1px solid var(--hair-2);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
   color: var(--ink);
   font: inherit;
   text-align: left;
@@ -3010,11 +3220,11 @@ body {
 }
 .boot-choice:hover {
   transform: translateY(-1px);
-  border-color: rgba(62, 224, 122, 0.45);
-  background: rgba(62, 224, 122, 0.05);
+  border-color: rgb(var(--signal-rgb) / 0.45);
+  background: rgb(var(--signal-rgb) / 0.05);
 }
 .boot-choice--resume {
-  border-color: rgba(62, 224, 122, 0.35);
+  border-color: rgb(var(--signal-rgb) / 0.35);
   background: var(--signal-wash);
 }
 .boot-choice-icon {
@@ -3030,7 +3240,7 @@ body {
 .boot-choice:hover .boot-choice-icon,
 .boot-choice--resume .boot-choice-icon {
   color: var(--signal);
-  border-color: rgba(62, 224, 122, 0.4);
+  border-color: rgb(var(--signal-rgb) / 0.4);
 }
 .boot-choice-text {
   display: flex;
@@ -3144,7 +3354,7 @@ body {
 .chart-mark--unbounded {
   background: repeating-linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.16) 0 5px,
+    rgb(var(--lift) / 0.16) 0 5px,
     transparent 5px 10px
   );
   border: 1px dashed var(--hair-3);
@@ -3182,17 +3392,17 @@ body {
   padding: 18px 20px;
   border-radius: 16px;
   border: 1px solid var(--hair-2);
-  background: linear-gradient(150deg, rgba(24, 78, 47, 0.35), rgba(9, 12, 10, 0.6));
+  background: linear-gradient(150deg, rgb(var(--stat-rgb) / 0.35), rgb(var(--scrim) / 0.6));
 }
 .stat--flat {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--lift) / 0.02);
 }
 .stat-value {
   font-size: 42px;
   font-weight: 600;
   line-height: 1;
   color: var(--signal-hi);
-  text-shadow: 0 0 30px rgba(62, 224, 122, 0.3);
+  text-shadow: 0 0 30px rgb(var(--signal-rgb) / 0.3);
 }
 .stat-unit {
   margin-top: 8px;
@@ -3232,7 +3442,7 @@ body {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(70% 60% at 50% 45%, rgba(35, 169, 92, 0.05), transparent 70%),
+    radial-gradient(70% 60% at 50% 45%, rgb(var(--signal-deep-rgb) / 0.05), transparent 70%),
     var(--void);
   cursor: grab;
 }
@@ -3263,7 +3473,7 @@ body {
   gap: 12px;
   padding: 9px 14px;
   border-top: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.92);
+  background: rgb(var(--scrim) / 0.92);
 }
 .figview-name {
   font-size: 12.5px;
@@ -3298,7 +3508,7 @@ body {
 }
 .figview-open:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(var(--lift) / 0.05);
 }
 .figview-note {
   margin: 0;
@@ -3306,7 +3516,7 @@ body {
   font-size: 11px;
   color: var(--ink-3);
   border-top: 1px solid var(--hair);
-  background: rgba(10, 11, 10, 0.92);
+  background: rgb(var(--scrim) / 0.92);
 }
 
 /* Two classes left without rules by concurrent work on this file. */
@@ -3350,7 +3560,7 @@ body {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(80% 70% at 50% 40%, #0a0d10, #04060a 70%);
+  background: radial-gradient(80% 70% at 50% 40%, var(--well-hi), var(--well-lo) 70%);
 }
 .viewerWrap canvas {
   display: block;
@@ -3361,8 +3571,8 @@ body {
 .srcLabel {
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(6, 8, 7, 0.86);
+  border: 1px solid rgb(var(--lift) / 0.18);
+  background: rgb(var(--scrim) / 0.86);
   color: var(--ink);
   font-family: var(--mono);
   font-size: 10.5px;
@@ -3391,7 +3601,7 @@ body {
   height: 8px;
   border-radius: 999px;
   border: 1px solid var(--hair);
-  background: linear-gradient(90deg, #08301c, #23a95c 55%, #7dffab);
+  background: linear-gradient(90deg, var(--signal-deep), #23a95c 55%, #7dffab);
 }
 .fieldscale-ends {
   display: flex;

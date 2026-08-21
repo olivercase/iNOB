@@ -4,6 +4,45 @@ All notable changes to the Forward_Model_Vagus_Nerve pipeline. Conforms to
 [Keep a Changelog](https://keepachangelog.com) and uses semantic-ish
 versioning. Dates in ISO-8601.
 
+## [Unreleased] — sensor bandwidth is half of a sensor spec, 2026-08-21
+
+A magnetometer is two numbers. Quoting the noise density without the bandwidth
+is how a QuSpin QZFM-3 ended up credited with a 30–500 Hz recording band it
+cannot deliver — integrating noise it never sees, and paying nothing for the
+CAP energy its 135 Hz pole cannot pass.
+
+### Added
+- **`inob.sensors.opm_presets`** — OPM presets carrying noise density *and*
+  3-dB bandwidth as a pair: `quspin_qzfm3` (7 fT/√Hz, 135 Hz — the default),
+  `quspin_qzfm2` (15, 135), `fieldline_v3` (15, 500), `he4_wideband`
+  (30, 2000). `noise.opm_sensor` names one; either number can still be
+  overridden individually. The last two carry `verified=False` and log a
+  warning: manufacturer-class figures, not checked against a current spec
+  sheet by anyone here.
+- **`--set noise.opm_bandwidth_hz=…`** and `NoiseCfg.opm_noise_bandwidth_hz`,
+  the equivalent noise bandwidth of the recording band seen through the
+  sensor pole: `f₃dB·[atan(hi/f₃dB) − atan(lo/f₃dB)]`.
+
+### Fixed
+- **The sensor now rolls off signal and noise alike.** One pole, applied both
+  ways: the noise integral saturates above the pole, and the CAP is scaled by
+  `1/√(1 + (f_CAP/f₃dB)²)` at its spectral peak `f_CAP = 1/(2πσ)` — exact for
+  the Gaussian-derivative AP shape in `inob.sources.cap`. Folded into the MEG
+  σ returned by `compute_noise_floors`, so every consumer inherits it and none
+  of them can reward a narrow-band sensor for the noise its own bandwidth
+  removes. **Narrowing the band can no longer improve SNR** (tested).
+- **The QZFM-3's effective floor is 217 fT, not 152 fT**, for the 0.5 ms vagal
+  CAP: it passes 39% of a 318 Hz signal. Note what this does *not* do — it does
+  not hand back the 6.7× fewer trials that dropping 1 kHz → 150 Hz appears to
+  promise on the noise side alone. Against the old broadband 1 kHz figure
+  (221 fT) the honest number moves by 2%, because the band the arithmetic
+  removed was band the signal was living in.
+- **The GUI has a light theme.** Every colour in `globals.css` is a token now,
+  including the sheens and shadows that were hard-coded `rgba(255,255,255,…)`
+  and `rgba(10,11,10,…)`; `<html data-theme>` picks the palette, `?theme=` or
+  the top-right toggle sets it, and `@media print` forces light regardless, so
+  a printed page is not a black slab. The 3-D well follows via `useTheme`.
+
 ## [Unreleased] — like-for-like modality comparison, 2026-07-29
 
 `inob source-models` answers the spine question that does *not* need the source

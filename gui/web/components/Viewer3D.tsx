@@ -7,10 +7,39 @@ import { Button, IconButton, Tag, Toggle } from "@/components/ui";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { MeshInfo, PointSource } from "@/lib/api";
+import { useTheme } from "@/components/ThemeToggle";
 
 // Whole-body anatomical palette. No structure is privileged — iNOB images any
 // target, so colours are per tissue category and the *selected target* (which
 // the user picks) is what gets emphasised, whatever it is.
+/* The well's own colours. Kept beside the tissue table rather than read out of
+ * CSS at frame time: three.js wants concrete colours, and a scene that has to
+ * parse a computed style every render is a scene that stutters. These match
+ * --well-hi / --well-lo in globals.css by hand — change both together. */
+const SCENE = {
+  dark: {
+    bg: "#0a0d13",
+    sky: "#aeb9ff",
+    ground: "#161a22",
+    stipple: "#ffffff",
+    fieldLow: "#08301c",
+    fieldHigh: "#7dffab",
+  },
+  light: {
+    bg: "#e4eaec",
+    sky: "#ffffff",
+    ground: "#b9c4c7",
+    // A white stipple vanishes on a pale well, so the dipole cloud inks up.
+    stipple: "#12261a",
+    // The ramp runs the other way in light: strongest field is the darkest
+    // green, because on paper-white it is depth of ink that reads as more.
+    fieldLow: "#cbe8d7",
+    fieldHigh: "#0a5029",
+  },
+} as const;
+
+type ScenePalette = { readonly [K in keyof (typeof SCENE)["dark"]]: string };
+
 const TISSUE: Record<string, { color: string; opacity: number }> = {
   skin: { color: "#e8c4a0", opacity: 0.09 },
   bone: { color: "#e4e9f0", opacity: 0.28 },
@@ -269,10 +298,12 @@ function SensorCloud({
   positions,
   values,
   size,
+  scene,
 }: {
   positions: [number, number, number][];
   values?: number[];
   size: number;
+  scene: ScenePalette;
 }) {
   const geometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
@@ -287,8 +318,8 @@ function SensorCloud({
     if (values && values.length === positions.length) {
       const top = Math.max(...values) || 1;
       const rgb = new Float32Array(positions.length * 3);
-      const low = new THREE.Color("#08301c");   // one hue…
-      const high = new THREE.Color("#7dffab");  // …dark to light
+      const low = new THREE.Color(scene.fieldLow);   // one hue…
+      const high = new THREE.Color(scene.fieldHigh); // …weak to strong
       const c = new THREE.Color();
       values.forEach((v, i) => {
         // Field falls off steeply, so a linear ramp puts every sensor at the
@@ -302,7 +333,7 @@ function SensorCloud({
       geom.setAttribute("color", new THREE.BufferAttribute(rgb, 3));
     }
     return geom;
-  }, [positions, values]);
+  }, [positions, values, scene]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -332,9 +363,11 @@ function SensorCloud({
 function DipoleCloud({
   positions,
   size,
+  scene,
 }: {
   positions: [number, number, number][];
   size: number;
+  scene: ScenePalette;
 }) {
   const geometry = useMemo(() => {
     const geom = new THREE.BufferGeometry();
@@ -358,7 +391,7 @@ function DipoleCloud({
       <pointsMaterial
         size={size}
         sizeAttenuation
-        color="#ffffff"
+        color={scene.stipple}
         transparent
         opacity={0.9}
         depthTest={false}
@@ -412,6 +445,7 @@ export default function Viewer3D({
   dipoleCloud = null,
   sensorCloud = null,
 }: Props) {
+  const scene = SCENE[useTheme()];
   const { loaded, loading, failed, retryFailed } = useStlMeshes(meshes, visible);
   const [placing, setPlacing] = useState(false);
   const [snap, setSnap] = useState(true);
@@ -472,9 +506,9 @@ export default function Viewer3D({
   return (
     <div className="viewerWrap" style={{ cursor: placing ? "crosshair" : "default" }}>
       <Canvas camera={{ fov: 42, position: [200, 80, 200] }} dpr={[1, 2]}>
-        <color attach="background" args={["#0a0d13"]} />
-        <fog attach="fog" args={["#0a0d13", modelSize * 1.6, modelSize * 4.5]} />
-        <hemisphereLight args={["#aeb9ff", "#161a22", 0.7]} />
+        <color attach="background" args={[scene.bg]} />
+        <fog attach="fog" args={[scene.bg, modelSize * 1.6, modelSize * 4.5]} />
+        <hemisphereLight args={[scene.sky, scene.ground, 0.7]} />
         <directionalLight position={[1, 1.2, 0.8]} intensity={1.1} />
         <directionalLight position={[-1, -0.4, -1]} intensity={0.35} />
 
@@ -574,6 +608,7 @@ export default function Viewer3D({
           <DipoleCloud
             positions={dipoleCloud}
             size={Math.max(modelSize * 0.004, 1.2)}
+            scene={scene}
           />
         )}
 
@@ -582,12 +617,13 @@ export default function Viewer3D({
             positions={sensorCloud.positions}
             values={sensorCloud.values}
             size={Math.max(modelSize * 0.006, 1.5)}
+            scene={scene}
           />
         )}
 
         <OrbitControls ref={controls as never} makeDefault enableDamping />
         <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
-          <GizmoViewport axisColors={["#e06666", "#7bd88f", "#6f9bff"]} labelColor="#0a0d13" />
+          <GizmoViewport axisColors={["#e06666", "#7bd88f", "#6f9bff"]} labelColor={scene.bg} />
         </GizmoHelper>
       </Canvas>
 

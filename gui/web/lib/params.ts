@@ -100,7 +100,9 @@ export const PARAM_GROUPS: ParamGroup[] = [
     icon: "pulse",
     summary: (c) => {
       const n = num(c, "noise.opm_intrinsic_fT_sqrtHz");
-      return n === undefined ? undefined : `${n} fT/√Hz`;
+      if (n === undefined) return undefined;
+      const bw = num(c, "noise.opm_bandwidth_hz");
+      return bw === undefined ? `${n} fT/√Hz` : `${n} fT/√Hz · ${bw} Hz`;
     },
     params: [
       {
@@ -109,10 +111,25 @@ export const PARAM_GROUPS: ParamGroup[] = [
         unit: "fT/√Hz",
         help:
           "Intrinsic noise of one magnetometer. 7 fT/√Hz matches a QuSpin " +
-          "Gen-3 sensor. Halving it halves the trials needed by a factor of four.",
+          "Gen-3 sensor. Halving it halves the trials needed by a factor of four. " +
+          "It never travels alone: read it with the sensor bandwidth below.",
         min: 0.1,
         max: 100,
         step: 0.5,
+      },
+      {
+        path: "noise.opm_bandwidth_hz",
+        label: "OPM sensor bandwidth",
+        unit: "Hz",
+        help:
+          "The magnetometer's own 3 dB point — 135 Hz for a QuSpin Gen-3, " +
+          "a few kHz for a helium-4 sensor. It bounds the noise you integrate " +
+          "AND rolls off the signal: a 0.5 ms action potential peaks near " +
+          "318 Hz, so a 135 Hz sensor passes under 40% of it. Narrowing this " +
+          "always makes detection harder, never easier.",
+        min: 10,
+        max: 5000,
+        step: 5,
       },
       {
         path: "noise.bandwidth_hz",
@@ -120,7 +137,8 @@ export const PARAM_GROUPS: ParamGroup[] = [
         unit: "Hz",
         help:
           "Bandwidth of the measurement. Total noise scales with its square " +
-          "root, so a narrower band around your signal helps.",
+          "root, so a narrower band around your signal helps — up to the " +
+          "sensor bandwidth above, past which there is little left to gain.",
         min: 1,
         max: 10000,
         step: 10,

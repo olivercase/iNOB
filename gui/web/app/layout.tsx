@@ -30,7 +30,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${display.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Resolve the theme before the first paint: ?theme=light|dark wins
+            (handy for a screenshot or a print preview), then a stored choice,
+            then the OS. Doing this in an effect would show one frame of the
+            wrong palette on every load. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var q=new URLSearchParams(location.search).get("theme");var t=(q==="light"||q==="dark")?q:localStorage.getItem("inob-theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="dark";}})();`,
+          }}
+        />
+      </head>
       {/* Grammarly and friends inject attributes into <body> before React
           hydrates, which React reports as a hydration mismatch. The markup we
           render is identical either way, so ignore attribute drift here. */}

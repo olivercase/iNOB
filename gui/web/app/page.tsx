@@ -37,6 +37,7 @@ import Boot, { type BootChoice } from "@/components/Boot";
 import JourneyCanvas from "@/components/JourneyCanvas";
 import CommandPalette, { type Command } from "@/components/CommandPalette";
 import ShortcutsHelp from "@/components/ShortcutsHelp";
+import ThemeToggle, { applyTheme } from "@/components/ThemeToggle";
 import StepView from "@/components/StepView";
 import AddOutputPanel from "@/components/AddOutputPanel";
 import ParamPanels from "@/components/ParamPanels";
@@ -926,6 +927,16 @@ export default function Page() {
         run: () => setAdvancedOpen(true),
       },
       {
+        id: "theme",
+        title: "Toggle light / dark theme",
+        group: "Settings",
+        icon: "theme",
+        run: () =>
+          applyTheme(
+            document.documentElement.dataset.theme === "light" ? "dark" : "light",
+          ),
+      },
+      {
         id: "shortcuts",
         title: "Keyboard shortcuts",
         group: "Settings",
@@ -1018,6 +1029,7 @@ export default function Page() {
           <Button icon="cog" disabled={!config} onClick={() => setAdvancedOpen(true)}>
             Advanced
           </Button>
+          <ThemeToggle />
           <Button
             icon="reset"
             disabled={running}

@@ -35,7 +35,8 @@ export type IconName =
   | "chevron-right"
   | "machine"
   | "info"
-  | "external";
+  | "external"
+  | "theme";
 
 const PATHS: Record<IconName, string> = {
   // A body volume: the thing being imaged.
@@ -73,6 +74,9 @@ const PATHS: Record<IconName, string> = {
   "chevron-down": "M6 9.5 12 15.5 18 9.5",
   "chevron-right": "M9.5 6 15.5 12 9.5 18",
   machine: "M3.4 5.5h17.2v10H3.4z M8.4 19.4h7.2 M12 15.5v3.9 M8 9.2h8 M8 12h5",
+  // Half-lit disc: the light/dark switch, drawn as the state it toggles
+  // rather than as a sun or a moon, neither of which says "invert this".
+  theme: "M12 3.6a8.4 8.4 0 1 0 0 16.8 8.4 8.4 0 0 0 0-16.8z M12 3.6v16.8 M12 5.6a6.4 6.4 0 0 1 0 12.8 M12 7.6a4.4 4.4 0 0 1 0 8.8",
   info: "M12 4.4a7.6 7.6 0 1 0 0 15.2 7.6 7.6 0 0 0 0-15.2z M12 11v5.2 M12 8.2v.9",
   external: "M14.4 4.6H19.4v5 M19.4 4.6 11.6 12.4 M17 14.4v4.2a.8.8 0 0 1-.8.8H5.4a.8.8 0 0 1-.8-.8V7.8a.8.8 0 0 1 .8-.8h4.2",
 };
