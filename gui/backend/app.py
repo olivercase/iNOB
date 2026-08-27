@@ -58,7 +58,7 @@ from fastapi.responses import FileResponse
 from gui.backend import cluster, duneuro_setup
 from inob import __version__ as _inob_version
 from inob.analysis.detect import compute_detectability
-from inob.cli.pipeline import ALL_STAGES
+from inob.cli.pipeline import ALL_STAGES, DEFAULT_STAGES
 from inob.config import ConfigError, load_config
 
 logger = logging.getLogger(__name__)
@@ -204,6 +204,10 @@ def health() -> dict[str, Any]:
         "project_root": str(PROJECT_ROOT),
         "active_config": str(_active_config_path()),
         "stages": list(ALL_STAGES),
+        # What a run does when the client names no stages. Figures are opt-in
+        # at every layer — CLI, backend and canvas — so a client can read the
+        # rule here instead of hardcoding a guess at it.
+        "default_stages": list(DEFAULT_STAGES),
     }
 
 
@@ -1201,7 +1205,9 @@ class _QueueLogHandler(logging.Handler):
 async def run_ws(ws: WebSocket) -> None:
     """Run pipeline stages and stream every ``inob`` log line to the client.
 
-    Client sends ``{"stages": ["geom", ...] | "all", "force": bool}``.
+    Client sends ``{"stages": ["geom", ...] | "all", "force": bool}``. Omit
+    ``stages`` for the default build-and-solve (no figures); pass ``"all"`` to
+    include the figure stage.
     Server streams ``{"type": "log"|"status"|"done"|"error", ...}`` messages.
     """
     await ws.accept()
@@ -1218,7 +1224,10 @@ async def run_ws(ws: WebSocket) -> None:
         await ws.close()
         return
 
-    stages_in = req.get("stages", "all")
+    # No `stages` key means "do the usual thing", which is build and solve
+    # without drawing (DEFAULT_STAGES). Asking for "all" is the explicit way to
+    # include the figure stage, exactly as on the CLI.
+    stages_in = req.get("stages")
     force = bool(req.get("force", False))
     sources = req.get("sources") or []
     threshold_snr = float(req.get("threshold_snr", 3.0))
@@ -1337,8 +1346,10 @@ async def run_ws(ws: WebSocket) -> None:
 
     def _work() -> None:
         try:
-            if stages_in == "all" or not stages_in:
+            if stages_in == "all":
                 stages = list(ALL_STAGES)
+            elif not stages_in:
+                stages = list(DEFAULT_STAGES)
             else:
                 stages = [s for s in stages_in if s in ALL_STAGES]
 

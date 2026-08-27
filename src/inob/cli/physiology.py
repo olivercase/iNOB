@@ -25,7 +25,22 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob physiology",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob physiology                                the target's own scenarios
+  inob physiology --hr-bpm 50                    slower heart, fewer bursts
+  inob physiology --source-target spine          SSEP volleys instead
+  inob physiology --median-rate-hz 3             a faster stimulus train
+
+Time-domain traces at every sensor, from the target's physiology profile.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     # vagus scenarios
     p.add_argument("--hr-bpm", type=float, default=None,

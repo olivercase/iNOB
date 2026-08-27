@@ -28,7 +28,21 @@ _MOMENTS = {"dominant": None, "x": 0, "y": 1, "z": 2}
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob sensor-field",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob sensor-field                      the strongest source's pattern
+  inob sensor-field --aggregate rms      the array's sensitivity map
+  inob sensor-field --aggregate coherent every source summed in phase
+  inob sensor-field --level c7           restrict to one vertebral level
+  inob sensor-field --no-figure --print-summary   the numbers only
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--source-idx", type=int, default=-1,
                    help="Source index; default (-1) picks the strongest source.")

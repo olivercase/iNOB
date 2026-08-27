@@ -7,6 +7,7 @@ import pytest
 
 from inob.cli.pipeline import (
     ALL_STAGES,
+    DEFAULT_STAGES,
     STAGES,
     Stage,
     _parse_stages,
@@ -19,7 +20,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_parse_stages_all() -> None:
     assert _parse_stages("all") == list(ALL_STAGES)
-    assert _parse_stages(None) == list(ALL_STAGES)
+
+
+def test_parse_stages_omitted_leaves_figures_out() -> None:
+    assert _parse_stages(None) == list(DEFAULT_STAGES)
 
 
 def test_parse_stages_subset() -> None:

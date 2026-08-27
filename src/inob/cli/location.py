@@ -11,7 +11,20 @@ from inob.viz.location_optimisation import render_location_optimisation
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob location",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob location                          whole-body array vs cervical paddle
+  inob location --source-idx 40          judge the comparison at one source
+
+Answers where to put the electrodes, given two arrays already solved.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     # The paddle side and the wholebody leadfield both depend on the source
     # region, so their defaults are left as None and resolved from the

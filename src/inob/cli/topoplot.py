@@ -16,7 +16,20 @@ from inob.viz.topoplot import (
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob topoplot",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob topoplot                          field map for the strongest source
+  inob topoplot --target eeg             the electric topography
+  inob topoplot --source-idx 40          one source by index
+  inob topoplot --n-sources 4            a small grid of them
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--target", choices=("dual", "meg", "eeg", "montage"), default="dual",
                    help="Which topoplot to render.")

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 import inob.cli.status as cli_mod
-from inob.cli.pipeline import ALL_STAGES
+from inob.cli.pipeline import DEFAULT_STAGES
 from inob.config import load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -49,7 +49,11 @@ def test_json_output_shape(tmp_path, capsys) -> None:
     data = json.loads(capsys.readouterr().out)
     assert set(data) >= {"project_root", "config", "stages", "optional", "next"}
     assert data["project_root"] == str(tmp_path)
-    assert [s["name"] for s in data["stages"]] == list(ALL_STAGES)
+    assert [s["name"] for s in data["stages"]] == list(DEFAULT_STAGES)
+    # Figures are an optional artefact, not a pipeline stage: a run that
+    # drew nothing is complete, not four-fifths done.
+    assert "viz" not in [s["name"] for s in data["stages"]]
+    assert "figures" in [e["name"] for e in data["optional"]]
 
 
 def test_nothing_built_suggests_inob_run(tmp_path) -> None:
@@ -59,9 +63,19 @@ def test_nothing_built_suggests_inob_run(tmp_path) -> None:
 
 
 def test_only_last_stage_missing_suggests_that_stage(tmp_path) -> None:
-    _build(tmp_path, "geom", "fem", "sensors", "forward")
+    _build(tmp_path, "geom", "fem", "sensors")
     stages, _ = cli_mod.collect(_cfg(tmp_path))
-    assert cli_mod.next_step(stages) == "inob visualise"
+    assert cli_mod.next_step(stages) == "inob forward"
+
+
+def test_undrawn_figures_do_not_make_a_finished_run_look_unfinished(tmp_path) -> None:
+    """The whole point of opt-in figures: not drawing them is not a missing step."""
+    _build(tmp_path, "geom", "fem", "sensors", "forward")
+    stages, extras = cli_mod.collect(_cfg(tmp_path))
+    assert cli_mod.next_step(stages) is None
+    figures = next(e for e in extras if e.name == "figures")
+    assert figures.state == "missing"
+    assert figures.command == "inob run --with-viz"
 
 
 def test_failed_marker_reports_failed_and_suggests_force(tmp_path) -> None:

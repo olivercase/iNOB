@@ -10,7 +10,21 @@ from inob.viz.geometry import render_geometry
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Render geometry + FEM PNGs.")
+    p = argparse.ArgumentParser(
+        prog="inob visualise",
+        description="Render geometry + FEM PNGs.",
+        epilog="""\
+examples:
+  inob visualise                         geometry and FEM overview PNGs
+  inob visualise --target geom           just the anatomy
+  inob visualise --no-sensors            leave the array off the render
+
+The same renders `inob run --with-viz` produces as its viz stage.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--target", choices=("geom", "fem", "all"), default="all",
                    help="Which visualisation to render (default: all).")

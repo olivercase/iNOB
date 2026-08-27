@@ -10,7 +10,22 @@ from inob.viz.cap_compare import render_cap_compare
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob cap-compare",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob cap-compare                       propagating volley vs lumped dipole
+  inob cap-compare --ap-width-ms 0.3     a sharper action potential
+  inob cap-compare --segment-mm 100      a longer stretch of nerve
+
+Measures whether the stationary approximation holds — it does for the
+cervical vagus, and does not for the ascending cord.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--ap-width-ms", type=float, default=None,
                    help="Width parameter (σ) of the biphasic action-potential "

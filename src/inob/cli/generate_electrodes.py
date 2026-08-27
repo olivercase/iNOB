@@ -10,7 +10,23 @@ from inob.sensors.electrodes import generate_electrode_array
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=generate_electrode_array.__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob electrodes",
+        description=generate_electrode_array.__doc__,
+        epilog="""\
+examples:
+  inob electrodes                        the 32-contact paddle over the target
+  inob electrodes --source-target spine  centre it over the cord instead
+  inob electrodes --level c7             centre it on one vertebral level
+  inob electrodes --rows 8 --cols 4      a different grid
+  inob electrodes --full-spine           cover the whole cord, not one patch
+
+The patch is target-specific, so --source-target tags its output file.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--rows", type=int, default=None,
                    help="Override electrodes.rows.")

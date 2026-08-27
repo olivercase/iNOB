@@ -182,7 +182,8 @@ export default function AddOutputPanel({
 
       <footer className="jpanel-foot">
         Anything you add can be dragged anywhere, and removed with its ✕ or the
-        Delete key.
+        Delete key. A run draws only the figures pinned here — pin none and it
+        builds the model and solves it, nothing more.
       </footer>
     </aside>
   );

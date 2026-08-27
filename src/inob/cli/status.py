@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from inob.cli import _ui
-from inob.cli._common import DEFAULT_CONFIG
-from inob.cli.pipeline import ALL_STAGES, STAGES
-from inob.config import Config, load_config
+from inob.cli._common import DEFAULT_CONFIG, apply_source_target
+from inob.cli.pipeline import DEFAULT_STAGES, STAGES
+from inob.config import SOURCE_TARGETS, Config, load_config
 
 # Stage name -> the `inob` subcommand that builds it, for the "next step" hint.
 STAGE_COMMAND: dict[str, str] = {
@@ -25,12 +25,18 @@ STAGE_COMMAND: dict[str, str] = {
     "viz": "inob visualise",
 }
 
-# Artifacts outside the five pipeline stages, shown as optional extras.
-EXTRA_ARTIFACTS: tuple[tuple[str, str, str, str], ...] = (
-    ("electrodes", "electrodes_mat", "inob electrodes",
+# Artifacts outside the pipeline stages a bare run builds, shown as optional
+# extras. Figures live here rather than under "Pipeline" because `inob run`
+# does not draw them: listing an undrawn PNG as a missing stage would report a
+# complete run as incomplete, and point "what to run next" at a render nobody
+# asked for. Each entry names one or more config fields — `viz` writes two.
+EXTRA_ARTIFACTS: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
+    ("electrodes", ("electrodes_mat",), "inob electrodes",
      "HD surface-electrode array"),
-    ("eeg", "forward_eeg_npz", "inob eeg",
+    ("eeg", ("forward_eeg_npz",), "inob eeg",
      "EEG leadfield via DUNEuro"),
+    ("figures", ("geometry_png", "fem_png"), "inob run --with-viz",
+     "geometry + FEM overview PNGs"),
 )
 
 
@@ -57,7 +63,7 @@ def _failed_marker(paths: tuple[Path, ...], name: str) -> Path:
 def collect(cfg: Config) -> tuple[list[Artifact], list[Artifact]]:
     """Return ``(pipeline_stages, extras)`` with their on-disk state."""
     stages: list[Artifact] = []
-    for name in ALL_STAGES:
+    for name in DEFAULT_STAGES:
         stage = STAGES[name]
         paths = tuple(getattr(cfg.outputs, f) for f in stage.output_paths)
         stages.append(Artifact(
@@ -70,11 +76,11 @@ def collect(cfg: Config) -> tuple[list[Artifact], list[Artifact]]:
         ))
 
     extras: list[Artifact] = []
-    for name, field, command, description in EXTRA_ARTIFACTS:
-        path = getattr(cfg.outputs, field)
+    for name, fields, command, description in EXTRA_ARTIFACTS:
+        paths = tuple(getattr(cfg.outputs, f) for f in fields)
         extras.append(Artifact(
             name=name, description=description, command=command,
-            paths=(path,), built=path.exists(), failed=False,
+            paths=paths, built=all(p.exists() for p in paths), failed=False,
         ))
     return stages, extras
 
@@ -160,6 +166,9 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
         detail = (_describe(extra.paths[0], root) if extra.built
                   else _ui.paint(f"not built — {extra.command}", "dim"))
         print(f"  {glyph} {extra.name:<{pad}}{detail}", file=out)
+        if extra.built:
+            for extra_path in extra.paths[1:]:
+                print(f"{indent}{_describe(extra_path, root)}", file=out)
 
     print(f"\n{_ui.heading('Forward physics')}", file=out)
     physics = forward_physics(cfg)
@@ -201,16 +210,35 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob status",
         description="Show which pipeline outputs exist and what to run next.",
+        epilog="""\
+examples:
+  inob status                             what's built, and the next command
+  inob status --source-target spine       the cord run's own tagged outputs
+  inob status --json                      machine-readable, for scripts
+
+Figures are listed but never demanded: a run does not draw them unless asked
+(`inob run --with-viz`), so a missing PNG is not a missing stage.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--config", type=Path, default=Path(DEFAULT_CONFIG),
                    help=f"Path to YAML config (default {DEFAULT_CONFIG}).")
     p.add_argument("--project-root", type=Path, default=None,
                    help="Override the project root used to resolve paths.")
+    p.add_argument("--source-target", default=None, metavar="TAG",
+                   choices=list(SOURCE_TARGETS),
+                   help="Report the outputs of one target's run rather than "
+                        "the config's defaults. A targeted solve writes tagged "
+                        "files (duneuro_leadfield_<TAG>.npz and friends), so "
+                        "without this a spine run reads as unbuilt. Same flag, "
+                        f"same meaning as on every other command. One of: "
+                        f"{', '.join(SOURCE_TARGETS)}.")
     p.add_argument("--json", action="store_true",
                    help="Emit machine-readable JSON instead of a table.")
     args = p.parse_args(argv)
 
     cfg = load_config(args.config, project_root=args.project_root)
+    if args.source_target:
+        cfg = apply_source_target(cfg, args.source_target)
     stages, extras = collect(cfg)
 
     if args.json:

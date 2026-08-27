@@ -79,7 +79,21 @@ def _run_modality(cfg: Config, modality: str, *, skip_unit: bool) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob sensitivity",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob sensitivity                       sweep both modalities and plot
+  inob sensitivity --modality eeg        electric only (where sigma matters)
+  inob sensitivity --plot-only           redraw from results already on disk
+
+Expensive: each perturbation is a fresh forward solve. Consider the cluster.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument(
         "--modality", choices=["meg", "eeg", "both"], default="both",

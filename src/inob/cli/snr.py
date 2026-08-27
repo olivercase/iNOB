@@ -19,7 +19,22 @@ logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob snr",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob snr                               per-source SNR at the configured noise
+  inob snr --modality eeg                the electric leadfield instead
+  inob snr --n-averages 100              SNR after averaging 100 trials
+  inob snr --set noise.opm_sensor=fieldline_v3    a different OPM
+
+Noise floors come from cfg.noise — a sensor is a density AND a bandwidth.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--leadfield", type=Path, default=None,
                    help="Override leadfield NPZ path (default: cfg.outputs.forward_npz).")

@@ -1615,6 +1615,83 @@ body {
   overflow-y: auto;
   z-index: 2;
 }
+/* ── a step with nothing to stage ──────────────────────────────────────────
+ *
+ * Most steps have something to show: the 3-D well, a drawn figure, the detect
+ * chart. The rest have only their controls, and they used to inherit the same
+ * stage-plus-rail skeleton anyway — seven fields squeezed into a 380px gutter
+ * beside 1,200px of empty black with a 72px watermark in the middle of it.
+ *
+ * When the stage has nothing to hold, it should not be there. The rail stops
+ * being a rail: it becomes one centred column at a readable measure, which is
+ * the same information at twice the size and none of the void.
+ */
+.jstep--form .jstep-body {
+  grid-template-columns: 1fr;
+  overflow-y: auto;
+}
+.jstep--form .jstep-side {
+  grid-column: 1;
+  width: min(660px, 100%);
+  margin: 0 auto;
+  border-left: 0;
+  background: transparent;
+  padding: 44px 28px 72px;
+  overflow: visible;
+}
+/* At a 660px measure a settings row needs a rule to track along; at 380px it
+   did not. Same control, more room, one line to carry the eye across it. */
+.jstep--form .stepfield {
+  margin: 0;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.jstep--form .stepfield-head {
+  margin-bottom: 0;
+}
+/* In a 380px rail these labels were captions beside the control. At this
+   measure they are the content, so they take the body size and the full ink. */
+.jstep--form .stepfield-head label,
+.jstep--form .jfield > span {
+  font-size: var(--t-3);
+  color: var(--ink);
+}
+.jstep--form .stepfield-help {
+  margin-top: 6px;
+}
+.jstep--form .stepfield:has(.stepfield-help) .stepfield-head {
+  margin-bottom: 2px;
+}
+/* An empty state, not a watermark: what is missing, and the verb for it. */
+.jempty {
+  padding: 4px 0 8px;
+}
+.jempty-head {
+  margin: 0 0 6px;
+  font-size: var(--t-4);
+  font-weight: 600;
+  color: var(--ink);
+}
+.jempty-line {
+  margin: 0 0 18px;
+  font-size: var(--t-3);
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 46ch;
+}
+/* A setting that qualifies the thing above it, rather than gating it. */
+.jfield--after {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--hair);
+}
+
+.jstep--form .jlead {
+  margin-bottom: 26px;
+  font-size: var(--t-4);
+  line-height: 1.55;
+}
+
 .jstep-main {
   grid-column: 1;
   grid-row: 1;

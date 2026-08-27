@@ -14,7 +14,22 @@ def main(argv: list[str] | None = None) -> int:
         # re-exec. Dispatch through `inob forward` handles its own switch.
         from inob.duneuro_env import reexec_with_duneuro
         reexec_with_duneuro()
-    p = argparse.ArgumentParser(description=run_forward_local.__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob forward",
+        description=run_forward_local.__doc__,
+        epilog="""\
+examples:
+  inob forward                           MEG leadfield, every core
+  inob forward --workers 1               serial, for debugging
+  inob forward --source-target spine     solve the cord, write a tagged NPZ
+  inob forward --source-model venant     St. Venant instead of partial integration
+
+Needs DUNEuro. Writes fT/nA·m into outputs/forward/. Slow: this is the solve.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="forward")

@@ -68,7 +68,23 @@ def _resolve_source_idx(cfg: Config, level: str | None, source_idx: int) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob detect",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob detect                            trials to detect, for the whole array
+  inob detect --snr-threshold 5          a stricter detection criterion
+  inob detect --q-nAm 20                   assume a 20 nA·m source
+  inob detect --level c7                 only sources at one vertebral level
+  inob detect --print-summary            JSON to stdout as well as the figure
+
+The planning question this whole package exists to answer.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument(
         "--target", choices=("surface", "detect", "all"), default="all",

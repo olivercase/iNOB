@@ -21,7 +21,21 @@ from inob.viz.muscle_sources import (
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob muscle-sources",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob muscle-sources                    pairing and fibre-orientation figures
+  inob muscle-sources --which pairs      left/right pairing only
+  inob muscle-sources --spacing-mm 10    denser dipole fill
+
+Pre-solve: it draws where the muscle dipoles would go, before any leadfield.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--which", choices=("pairs", "orientations", "all"), default="all",
                    help="Which figure(s) to render (default: all).")

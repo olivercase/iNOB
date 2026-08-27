@@ -10,16 +10,55 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 
 
-def test_main_default_runs_all_stages(tmp_path, monkeypatch) -> None:
-    calls = {}
+def _capture(monkeypatch, calls):
     monkeypatch.setattr(
         cli_mod, "run_pipeline",
         lambda cfg, *, stages, force=False: (calls.update(stages=stages, force=force), {})[1],
     )
+
+
+def test_main_default_builds_and_solves_without_drawing(tmp_path, monkeypatch) -> None:
+    """A bare run is the model and the answer — figures are asked for, not assumed."""
+    calls = {}
+    _capture(monkeypatch, calls)
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
-    assert calls["stages"] == list(cli_mod.ALL_STAGES)
+    assert calls["stages"] == list(cli_mod.DEFAULT_STAGES)
+    assert "viz" not in calls["stages"]
     assert calls["force"] is False
+
+
+def test_main_with_viz_adds_the_figure_stage(tmp_path, monkeypatch) -> None:
+    calls = {}
+    _capture(monkeypatch, calls)
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--with-viz",
+    ])
+    assert rc == 0
+    assert set(calls["stages"]) == set(cli_mod.ALL_STAGES)
+
+
+def test_main_stages_all_is_every_stage(tmp_path, monkeypatch) -> None:
+    """`all` still means all — it is the explicit spelling of opting in."""
+    calls = {}
+    _capture(monkeypatch, calls)
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--stages", "all",
+    ])
+    assert rc == 0
+    assert calls["stages"] == list(cli_mod.ALL_STAGES)
+
+
+def test_skip_viz_beats_with_viz(tmp_path, monkeypatch) -> None:
+    """The older flag means "definitely not", whatever else is on the line."""
+    calls = {}
+    _capture(monkeypatch, calls)
+    rc = cli_mod.main([
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--with-viz", "--skip-viz",
+    ])
+    assert rc == 0
+    assert "viz" not in calls["stages"]
 
 
 def test_main_stages_subset(tmp_path, monkeypatch) -> None:
@@ -50,13 +89,15 @@ def test_main_force_flag(tmp_path, monkeypatch) -> None:
 
 
 def test_main_skip_viz_removes_viz_stage(tmp_path, monkeypatch) -> None:
+    """Kept working for scripts that pass it against an explicit `--stages all`."""
     calls = {}
     monkeypatch.setattr(
         cli_mod, "run_pipeline",
         lambda cfg, *, stages, force=False: (calls.update(stages=stages), {})[1],
     )
     rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--skip-viz",
+        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
+        "--stages", "all", "--skip-viz",
     ])
     assert rc == 0
     assert "viz" not in calls["stages"]
@@ -81,10 +122,12 @@ def test_parse_stages_empty_string_is_rejected() -> None:
         _parse_stages(" , ,")
 
 
-def test_parse_stages_none_and_all_run_everything() -> None:
-    from inob.cli.pipeline import ALL_STAGES, _parse_stages
-    assert _parse_stages(None) == list(ALL_STAGES)
+def test_parse_stages_omitted_is_not_all() -> None:
+    """Omitting the flag and writing `all` are different asks, and differ by viz."""
+    from inob.cli.pipeline import ALL_STAGES, DEFAULT_STAGES, _parse_stages
+    assert _parse_stages(None) == list(DEFAULT_STAGES)
     assert _parse_stages("all") == list(ALL_STAGES)
+    assert set(ALL_STAGES) - set(DEFAULT_STAGES) == {"viz"}
 
 
 def test_main_empty_stages_returns_2_not_full_run(tmp_path) -> None:

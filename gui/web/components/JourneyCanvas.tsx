@@ -58,6 +58,11 @@ interface Props {
 
 const MIN_SCALE = 0.35;
 const MAX_SCALE = 1.8;
+/* Auto-fit stops here even when the graph would need less. Zoom out by hand as
+   far as MIN_SCALE if you want the whole board — but arriving at a window and
+   being handed 45%, where a card title is four pixels tall, is a worse first
+   frame than arriving zoomed in and having to pan. Legibility over completeness. */
+const MIN_FIT_SCALE = 0.7;
 // Pointer travel (screen px) past which a press counts as a drag, not a click.
 const DRAG_SLOP = 4;
 
@@ -149,7 +154,7 @@ export default function JourneyCanvas({
     const graphH = b.maxY - b.minY;
     const scale = Math.min(
       MAX_SCALE,
-      Math.max(MIN_SCALE, Math.min(availW / graphW, availH / graphH)),
+      Math.max(MIN_FIT_SCALE, Math.min(availW / graphW, availH / graphH)),
     );
     setView({
       scale,

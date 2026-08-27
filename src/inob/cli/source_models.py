@@ -12,7 +12,21 @@ from inob.viz.source_models_plot import render_source_models
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob source-models",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob source-models                     OPM vs electrodes, three source models
+  inob source-models --json-out out.json the numbers, not the figure
+  inob source-models --no-figure         the summary table only
+
+Every ratio it reports is independent of the assumed source strength.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument(
         "--Q-nAm", type=float, default=None, dest="Q_nAm",

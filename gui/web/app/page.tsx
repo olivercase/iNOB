@@ -47,7 +47,20 @@ import DuneuroSetup from "@/components/DuneuroSetup";
 import LadderPanel from "@/components/LadderPanel";
 
 const Viewer3D = dynamic(() => import("@/components/Viewer3D"), { ssr: false });
+// Every stage the backend knows, in dependency order.
 const ALL_STAGES = ["geom", "fem", "sensors", "forward", "viz"];
+
+// What "Run the journey" does when nothing on the canvas asks for a drawing.
+//
+// `viz` renders the geometry and FEM PNGs, which costs minutes and a VTK render
+// window and produces something nobody asked to look at. Figures are cards you
+// pin from "Add to the journey"; pin one and the stage that draws it joins the
+// run (see `stagesForRun`). Pin none and a run is the model and the answer.
+const DEFAULT_STAGES = ["geom", "fem", "sensors", "forward"];
+
+// Stages that exist only to draw. Kept as a set so the rule below reads as the
+// rule rather than as a string comparison.
+const FIGURE_STAGES = new Set(["viz"]);
 
 // Stage names in the words a planner would use, not the CLI's.
 const STAGE_LABEL: Record<string, string> = {
@@ -135,7 +148,7 @@ export default function Page() {
   const [stage, setStage] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   // Which stages this run was asked for — the HUD narrates only those.
-  const [runningStages, setRunningStages] = useState<string[]>(ALL_STAGES);
+  const [runningStages, setRunningStages] = useState<string[]>(DEFAULT_STAGES);
   const [elapsed, setElapsed] = useState(0);
   const runRef = useRef<RunHandle | null>(null);
   // The keyboard handler and the palette are both defined before the run
@@ -298,7 +311,7 @@ export default function Page() {
     setStage(null);
     setStartedAt(null);
     setElapsed(0);
-    setRunningStages(ALL_STAGES);
+    setRunningStages(DEFAULT_STAGES);
     setRestored(false);
     setResetOpen(false);
     setBooting(true);
@@ -638,7 +651,19 @@ export default function Page() {
     );
   };
 
-  const onRun = () => runStages(ALL_STAGES);
+  // The stages a full journey run needs: the model and the solve always, plus
+  // the drawing stage only when a figure card on the canvas is waiting on it.
+  // Pinning "Geometry overview" is what buys the render; nothing else does.
+  const stagesForRun = useCallback((): string[] => {
+    const wanted = new Set(DEFAULT_STAGES);
+    for (const key of outputs) {
+      const stage = figureByKey.get(key)?.stage;
+      if (stage && FIGURE_STAGES.has(stage)) wanted.add(stage);
+    }
+    return ALL_STAGES.filter((s) => wanted.has(s));
+  }, [outputs, figureByKey]);
+
+  const onRun = () => runStages(stagesForRun());
 
   const onCancel = () => {
     if (!runRef.current) return;
@@ -947,7 +972,10 @@ export default function Page() {
     ];
   }, [nodes, running, sources.length, config, positions, resetLayout]);
 
-  const hudStages = running || Object.keys(statuses).length ? runningStages : ALL_STAGES;
+  // Before a run the HUD previews what pressing Run would do, which is the same
+  // list Run itself would send — including whether figures are in it.
+  const hudStages =
+    running || Object.keys(statuses).length ? runningStages : stagesForRun();
   const resumeSummary = useMemo(() => {
     const s = saved.current;
     if (!s) return undefined;

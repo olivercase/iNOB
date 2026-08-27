@@ -182,7 +182,9 @@ function NumField({
 }: {
   label: string;
   unit?: string;
-  help: string;
+  /* Omit it when there is nothing row-specific to say. A help line repeated
+     verbatim under every field is not help, it is seven copies of one fact. */
+  help?: string;
   path: string;
   config: Cfg;
   onChange: (c: Cfg) => void;
@@ -211,7 +213,7 @@ function NumField({
           onBlur={() => setDraft(null)}
         />
       </div>
-      <p className="stepfield-help">{help}</p>
+      {help && <p className="stepfield-help">{help}</p>}
     </div>
   );
 }
@@ -366,6 +368,17 @@ export default function StepView(p: Props) {
     "detect",
   ]);
   const writesConfig = WRITES_CONFIG.has(node.kind);
+  /* Does anything actually occupy the stage? The 3-D well, a drawn figure, the
+     detect chart and the ladder rungs each fill it; every other step has only
+     its controls. Those used to get the same stage-plus-rail skeleton, which
+     put seven fields in a 380px gutter beside 1,200px of empty black. When
+     there is nothing to stage, the controls become the page. */
+  const stageEmpty =
+    !p.usesViewer &&
+    !(node.kind === "figure" && p.figure?.exists) &&
+    !(node.kind === "detect" && p.result) &&
+    node.kind !== "biot" &&
+    node.kind !== "sarvas";
 
   const activeMeshPreset = MESH_PRESETS.find(
     (m) =>
@@ -376,7 +389,11 @@ export default function StepView(p: Props) {
   );
 
   return (
-    <div className={`jstep${p.usesViewer ? " jstep--viewer" : ""}`}>
+    <div
+      className={`jstep${p.usesViewer ? " jstep--viewer" : ""}${
+        stageEmpty ? " jstep--form" : ""
+      }`}
+    >
       <header className="jstep-bar">
         <button type="button" className="jbtn jbtn--ghost" onClick={p.onBack}>
           <Icon name="arrow-left" size={14} /> Journey
@@ -431,7 +448,7 @@ export default function StepView(p: Props) {
           </button>
         ) : (
           <button type="button" className="jbtn jbtn--go" onClick={p.onBack}>
-            <Icon name="check" size={14} /> Done
+            <Icon name="check" size={14} /> Back to journey
           </button>
         )}
       </header>
@@ -601,7 +618,8 @@ export default function StepView(p: Props) {
               <p className="jlead">
                 How well each tissue carries current, in siemens per metre.
                 These set the volume-conductor the solver sees — the field at
-                the sensors depends on them as much as on the source.
+                the sensors depends on them as much as on the source. Every
+                tissue below is in the mesh unless its row says otherwise.
               </p>
               {!config && (
                 <Note tone="warn" title="No config loaded">
@@ -621,13 +639,14 @@ export default function StepView(p: Props) {
                     <NumField
                       key={tissue}
                       label={tissue.replace(/_/g, " ")}
-                      unit="S/m"
+                      /* No unit here: it is the same for every row and the
+                         lead already says it. Seven "(S/m)"s label nothing. */
                       path={`forward.conductivities_sm.${tissue}`}
                       config={config}
                       onChange={p.onConfigChange}
                       help={
                         femTissues.includes(tissue)
-                          ? "In the mesh — this value is used."
+                          ? undefined
                           : "Not currently meshed, so this value is unused."
                       }
                     />
@@ -1009,8 +1028,19 @@ export default function StepView(p: Props) {
 
           {/* ── the answer ─────────────────────────────────────────────── */}
           {node.kind === "detect" && (
+            /* The answer leads. The threshold is a knob on it, not a thing to
+               get past first — putting the setting above the result made the
+               step read as a form whose output was a footnote. */
             <>
-              <label className="jfield">
+              <div aria-live="polite">
+                <ResultsPanel
+                  result={p.result}
+                  unavailable={p.unavailable}
+                  sourceCount={p.sources.length}
+                  onBack={p.onBack}
+                />
+              </div>
+              <label className="jfield jfield--after">
                 <span>Detection confidence</span>
                 <Select
                   value={p.threshold}
@@ -1019,9 +1049,6 @@ export default function StepView(p: Props) {
                   options={THRESHOLDS}
                 />
               </label>
-              <div aria-live="polite">
-                <ResultsPanel result={p.result} unavailable={p.unavailable} />
-              </div>
             </>
           )}
 
@@ -1029,16 +1056,15 @@ export default function StepView(p: Props) {
           {node.kind === "figure" && (
             <>
               {p.figure?.exists ? (
-                /* "Open full size" is the real verb of this step, so it lives
-                   in the bar with the other actions rather than as a link
-                   underneath a byte count. */
-                <p className="jmeta mono">
-                  {(p.figure.bytes / 1024).toFixed(0)} kB · drawn{" "}
-                  {new Date(p.figure.mtime * 1000).toLocaleString()}
-                </p>
+                /* Nothing goes here. "Open full size" is the real verb of this
+                   step and lives in the bar; the size and draw time are in the
+                   viewer's own status bar, and printing them again in the rail
+                   just left a 380px column holding one duplicated line. */
+                null
               ) : (
                 <p className="jlead">
-                  Not drawn yet. Run the journey and this fills in when the{" "}
+                  Not drawn yet. Nothing draws figures unless one is pinned —
+                  this card is the ask. Run the journey and it fills in when the{" "}
                   {node.stage} stage writes it.
                 </p>
               )}
@@ -1095,17 +1121,6 @@ export default function StepView(p: Props) {
           </section>
         )}
 
-        {!p.usesViewer &&
-          node.kind !== "figure" &&
-          !(node.kind === "detect" && p.result) &&
-          !(node.kind === "biot" || node.kind === "sarvas") && (
-            <section className="jstep-main jstep-main--quiet">
-              <div className="jstep-mark" aria-hidden>
-                <Icon name={node.icon as IconName} size={72} />
-              </div>
-              <p className="jstep-caption">{node.caption}</p>
-            </section>
-          )}
       </div>
     </div>
   );

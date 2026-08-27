@@ -9,7 +9,22 @@ from inob.geometry.builder import build_geometry, check_existing
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=build_geometry.__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob build-geom",
+        description=build_geometry.__doc__,
+        epilog="""\
+examples:
+  inob build-geom                        watertighten every configured tissue
+  inob build-geom --only skin,bone       just two compartments
+  inob build-geom --check-only           report what exists; build nothing
+  inob build-geom --shrinkwrap-only      skip repair/union, force the voxel path
+
+Writes outputs/geometry/geometry.mat. `inob run` calls this as its first stage.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument(
         "--shrinkwrap-only", action="store_true",

@@ -10,7 +10,21 @@ from inob.viz.cross_modality_plot import render_cross_modality
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob cross",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob cross                             MEG/EEG coupling for the same source
+  inob cross --source-idx 40             at one point on the polyline
+  inob cross --noise-uV 0.5               bootstrap with 0.5 µV of EEG noise
+
+Not an inverse solution: the source position is assumed known.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--source-idx", type=int, default=-1,
                    help="Source index along the vagus polyline (default: middle).")

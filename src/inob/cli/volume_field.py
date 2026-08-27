@@ -30,8 +30,22 @@ from inob.io.hdf5 import load_fem, load_sensors, validate_fem
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        prog="inob volume-field",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob volume-field --source                     one dipole's own field, to VTK
+  inob volume-field --evaluate --spacing-mm 5    the field as numbers on a grid
+  inob volume-field --stimulation --anode e01 --cathode e17 --current-mA 1.0
+                                                 a tDCS-style montage's field
+
+Reads the FEM solution inside the body rather than only at the sensors.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     mode = p.add_mutually_exclusive_group()
     mode.add_argument(

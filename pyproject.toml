@@ -80,6 +80,7 @@ inob-physiology = "inob.cli.physiology:main"
 inob-cap-compare = "inob.cli.cap_compare:main"
 inob-topoplot   = "inob.cli.topoplot:main"
 inob-torso      = "inob.cli.torso:main"
+inob-sensor-field = "inob.cli.sensor_field:main"
 inob-visualise  = "inob.cli.visualise:main"
 inob-muscle-sources = "inob.cli.muscle_sources:main"
 

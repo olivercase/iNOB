@@ -1,6 +1,6 @@
 "use client";
 
-import { Note } from "@/components/ui";
+import { Button, Note } from "@/components/ui";
 import type { DetectResult, DetectUnavailable } from "@/lib/api";
 
 function fmtTrials(n: number): string {
@@ -40,9 +40,15 @@ function verdict(
 export default function ResultsPanel({
   result,
   unavailable,
+  sourceCount = 0,
+  onBack,
 }: {
   result: DetectResult | null;
   unavailable?: DetectUnavailable | null;
+  /** How many sources are placed — decides which empty state is the true one. */
+  sourceCount?: number;
+  /** Return to the journey, where both missing things are done. */
+  onBack?: () => void;
 }) {
   if (unavailable && !result) {
     return (
@@ -53,12 +59,29 @@ export default function ResultsPanel({
     );
   }
 
+  /* An empty screen is an invitation, so it names the one thing missing and
+     carries the verb for it. Which thing that is depends on the run: with no
+     source there is nothing to solve; with sources placed the solve is simply
+     the step not taken yet. Saying both at once would be true of neither. */
   if (!result) {
     return (
-      <Note>
-        Place a source and run the journey to see how many averaged trials it
-        takes to detect it.
-      </Note>
+      <div className="jempty">
+        <p className="jempty-head">
+          {sourceCount === 0 ? "No source placed" : "Not run yet"}
+        </p>
+        <p className="jempty-line">
+          {sourceCount === 0
+            ? "Drop a dipole on the anatomy, then run the journey and the answer lands here."
+            : `${sourceCount} source${sourceCount === 1 ? "" : "s"} placed. Run the journey and the answer lands here.`}
+        </p>
+        {onBack && (
+          /* Outline, not filled: the bar already carries one filled accent,
+             and two greens on one screen is two primaries, which is none. */
+          <Button icon="arrow-left" onClick={onBack}>
+            Back to journey
+          </Button>
+        )}
+      </div>
     );
   }
 

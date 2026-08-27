@@ -16,7 +16,21 @@ from inob.viz.sarvas_plot import render_sarvas_vs_fem
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob sarvas",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob sarvas                            FEM against the analytic sphere
+  inob sarvas --source-idx 40            benchmark one source
+  inob sarvas --show-hamalainen          mark the Hamalainen dipole moment
+
+A validation, not a result: the sphere is the reference the FEM is judged by.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument(
         "--Q-nAm", type=float, default=1.0,

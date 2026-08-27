@@ -101,6 +101,8 @@ COMMANDS: tuple[Command, ...] = (
             "MEG/EEG field maps on the body surface"),
     Command("torso", "inob.cli.torso", "Figures",
             "Four-panel field map painted on the body itself"),
+    Command("sensor-field", "inob.cli.sensor_field", "Figures",
+            "Dipolar pattern, falloff and along-axis strength at the array"),
     Command("visualise", "inob.cli.visualise", "Figures",
             "Render geometry and FEM mesh PNGs"),
     Command("muscle-sources", "inob.cli.muscle_sources", "Figures",

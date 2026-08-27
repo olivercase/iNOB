@@ -210,6 +210,15 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob doctor",
         description="Check that this machine can run the pipeline.",
+        epilog="""\
+examples:
+  inob doctor                            what works, what doesn't, what to do
+  inob doctor --json                      machine-readable, for CI
+  inob doctor --config configs/mine.yaml  check a different setup
+
+Every stage except forward/eeg runs without DUNEuro, so a partial pass is
+still a usable install. Run this first if anything behaves oddly.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--config", type=Path, default=Path(DEFAULT_CONFIG),
                    help=f"Path to YAML config (default {DEFAULT_CONFIG}).")

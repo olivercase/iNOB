@@ -10,7 +10,19 @@ from inob.viz.torso_topoplot import render_torso_topoplot
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob torso",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob torso                             four views, field painted on the body
+  inob torso --moment z                  the longitudinal moment only
+  inob torso --source-idx 40             one source by index
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--source-idx", type=int, default=-1,
                    help="Which source to map. Default: the one the electrode "

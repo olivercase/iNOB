@@ -5,13 +5,24 @@ file-based skip logic. Each stage's output is validated via its schema before
 the orchestrator declares it "done"; a failed stage drops a ``.FAILED``
 marker in its output dir so reruns know to retry it.
 
+Figures are not part of a default run
+------------------------------------
+``inob run`` builds the model and solves it: geometry, mesh, sensors, forward.
+It does *not* draw the geometry/FEM PNGs, because a figure is an output you ask
+for, not a cost every solve pays — the render pulls in PyVista and VTK, opens a
+window on some platforms, and adds minutes to a run whose answer is a leadfield.
+Ask for it with ``--with-viz``, ``--stages all``, or by naming ``viz`` in
+``--stages``. The GUI follows the same rule: it renders figures only for the
+figure cards you have pinned to the canvas.
+
 Usage
 -----
-    inob-pipeline                                    # run all stages
+    inob-pipeline                                    # build + solve, no figures
+    inob-pipeline --with-viz                         # ...and draw the PNGs
+    inob-pipeline --stages all                       # same thing, spelled out
     inob-pipeline --stages geom,fem                  # just two
     inob-pipeline --force                            # ignore existing outputs
     inob-pipeline --force --stages forward           # rebuild forward only
-    inob-pipeline --skip-viz                         # skip the PNG render
 """
 from __future__ import annotations
 
@@ -27,7 +38,18 @@ from inob.config import Config
 
 logger = logging.getLogger(__name__)
 
+# Every stage that exists, in dependency order. This is what `--stages all`
+# means, and the order `run_pipeline` walks.
 ALL_STAGES: tuple[str, ...] = ("geom", "fem", "sensors", "forward", "viz")
+
+# What a bare `inob run` does. Deliberately not ALL_STAGES: `viz` draws PNGs,
+# and drawing is an output you ask for rather than a toll every solve pays. See
+# the module docstring.
+DEFAULT_STAGES: tuple[str, ...] = ("geom", "fem", "sensors", "forward")
+
+# Stages that only ever produce figures. Named once, so the CLI flags, the help
+# text and any future renderer stay in step.
+FIGURE_STAGES: frozenset[str] = frozenset({"viz"})
 
 
 @dataclass(frozen=True)
@@ -178,11 +200,17 @@ def missing_prerequisites(
 
 
 def _parse_stages(arg: str | None) -> list[str]:
-    # `None` means "flag omitted" → run everything. But an *explicit* empty or
-    # whitespace value (e.g. `--stages ""` from an unset shell variable) is a
-    # mistake: silently running the entire pipeline, including a slow forward
-    # solve, is the wrong thing to do on what is almost certainly a typo.
-    if arg is None or arg.lower() == "all":
+    # `None` means "flag omitted" → build and solve, but do not draw (see
+    # DEFAULT_STAGES). `all` is the explicit way to ask for every stage there
+    # is, figures included — spelling it out is how you opt in.
+    #
+    # An *explicit* empty or whitespace value (e.g. `--stages ""` from an unset
+    # shell variable) is neither: silently running the entire pipeline,
+    # including a slow forward solve, is the wrong thing to do on what is
+    # almost certainly a typo.
+    if arg is None:
+        return list(DEFAULT_STAGES)
+    if arg.lower() == "all":
         return list(ALL_STAGES)
     out: list[str] = []
     for s in arg.split(","):
@@ -202,11 +230,15 @@ def _parse_stages(arg: str | None) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
+        prog="inob run",
         description="Build anatomy, mesh, sensors and leadfield, in order. "
-                    "Stages whose outputs already exist are skipped.",
+                    "Stages whose outputs already exist are skipped. Figures "
+                    "are not drawn unless you ask for them (--with-viz).",
         epilog=(
             "examples:\n"
-            "  inob run                          everything that's missing\n"
+            "  inob run                          build and solve, no figures\n"
+            "  inob run --with-viz               ...and draw the geometry/FEM PNGs\n"
+            "  inob run --stages all             every stage, figures included\n"
             "  inob run --stages geom,fem        anatomy and mesh only\n"
             "  inob run --force --stages fem     rebuild the mesh\n"
             "  inob run --set fem.pitch_mm=2.0   finer mesh\n"
@@ -216,17 +248,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     add_common_args(p)
     p.add_argument(
-        "--stages", default="all",
-        help="Comma-separated stage list (geom,fem,sensors,forward,viz) "
-             "or 'all' (default).",
+        "--stages", default=None,
+        help="Comma-separated stage list (geom,fem,sensors,forward,viz), or "
+             "'all' for every stage including figures. Omitted, a run builds "
+             f"and solves without drawing: {','.join(DEFAULT_STAGES)}.",
     )
     p.add_argument(
         "--force", action="store_true",
         help="Rebuild stages even if their outputs already exist.",
     )
     p.add_argument(
+        "--with-viz", action="store_true",
+        help="Also draw the geometry and FEM figures (adds the 'viz' stage). "
+             "Off by default: a figure is an output you ask for, not a cost "
+             "every solve pays.",
+    )
+    p.add_argument(
         "--skip-viz", action="store_true",
-        help="Convenience flag: drop 'viz' from --stages.",
+        help="Drop 'viz' from --stages. Redundant now that figures are opt-in, "
+             "and kept so existing scripts keep working; it still wins over "
+             "--with-viz.",
     )
     args = p.parse_args(argv)
 
@@ -236,8 +277,13 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as e:
         logger.error("%s", e)
         return 2
-    if args.skip_viz and "viz" in stages:
-        stages.remove("viz")
+    # Opt in, then opt out: --skip-viz is the older flag and existing scripts
+    # pass it to mean "definitely no figures", so it wins over --with-viz
+    # rather than the two cancelling in whichever order they were parsed.
+    if args.with_viz:
+        stages += [s for s in ALL_STAGES if s in FIGURE_STAGES and s not in stages]
+    if args.skip_viz:
+        stages = [s for s in stages if s not in FIGURE_STAGES]
 
     unmet = missing_prerequisites(cfg, stages)
     if unmet:

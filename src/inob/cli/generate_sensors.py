@@ -9,7 +9,21 @@ from inob.sensors.triaxial import generate_sensor_array
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=generate_sensor_array.__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob sensors",
+        description=generate_sensor_array.__doc__,
+        epilog="""\
+examples:
+  inob sensors                           the whole configured torso wrap
+  inob sensors --zmin 1200 --zmax 1450   cervical band only
+  inob sensors --set sensors.resolution_mm=20   denser array
+
+Writes outputs/sensors/sensor_array.mat: one position, three coils (R, T1, T2).
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--zmin", type=float, default=None,
                    help="Lower head-foot crop (mm). Default: from sensors.z_crop_low_factor.")

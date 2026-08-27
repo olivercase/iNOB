@@ -24,7 +24,22 @@ from inob.forward.duneuro_driver import build_source_model_config
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(
+        prog="inob calibrate",
+        description=__doc__,
+        epilog="""\
+examples:
+  inob calibrate                         EEG mm-mode to SI, from a sphere FEM
+  inob calibrate --meg                   the MEG sphere validation instead
+  inob calibrate --radius-mm 80          a smaller sphere
+  inob calibrate --compare-source-models partial integration vs St. Venant
+
+Determines the unit factor empirically rather than by dimensional analysis.
+
+Every command also takes --config, --set, --source-target, --log-level;
+see `inob --help` for the full list.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     add_common_args(p)
     p.add_argument("--radius-mm", type=float, default=100.0,
                    help="Sphere radius (default 100 mm — neck-scale).")
