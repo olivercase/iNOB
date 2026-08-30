@@ -91,7 +91,8 @@ def check_duneuro() -> Check:
     return Check(
         "DUNEuro (duneuropy)", WARN,
         "not found — every stage works except `inob forward` / `inob eeg`",
-        ["Build it: https://github.com/olivercase/duneuro-build",
+        ["Build it: conda env create -f environment.yml && conda activate inob "
+         "&& bash scripts/build_duneuro_local.sh  (see README)",
          "Already built it? Point at it with "
          "INOB_DUNEURO_PYTHON=/path/to/venv/bin/python"],
     )

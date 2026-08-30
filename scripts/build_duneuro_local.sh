@@ -6,8 +6,12 @@
 #
 #   bash scripts/build_duneuro_local.sh
 #
+# duneuropy is installed into whichever environment you are asking for, in
+# this order: $INOB_VENV, the conda env that is active right now (this is what
+# environment.yml's `conda activate inob` leaves you in), else <repo>/.venv.
+#
 # Overridable:
-#   INOB_VENV           venv to install duneuropy into   (default: <repo>/.venv)
+#   INOB_VENV           env to install duneuropy into    (default: see above)
 #   INOB_DUNEURO_BASE   where the sources are built      (default: ~/.local/share/inob-duneuro)
 #
 # Re-running is idempotent: clones, patch and cmake configure all no-op when
@@ -16,7 +20,7 @@
 set -euo pipefail
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VENV="${INOB_VENV:-${REPO}/.venv}"
+VENV="${INOB_VENV:-${CONDA_PREFIX:-${REPO}/.venv}}"
 BASE="${INOB_DUNEURO_BASE:-${HOME}/.local/share/inob-duneuro}"
 SRC="${BASE}/duneuro-src"
 
@@ -35,8 +39,11 @@ export GIT_CONFIG_PARAMETERS="'credential.helper='"
 
 # ── prerequisites ──────────────────────────────────────────────────────────
 [[ -x "${VENV}/bin/python" ]] || {
-    log "ERROR: no venv at ${VENV}. Create one first:"
-    log "  python3.11 -m venv ${VENV} && ${VENV}/bin/pip install -r requirements-docker.txt"
+    log "ERROR: no python at ${VENV}/bin/python — nothing to install duneuropy into."
+    log "Pick one of:"
+    log "  conda env create -f environment.yml && conda activate inob   # then re-run"
+    log "  python3.11 -m venv ${REPO}/.venv && ${REPO}/.venv/bin/pip install -r ${REPO}/requirements.txt"
+    log "  INOB_VENV=/path/to/existing/env bash ${BASH_SOURCE[0]}"
     exit 1; }
 
 PYEXE="${VENV}/bin/python"

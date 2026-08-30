@@ -103,6 +103,22 @@ def _search_roots() -> list[Path]:
         for name in named:
             roots.append(base / name)
 
+    # The documented local build (environment.yml + scripts/build_duneuro_local.sh)
+    # installs duneuropy into a conda env and builds the sources under
+    # ~/.local/share/inob-duneuro. Neither sits under any root above once `inob`
+    # is run from some *other* interpreter, which is exactly when this search
+    # has to do the work.
+    roots.append(home / ".local" / "share" / "inob-duneuro")
+    conda = os.environ.get("CONDA_PREFIX")
+    if conda:
+        roots.append(Path(conda))
+    for install in ("miniforge3", "miniconda3", "anaconda3", "mambaforge"):
+        envs = home / install / "envs"
+        try:
+            roots.extend(p for p in envs.iterdir() if p.is_dir())
+        except OSError:
+            pass
+
     # An external volume is where a multi-gigabyte build usually ends up.
     volumes = Path("/Volumes")
     if volumes.is_dir():

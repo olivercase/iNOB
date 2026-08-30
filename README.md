@@ -43,22 +43,45 @@ make test                            # 140 tests, no DUNEuro required
 The DUNEuro forward solve needs the `duneuropy` extension. Every other stage
 runs without it, so you only need this to run `inob-forward` / `inob-eeg`.
 
-**Locally (macOS / Apple Silicon):** the build recipe lives in a separate repo,
-[`olivercase/duneuro-build`](https://github.com/olivercase/duneuro-build) — this
-repo only *runs* DUNEuro, it doesn't carry the build scripts/patches itself.
-That repo's script builds DUNE 2.10 + duneuro + duneuro-py against Homebrew +
-`python@3.11` into a self-contained venv (default
-`/Volumes/UCL/duneuro_build/venv`). Because the solve runs from that venv,
-install this package into it too, then call the CLI with that interpreter:
+**Locally (macOS or Linux), the whole build is three commands.** conda supplies
+the C++ toolchain, so there is nothing to install by hand:
 
 ```bash
-brew install eigen gmp metis superlu cmake python@3.11   # one-time prerequisites
-git clone https://github.com/olivercase/duneuro-build.git
-bash duneuro-build/scripts/build_duneuro_local.sh         # builds duneuropy (~30 min)
-BASE=/Volumes/UCL/duneuro_build
-"$BASE/venv/bin/pip" install --no-deps -e .               # put inob in the same venv (run from iNOB checkout)
-"$BASE/venv/bin/inob-forward"                             # real DUNEuro solve
+conda env create -f environment.yml     # python 3.11 + eigen, gmp, metis, suitesparse, tbb
+conda activate inob
+bash scripts/build_duneuro_local.sh     # builds DUNE 2.10 + duneuro + duneuro-py (~30 min)
 ```
+
+The script installs `duneuropy` into whatever environment is active, so
+`inob-forward` then just works — no second interpreter to remember:
+
+```bash
+pip install -e .        # once, into the same env
+inob-forward            # real DUNEuro solve
+inob doctor             # confirms duneuropy is importable
+```
+
+Prefer Homebrew and a plain venv? That works too — the script takes the C++
+dependencies from Homebrew whenever no conda env is active:
+
+```bash
+brew install eigen gmp metis suite-sparse tbb cmake pkg-config python@3.11
+python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pip install -e .
+bash scripts/build_duneuro_local.sh     # installs duneuropy into .venv
+```
+
+Re-running the script is safe: clones, the source patch and the CMake
+configure all no-op once they are in the state they want. Sources are built
+under `~/.local/share/inob-duneuro` (override with `INOB_DUNEURO_BASE`), and
+`INOB_VENV` picks the target environment explicitly. Already built duneuropy
+somewhere else? Point at it with
+`INOB_DUNEURO_PYTHON=/path/to/env/bin/python` and skip the build entirely.
+
+DUNEuro needs one source patch for Eigen 5 / DUNE 2.10; it is versioned in
+[`olivercase/duneuro-build`](https://github.com/olivercase/duneuro-build) and
+fetched by tag, so the local, cluster and Docker builds all apply byte-identical
+sources. You never clone that repo yourself.
 
 **On a cluster:** `cluster/build_duneuro.sh` (see [Cluster](#cluster-ucl-myriad--kathleen-sge)).
 
