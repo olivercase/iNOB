@@ -43,21 +43,43 @@ pip install --only-binary=:all: -r "${HERE}/../requirements-cluster.txt"
 pip install --no-deps -e "${HERE}/.."
 
 # ── DUNE 2.10 modules ──────────────────────────────────────────────────────
+# The clone loop below probes several DUNE namespaces and *expects* most of
+# them to miss. gitlab.dune-project.org answers a miss with an auth challenge
+# rather than a plain 404, so an interactive git — or one whose GIT_ASKPASS
+# points at an editor helper, as it does inside a VS Code terminal — sits on a
+# credential prompt forever instead of failing through to the next namespace.
+# Force every git here to be non-interactive so a miss is an immediate miss.
+# (The Dockerfile sets GIT_TERMINAL_PROMPT=0 for the same reason.)
+export GIT_TERMINAL_PROMPT=0
+export GIT_ASKPASS=""
+export SSH_ASKPASS=""
+export GIT_CONFIG_PARAMETERS="'credential.helper='"
+
 cd "${SRC}"
 DUNE_MODS=(dune-common dune-geometry dune-grid dune-istl dune-localfunctions \
            dune-typetree dune-functions dune-uggrid dune-alugrid \
            dune-pdelab dune-subgrid)
 for m in "${DUNE_MODS[@]}"; do
+    # A run killed mid-clone leaves a directory with no .git behind; treat that
+    # as absent rather than as a usable checkout.
+    if [[ -d "${m}" && ! -d "${m}/.git" ]]; then
+        inob__log "discarding partial ${m}"
+        rm -rf "${m}"
+    fi
     if [[ ! -d "${m}" ]]; then
         # Try each known DUNE namespace in priority order; fail loudly if none work.
-        if   git clone -b releases/2.10 "https://gitlab.dune-project.org/core/${m}.git"        2>/dev/null; then :;
-        elif git clone -b releases/2.10 "https://gitlab.dune-project.org/staging/${m}.git"     2>/dev/null; then :;
-        elif git clone -b releases/2.10 "https://gitlab.dune-project.org/extensions/${m}.git"  2>/dev/null; then :;
-        elif git clone -b releases/2.10 "https://gitlab.dune-project.org/pdelab/${m}.git"      2>/dev/null; then :;
-        else
+        cloned=""
+        for ns in core staging extensions pdelab; do
+            if git clone -b releases/2.10 "https://gitlab.dune-project.org/${ns}/${m}.git" 2>/dev/null; then
+                cloned="${ns}"; break
+            fi
+            rm -rf "${m}"     # git leaves the directory behind on a failed clone
+        done
+        if [[ -z "${cloned}" ]]; then
             inob__log "ERROR: could not clone DUNE module ${m} from any namespace"
             exit 1
         fi
+        inob__log "cloned ${m} from ${cloned}"
     fi
 done
 

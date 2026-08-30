@@ -30,7 +30,16 @@ dependencies:
   - eigen>=3.4
   - gmp
   - metis
-  - superlu
+  # SuperLU is deliberately absent. dune-istl 2.10's superlufunctions.hh is
+  # written against the SuperLU <=5 ABI, where the single-precision complex
+  # type is ::complex; SuperLU 6 renamed it to singlecomplex, so anything
+  # current (conda-forge and Homebrew both ship 7.x) fails to compile with
+  # "no type named 'complex' in the global namespace" once duneuro pulls the
+  # header in. It is only an optional direct solver — the verified cluster
+  # profiles (cluster/profiles/*.env) load no SuperLU either — and dune-istl
+  # falls back to UMFPACK from suitesparse. build_duneuro_local.sh passes
+  # -DCMAKE_DISABLE_FIND_PACKAGE_SuperLU=ON so a SuperLU that is already on
+  # the system cannot be picked up by accident.
   - suitesparse
   - tbb-devel
   # ── Python runtime (pinned to the verified local build) ──────────────────
