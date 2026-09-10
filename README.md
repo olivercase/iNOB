@@ -1,5 +1,9 @@
 # iNOB — imaging neuroscience outside the brain
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22688957.svg)](https://doi.org/10.5281/zenodo.22688957)
+[![ci](https://github.com/olivercase/iNOB/actions/workflows/ci.yml/badge.svg)](https://github.com/olivercase/iNOB/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
+
 A whole-body **forward-modelling and sensor-planning** package for non-invasive
 recording of peripheral and autonomic nerves. You pick a target structure and a
 source configuration, choose which anatomical meshes to include and their
@@ -259,7 +263,9 @@ request.
 
 Code under the MIT License (`LICENSE`). Anatomical data are BodyParts3D
 derivatives under CC BY-SA 2.1 JP (`LICENSE-DATA`). Cite via `CITATION.cff` —
-software DOI: [10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS)
-— and cite the packages iNOB is built on; [`docs/CITING.md`](docs/CITING.md)
+software DOI [10.5281/zenodo.22688957](https://doi.org/10.5281/zenodo.22688957)
+(every release is archived on Zenodo; v1.1.0 is
+[10.5281/zenodo.22688958](https://doi.org/10.5281/zenodo.22688958)), project
+page [10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS) — and cite the packages iNOB is built on; [`docs/CITING.md`](docs/CITING.md)
 lists them. DUNEuro (LGPL) does the forward solves and must be cited with any
 leadfield produced here.

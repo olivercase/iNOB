@@ -3,9 +3,14 @@
 ## iNOB
 
 `CITATION.cff` at the repository root carries the metadata (GitHub shows a
-"Cite this repository" button from it). Software DOI:
-[10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS). Cite the
-exact version you used (`inob --version`); each tagged release is archived.
+"Cite this repository" button from it). Every tagged release is archived on
+Zenodo:
+
+- concept DOI, always the latest release: [10.5281/zenodo.22688957](https://doi.org/10.5281/zenodo.22688957)
+- v1.1.0: [10.5281/zenodo.22688958](https://doi.org/10.5281/zenodo.22688958)
+- OSF project page: [10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS)
+
+Cite the DOI of the exact version you used (`inob --version`).
 
 ## Dependencies you are also using
 

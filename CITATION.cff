@@ -34,8 +34,14 @@ repository-code: https://github.com/olivercase/iNOB
 url: https://github.com/olivercase/iNOB
 identifiers:
   - type: doi
+    value: 10.5281/zenodo.22688957
+    description: Zenodo concept DOI (resolves to the latest release)
+  - type: doi
+    value: 10.5281/zenodo.22688958
+    description: Zenodo DOI for v1.1.0 (frozen release archive)
+  - type: doi
     value: 10.17605/OSF.IO/U4MDS
-    description: Software Project DOI (OSF)
+    description: OSF project page
 license: MIT
 version: 1.1.0
 date-released: '2026-09-10'
