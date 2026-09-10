@@ -23,6 +23,14 @@ versioning. Dates in ISO-8601.
   `.git-blame-ignore-revs` so `git blame` looks through it.
 
 ### Fixed
+- **The physics validation could not fetch its sources.** Since 2026-08-24
+  `gitlab.dune-project.org` has answered GitHub's runners with 403, so every
+  scheduled `duneuro-validation` run failed before compiling anything and the
+  sphere check had not actually run for two and a half weeks. The Dockerfile
+  now takes the DUNE 2.10 modules, duneuro (pinned commit) and duneuro-py
+  from source tarballs on the `olivercase/duneuro-build` v1.1.0 release,
+  verified against its `SHA256SUMS`, with the GitLab clone kept as a fallback.
+  Same sources for everyone, and a build that works where GitLab does not.
 - **Six `except Exception: pass` sites now say something.** Five decorative
   skin backdrops in the topoplot and cross-modality figures log at debug
   with the traceback instead of vanishing; the GUI capability report logs

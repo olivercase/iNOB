@@ -70,56 +70,63 @@ RUN set -eux; \
 ENV DUNE_SRC=/opt/dune-src
 WORKDIR ${DUNE_SRC}
 
-# ── DUNE 2.10 core/staging/extensions modules ──────────────────────────────
-# Each module lives in one of four namespaces and we do not track which, so
-# every namespace is tried until one clones. GIT_TERMINAL_PROMPT=0 matters:
-# without it a miss makes git ask for a username and fail with "could not read
-# Username ... No such device or address", which reads like a credentials
-# problem and buried the real (compile) error in the log. A module that never
-# clones is a hard failure here rather than a confusing one much later.
+# ── DUNE 2.10 modules, duneuro, duneuro-py ────────────────────────────────
+# GIT_TERMINAL_PROMPT=0 matters for the git fallback below: without it a miss
+# makes git ask for a username and fail with "could not read Username ... No
+# such device or address", which reads like a credentials problem and buried
+# the real (compile) error in the log.
 ENV GIT_TERMINAL_PROMPT=0
-# Shallow (--depth 1). dunecontrol builds a working tree; it never reads the
-# history, and the full history of eleven DUNE modules is most of the download.
-# On a slow link to gitlab.dune-project.org that difference is the difference
-# between a build that finishes and one that does not.
-#
-# The namespace search below tries each namespace in turn, and a miss costs a
-# full connection timeout. --depth 1 does not help a miss, so the namespace each
-# module actually lives in is pinned instead; the search is kept only as a
-# fallback for a module that moves.
-RUN set -eux; \
-    clone() { git clone -q --depth 1 -b releases/2.10 "$1" "$2"; }; \
-    for spec in core:dune-common core:dune-geometry core:dune-grid \
-                core:dune-istl core:dune-localfunctions staging:dune-typetree \
-                staging:dune-functions staging:dune-uggrid \
-                extensions:dune-alugrid pdelab:dune-pdelab \
-                extensions:dune-subgrid; do \
-        ns="${spec%%:*}"; m="${spec#*:}"; \
-        clone "https://gitlab.dune-project.org/${ns}/${m}.git" "${m}" || { \
-            for alt in core staging extensions pdelab; do \
-                if clone "https://gitlab.dune-project.org/${alt}/${m}.git" "${m}" 2>/dev/null; then break; fi; \
-            done; \
-        }; \
-        test -d "${m}" || { echo "could not clone ${m}" >&2; exit 1; }; \
-    done
-
-# Pinned duneuro + the source patch (separate layer → fast patch iteration).
-# The patch itself lives in olivercase/duneuro-build (the build recipe), not
-# in this repo — fetched fresh from a tagged release, same as
-# cluster/build_duneuro.sh, so there's one source of truth.
+# Sources come from a tagged release of olivercase/duneuro-build: one tarball
+# per module (the eleven DUNE 2.10 modules, duneuro at its pinned commit,
+# duneuro-py), a SHA256SUMS file, and the Eigen 5 / DUNE 2.10 patch. Reasons:
+#   * gitlab.dune-project.org answers GitHub's runners with 403 (since
+#     2026-08-24), so the scheduled validation could not even fetch.
+#   * a release is immutable: the local, cluster and Docker builds compile
+#     byte-identical sources, which is the point of that repo.
+# `git clone` from GitLab is kept as the fallback for anyone building where
+# the release is unreachable but GitLab is.
 ARG DUNEURO_COMMIT=8f344b4da9c128ddf3e47af5ec136d05a3aeb162
-ARG DUNEURO_BUILD_TAG=v1.0.1
-# duneuro is pinned to a commit, so it is fetched shallowly *at that commit*
-# rather than cloned whole and then checked out — same result, a fraction of
-# the transfer.
+ARG DUNEURO_BUILD_TAG=v1.1.0
+ARG SOURCES_URL=https://github.com/olivercase/duneuro-build/releases/download/${DUNEURO_BUILD_TAG}
 RUN set -eux; \
-    mkdir duneuro; \
-    git -C duneuro init -q; \
-    git -C duneuro remote add origin https://gitlab.dune-project.org/duneuro/duneuro.git; \
-    git -C duneuro fetch -q --depth 1 origin "${DUNEURO_COMMIT}"; \
-    git -C duneuro checkout -q FETCH_HEAD; \
-    git clone -q --depth 1 https://gitlab.dune-project.org/duneuro/duneuro-py.git; \
-    curl -fsSL -o /tmp/duneuro.patch \
+    modules="dune-common dune-geometry dune-grid dune-istl dune-localfunctions \
+             dune-typetree dune-functions dune-uggrid dune-alugrid dune-pdelab \
+             dune-subgrid duneuro duneuro-py"; \
+    if curl -fsSL --retry 3 -o SHA256SUMS "${SOURCES_URL}/SHA256SUMS"; then \
+        for m in ${modules}; do \
+            curl -fsSL --retry 3 -o "${m}.tar.gz" "${SOURCES_URL}/${m}.tar.gz"; \
+        done; \
+        sha256sum -c SHA256SUMS; \
+        for m in ${modules}; do tar xzf "${m}.tar.gz" && rm "${m}.tar.gz"; done; \
+        rm SHA256SUMS; \
+    else \
+        echo "release ${DUNEURO_BUILD_TAG} unreachable; cloning from gitlab.dune-project.org" >&2; \
+        clone() { git clone -q --depth 1 -b releases/2.10 "$1" "$2"; }; \
+        for spec in core:dune-common core:dune-geometry core:dune-grid \
+                    core:dune-istl core:dune-localfunctions staging:dune-typetree \
+                    staging:dune-functions staging:dune-uggrid \
+                    extensions:dune-alugrid pdelab:dune-pdelab \
+                    extensions:dune-subgrid; do \
+            ns="${spec%%:*}"; m="${spec#*:}"; \
+            clone "https://gitlab.dune-project.org/${ns}/${m}.git" "${m}" || { \
+                for alt in core staging extensions pdelab; do \
+                    if clone "https://gitlab.dune-project.org/${alt}/${m}.git" "${m}" 2>/dev/null; then break; fi; \
+                done; \
+            }; \
+            test -d "${m}" || { echo "could not clone ${m}" >&2; exit 1; }; \
+        done; \
+        mkdir duneuro; \
+        git -C duneuro init -q; \
+        git -C duneuro remote add origin https://gitlab.dune-project.org/duneuro/duneuro.git; \
+        git -C duneuro fetch -q --depth 1 origin "${DUNEURO_COMMIT}"; \
+        git -C duneuro checkout -q FETCH_HEAD; \
+        git clone -q --depth 1 https://gitlab.dune-project.org/duneuro/duneuro-py.git; \
+    fi; \
+    for m in ${modules}; do test -d "${m}" || { echo "missing ${m}" >&2; exit 1; }; done
+
+# The Eigen 5 / DUNE 2.10 patch, from the same release as the sources.
+RUN set -eux; \
+    curl -fsSL --retry 3 -o /tmp/duneuro.patch \
         "https://raw.githubusercontent.com/olivercase/duneuro-build/${DUNEURO_BUILD_TAG}/scripts/patches/duneuro-eigen5-dune210.patch"; \
     git -C duneuro apply /tmp/duneuro.patch
 
