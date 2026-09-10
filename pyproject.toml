@@ -61,6 +61,10 @@ dev = [
     # which needs httpx (and fastapi itself, from the [gui] extra).
     "fastapi>=0.110",
     "httpx>=0.27",
+    # `make hooks`, `make build`
+    "pre-commit>=4.0",
+    "build>=1.2",
+    "twine>=5.0",
 ]
 # GUI backend (gui/backend/app.py). `pip install inob[gui]` is self-contained.
 gui = [

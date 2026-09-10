@@ -17,9 +17,15 @@ Open an issue at https://github.com/olivercase/iNOB/issues with:
 ```bash
 git lfs install && git clone https://github.com/olivercase/iNOB.git && cd iNOB
 python3 -m pip install -e .[dev]
+make hooks     # pre-commit hooks: whitespace, YAML/TOML, large files, ruff, gitleaks, TODO guard
 make lint      # ruff, whole repo
 make test      # pytest; DUNEuro tests auto-skip without duneuropy
+make ci        # lint + test + package build, the same gate CI runs
 ```
+
+`ruff format` is not enforced: the codebase predates it and a whole-repo
+reformat would bury the history. `make format-check` shows what it would
+change; format new files, leave old ones as they are.
 
 Before opening a pull request:
 
@@ -30,7 +36,9 @@ Before opening a pull request:
   the weekly `duneuro-validation` workflow;
 - `--help` text is written for the user, not the maintainer
   (`tests/test_cli_help.py` enforces the rules);
-- add a line to `CHANGELOG.md` under `[Unreleased]`.
+- add a line to `CHANGELOG.md` under `[Unreleased]`;
+- no `except Exception: pass` — log it or say in a comment why swallowing is
+  right; no new `TODO`/`FIXME` in shipped code (the hooks check).
 
 Commit messages follow the existing style: a `type(scope): summary` line
 that says why, then detail if it helps.

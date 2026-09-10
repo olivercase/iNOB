@@ -183,7 +183,7 @@ def system_info() -> dict[str, Any]:
         raw, _ = _read_raw_safe(_active_config_path())
         configured = (raw.get("forward") or {}).get("local_workers")
     except Exception:  # a broken config must not break the capability report
-        pass
+        logger.debug("capability report: config unreadable", exc_info=True)
 
     return {
         "platform": platform.system(),
@@ -1198,6 +1198,8 @@ class _QueueLogHandler(logging.Handler):
         try:
             self._q.put_nowait(self.format(record))
         except Exception:
+            # A logging handler must never raise into the code being logged;
+            # a full queue or a closed socket just drops this line.
             pass
 
 
@@ -1469,4 +1471,4 @@ async def run_ws(ws: WebSocket) -> None:
         try:
             await ws.close()
         except Exception:
-            pass
+            pass  # teardown: the client may already be gone

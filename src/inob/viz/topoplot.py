@@ -442,7 +442,8 @@ def render_eeg_topoplot(
             if skin is not None:
                 _draw_skin_3d(ax3d, skin.vertices, skin.faces, alpha=0.04)
         except Exception:
-            pass
+            # The skin backdrop is decorative; the data plot must still draw.
+            logger.debug("skin backdrop skipped", exc_info=True)
         ax3d.scatter(
             electrodes.coilpos[:, 0], electrodes.coilpos[:, 1], electrodes.coilpos[:, 2],
             c=val, cmap=divergent_cmap(), vmin=vmin, vmax=vmax,
@@ -515,7 +516,8 @@ def render_dual_topoplot(
             _draw_skin_3d(ax_a, vagus.vertices, vagus.faces, alpha=0.65,
                           max_tris=12_000)
     except Exception:
-        pass
+        # The skin backdrop is decorative; the data plot must still draw.
+        logger.debug("skin backdrop skipped", exc_info=True)
     ax_a.scatter(
         sensors.coilpos[:: 3, 0], sensors.coilpos[:: 3, 1], sensors.coilpos[:: 3, 2],
         c=NATURE_PALETTE["blue"], s=4, alpha=0.5, depthshade=False,
@@ -550,7 +552,8 @@ def render_dual_topoplot(
         if skin is not None:
             _draw_skin_3d(ax_b, skin.vertices, skin.faces, alpha=0.05)
     except Exception:
-        pass
+        # The skin backdrop is decorative; the data plot must still draw.
+        logger.debug("skin backdrop skipped", exc_info=True)
     vmin_b, vmax_b = divergent_norm(meg_val)
     sc_b = ax_b.scatter(
         meg_pos[:, 0], meg_pos[:, 1], meg_pos[:, 2],

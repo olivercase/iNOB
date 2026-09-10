@@ -4,6 +4,27 @@ All notable changes to iNOB. Conforms to
 [Keep a Changelog](https://keepachangelog.com) and uses semantic-ish
 versioning. Dates in ISO-8601.
 
+## [Unreleased]
+
+### Added
+- **Engineering hygiene, measured against a sibling project.** Pre-commit
+  hooks (`.pre-commit-config.yaml`, `make hooks`): whitespace, YAML/TOML/JSON,
+  large files, private keys, ruff, gitleaks, and a guard against new
+  `TODO`s in shipped code. CI gains a hooks backstop, a full-history secret
+  scan, a coverage artifact and a package-build check; every action is
+  pinned to a commit SHA, every workflow declares read-only permissions,
+  superseded runs are cancelled, every job has a timeout. Dependabot for
+  pip, npm and actions. `SECURITY.md`. `CLAUDE.md` with the physics gate
+  and the rules an agent must follow here. `make ci` runs the same gate
+  locally.
+
+### Fixed
+- **Six `except Exception: pass` sites now say something.** Five decorative
+  skin backdrops in the topoplot and cross-modality figures log at debug
+  with the traceback instead of vanishing; the GUI capability report logs
+  an unreadable config. The two that stay silent (a logging handler, a
+  websocket close at teardown) say why.
+
 ## [1.1.0] — 2026-09-10
 
 The help text is the manual, and the repository is packaged for review.

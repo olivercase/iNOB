@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint test doctor status gui pipeline geom fem sensors forward viz clean clean-outputs
+.PHONY: install install-dev hooks lint format-check secrets test coverage build ci doctor status gui pipeline geom fem sensors forward viz clean clean-outputs
 
 PYTHON ?= python3
 CONFIG ?= configs/default.yaml
@@ -10,11 +10,34 @@ install:
 install-dev:
 	$(PYTHON) -m pip install -e .[dev]
 
+# Install the pre-commit hooks (.pre-commit-config.yaml) into .git/hooks.
+hooks:
+	$(PYTHON) -m pip install -q pre-commit
+	$(PYTHON) -m pre_commit install
+
 lint:
 	$(PYTHON) -m ruff check .
 
+# Reports what `ruff format` would change; not a gate (see CONTRIBUTING.md).
+format-check:
+	$(PYTHON) -m ruff format --check . || true
+
+# Secret scan over the whole history. Needs gitleaks (brew install gitleaks).
+secrets:
+	gitleaks git . --no-banner --redact
+
 test:
 	$(PYTHON) -m pytest -q
+
+coverage:
+	$(PYTHON) -m pytest -q --cov=inob --cov-report=term-missing:skip-covered
+
+# sdist + wheel, then the metadata check PyPI would run.
+build:
+	rm -rf dist && $(PYTHON) -m build && $(PYTHON) -m twine check dist/*
+
+# The full local gate: what CI runs, in one target.
+ci: lint test build
 
 doctor:
 	$(INOB) doctor --config $(CONFIG)

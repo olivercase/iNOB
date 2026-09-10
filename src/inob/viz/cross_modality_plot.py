@@ -148,7 +148,8 @@ def render_cross_modality(
         if skin is not None:
             _draw_skin_3d(ax_c, skin.vertices, skin.faces, alpha=0.05)
     except Exception:
-        pass
+        # The skin backdrop is decorative; the data plot must still draw.
+        logger.debug("skin backdrop skipped", exc_info=True)
     vmin_c, vmax_c = divergent_norm(np.r_[pred_vals, true_vals])
     sc_c = ax_c.scatter(
         pos_meg[:, 0], pos_meg[:, 1], pos_meg[:, 2],
@@ -172,7 +173,8 @@ def render_cross_modality(
         if skin is not None:
             _draw_skin_3d(ax_d, skin.vertices, skin.faces, alpha=0.05)
     except Exception:
-        pass
+        # The skin backdrop is decorative; the data plot must still draw.
+        logger.debug("skin backdrop skipped", exc_info=True)
     sc_d = ax_d.scatter(
         pos_meg[:, 0], pos_meg[:, 1], pos_meg[:, 2],
         c=true_vals, cmap=divergent_cmap(), vmin=vmin_c, vmax=vmax_c,

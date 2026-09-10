@@ -60,3 +60,15 @@ poster_vagus_opmeg/
 
 # Manuscript drafts live outside version control
 docs/*.docx
+
+# Secrets and credentials — never tracked
+.env
+.env.*
+*.pem
+*.p12
+*.key
+id_rsa*
+
+# Claude Code per-machine state
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

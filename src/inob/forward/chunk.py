@@ -13,7 +13,7 @@ The companion :mod:`inob.forward.reduce` stitches all chunks back into a
 single leadfield NPZ identical in schema to the local
 :mod:`inob.forward.solve` output (``source_pos`` included).
 
-# TODO: source-first cluster mode for sensor optimisation
+# Design note, deferred: source-first cluster mode for sensor optimisation
 #
 # The current reciprocal (sensor-first) approach commits to a fixed sensor
 # geometry before the FEM runs — T must be fully recomputed for any change

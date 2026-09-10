@@ -31,12 +31,19 @@ on:
       # this filter ignored, leaving the last visible result a stale failure.
       - ".github/workflows/duneuro-validation.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: duneuro-validation
+  cancel-in-progress: false      # a validation in flight finishes
+
 jobs:
   duneuro:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           lfs: false          # the sphere validation is synthetic; no meshes needed
 

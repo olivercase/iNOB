@@ -1,0 +1,49 @@
+# Pre-commit hooks. Install once with `make hooks` (or `pre-commit install`,
+# or `prek install`); they then run on every commit. CI re-runs the same
+# checks as a backstop, since hooks are local and `--no-verify` exists.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'          # two trailing spaces is a Markdown line break
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+        exclude: '^gui/web/tsconfig\.json$'   # JSONC: has comments
+      - id: check-added-large-files
+        args: ["--maxkb=5000"]
+        # Meshes are LFS pointers by the time this sees them; anything else
+        # over 5 MB is a mistake.
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: no-new-todo
+        name: no TODO/FIXME in shipped code (use the changelog or an issue)
+        # PHYSIOLOGY-TODO is the one sanctioned marker: it gates muscle
+        # time-domain figures and is grepped for deliberately.
+        entry: bash -c 'hits=$(grep -nE "\b(TODO|FIXME|XXX|HACK)\b" "$@" | grep -v PHYSIOLOGY-TODO || true); if [ -n "$hits" ]; then echo "$hits"; exit 1; fi' --
+        language: system
+        files: '^(src|gui/backend|scripts|cluster)/.*\.(py|sh)$'
+      - id: cff-valid
+        name: CITATION.cff parses
+        entry: python3 -c "import sys,yaml; yaml.safe_load(open('CITATION.cff')); print('CITATION.cff ok')"
+        language: system
+        files: '^CITATION\.cff$'
+        pass_filenames: false
