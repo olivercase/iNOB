@@ -7,13 +7,13 @@
 numpy==2.4.6
 scipy==1.17.1
 h5py==3.16.0
-trimesh==4.12.2
+trimesh==5.1.0
 scikit-image==0.26.0
-matplotlib==3.10.9
+matplotlib==3.11.1
 pyyaml==6.0.3
 
 # ── geometry / FEM build extras (pinned to the verified build) ────────────
 pyvista==0.48.4
-iso2mesh==0.5.5
+iso2mesh==0.6.6
 pymeshfix==0.18.1
 rtree==1.4.1
