@@ -27,17 +27,28 @@ from inob.viz.sensor_field import (
 _MOMENTS = {"dominant": None, "x": 0, "y": 1, "z": 2}
 
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Characterise what the array actually sees from a source region.
+
+Draws the dipolar pattern, the topography, the along-axis strength and the
+falloff with distance, and prints the same numbers. Use --source-target to
+characterise a different region's leadfield.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob sensor-field",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
-  inob sensor-field                      the strongest source's pattern
-  inob sensor-field --aggregate rms      the array's sensitivity map
-  inob sensor-field --aggregate coherent every source summed in phase
-  inob sensor-field --level c7           restrict to one vertebral level
-  inob sensor-field --no-figure --print-summary   the numbers only
+  inob sensor-field                                 strongest source's pattern
+  inob sensor-field --aggregate rms                 the array's sensitivity map
+  inob sensor-field --aggregate coherent            every source summed in step
+  inob sensor-field --level c7                      one vertebral level only
+  inob sensor-field --no-figure --print-summary     the numbers only
 
 Every command also takes --config, --set, --source-target, --log-level;
 see `inob --help` for the full list.""",
@@ -53,9 +64,11 @@ see `inob --help` for the full list.""",
                         "'coherent' (in-phase sum) or 'rms' (sensitivity map). "
                         "Defaults to the longitudinal (z) moment.")
     p.add_argument("--level", choices=VERTEBRA_LEVELS, default=None,
+                   metavar="LEVEL",
                    help="Restrict to cord sources at one vertebral level (e.g. "
                         "'c7'). The Z band is taken from that vertebra's segmented "
-                        "STL in the bone_dir. Mutually exclusive with --z-range.")
+                        "STL in the bone_dir. Mutually exclusive with --z-range. "
+                        f"One of: {', '.join(VERTEBRA_LEVELS)}.")
     p.add_argument("--z-range", type=float, nargs=2, metavar=("ZLO", "ZHI"),
                    default=None,
                    help="Restrict to cord sources with ZLO <= z <= ZHI (mm). "

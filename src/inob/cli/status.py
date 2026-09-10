@@ -140,7 +140,7 @@ def _describe(path: Path, root: Path) -> str:
 
 
 def _render(cfg: Config, config_path: Path, stages: list[Artifact],
-            extras: list[Artifact], out) -> None:
+            extras: list[Artifact], out, notes: list[str] | None = None) -> None:
     root = cfg.project_root
     # One column width across both tables so the two line up.
     pad = max(len(a.name) for a in (*stages, *extras)) + 2
@@ -176,6 +176,11 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
     for label, detail in physics:
         print(f"    {label:<{phys_pad}}{detail}", file=out)
 
+    for note in notes or ():
+        print(f"\n{_ui.heading('Note')}", file=out)
+        for line in _ui.wrap(note, "  "):
+            print(line, file=out)
+
     step = next_step(stages)
     if step is None:
         print(f"\nEverything is built. Analyse it with "
@@ -187,7 +192,7 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
 
 
 def _as_json(cfg: Config, config_path: Path, stages: list[Artifact],
-             extras: list[Artifact]) -> dict:
+             extras: list[Artifact], notes: list[str] | None = None) -> dict:
     def encode(a: Artifact) -> dict:
         return {
             "name": a.name,
@@ -203,6 +208,7 @@ def _as_json(cfg: Config, config_path: Path, stages: list[Artifact],
         "optional": [encode(e) for e in extras],
         "next": next_step(stages),
         "forward_physics": dict(forward_physics(cfg)),
+        "notes": list(notes or ()),
     }
 
 
@@ -236,17 +242,20 @@ Figures are listed but never demanded: a run does not draw them unless asked
                    help="Emit machine-readable JSON instead of a table.")
     args = p.parse_args(argv)
 
-    cfg = load_config(args.config, project_root=args.project_root)
+    # Same reason as doctor: a warning logged while the config loads belongs
+    # inside this report, not on stderr above it.
+    with _ui.collect_warnings() as notes:
+        cfg = load_config(args.config, project_root=args.project_root)
     if args.source_target:
         cfg = apply_source_target(cfg, args.source_target)
     stages, extras = collect(cfg)
 
     if args.json:
-        json.dump(_as_json(cfg, args.config, stages, extras),
+        json.dump(_as_json(cfg, args.config, stages, extras, notes),
                   sys.stdout, indent=2)
         sys.stdout.write("\n")
     else:
-        _render(cfg, args.config, stages, extras, sys.stdout)
+        _render(cfg, args.config, stages, extras, sys.stdout, notes)
     return 0
 
 

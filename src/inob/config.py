@@ -845,10 +845,10 @@ def _build_noise(d: dict[str, Any]) -> NoiseCfg:
     if cfg.bandwidth_hz is None and cfg.band_hi_hz > cfg.opm_bandwidth_hz:
         logger.warning(
             "[noise] recording band reaches %g Hz but the OPM (%s) is a "
-            "single pole at %g Hz: the band above the pole contributes "
-            "little noise and less signal. Both are modelled (see "
-            "inob.analysis.snr), so this is honest rather than wrong — but "
-            "if you meant to record that band, pick a wider sensor preset.",
+            "single pole at %g Hz: above the pole the band contributes "
+            "little noise and less signal. Both effects are modelled, so "
+            "the answer is honest rather than wrong — but if you meant to "
+            "record that band, choose a wider sensor preset.",
             cfg.band_hi_hz, cfg.opm_sensor, cfg.opm_bandwidth_hz,
         )
     return cfg

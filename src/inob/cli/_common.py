@@ -18,7 +18,7 @@ from inob.config import (
     load_config,
     tag_path,
 )
-from inob.logging_setup import configure_logging, run_log_path
+from inob.logging_setup import begin_capture, configure_logging, run_log_path
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +185,10 @@ def setup(
     if muscle_aniso:
         overrides.append(f"forward.muscle_anisotropy.mode={muscle_aniso}")
 
+    # Console first: load_config warns about things like a recording band
+    # wider than the sensor, and those warnings should look like every other
+    # log line rather than arriving bare, ahead of the command's own output.
+    begin_capture(args.log_level)
     cfg = load_config(
         args.config, overrides=overrides, project_root=args.project_root,
     )

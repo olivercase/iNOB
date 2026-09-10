@@ -7,16 +7,23 @@ import sys
 from inob.cli._common import add_common_args, setup
 from inob.sensors.triaxial import generate_sensor_array
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Place the triaxial OPM array on a stand-off shell wrapped around
+the body.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob sensors",
-        description=generate_sensor_array.__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
-  inob sensors                           the whole configured torso wrap
-  inob sensors --zmin 1200 --zmax 1450   cervical band only
-  inob sensors --set sensors.resolution_mm=20   denser array
+  inob sensors                                 the whole configured torso wrap
+  inob sensors --zmin 1200 --zmax 1450         cervical band only
+  inob sensors --set sensors.resolution_mm=20  a denser array
 
 Writes outputs/sensors/sensor_array.mat: one position, three coils (R, T1, T2).
 

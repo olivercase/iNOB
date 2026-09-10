@@ -143,15 +143,21 @@ def check_config(config_path: Path,
     if not config_path.exists():
         return Check("Config", FAIL, f"{config_path} does not exist",
                      [f"Pass --config, or restore {DEFAULT_CONFIG}."]), None
+    # A config can load and still be worth a word — a recording band wider
+    # than the sensor, say. Those are warnings the loader logs; catching them
+    # here turns them into part of the report rather than a bare line printed
+    # above it.
     try:
-        cfg = load_config(config_path, project_root=project_root)
+        with _ui.collect_warnings() as notes:
+            cfg = load_config(config_path, project_root=project_root)
     except Exception as exc:  # ConfigError and anything YAML throws
         return Check("Config", FAIL, f"{config_path} failed to load: {exc}",
                      ["Fix the reported field, or start from "
                       "configs/default.yaml."]), None
-    return Check("Config", OK,
-                 f"{config_path} loads, project root {cfg.project_root}"), \
-        cfg.project_root
+    detail = f"{config_path} loads, project root {cfg.project_root}"
+    if notes:
+        return Check("Config", WARN, detail, notes), cfg.project_root
+    return Check("Config", OK, detail), cfg.project_root
 
 
 def check_outputs_writable(project_root: Path) -> Check:
@@ -190,15 +196,20 @@ def _render(checks: list[Check], out) -> None:
         print(f"  {_ui.mark(glyph_for[check.status])} "
               f"{check.name:<22}{check.detail}", file=out)
         for hint in check.hints:
-            print(f"      {_ui.arrow()} {_ui.paint(hint, 'cyan')}", file=out)
+            head, *rest = _ui.wrap(hint, "        ")
+            print(f"      {_ui.arrow()} {_ui.paint(head.strip(), 'cyan')}",
+                  file=out)
+            for line in rest:
+                print(_ui.paint(line, "cyan"), file=out)
 
     failures = [c for c in checks if c.status == FAIL]
     warnings = [c for c in checks if c.status == WARN]
     print("", file=out)
     if failures:
+        count = len(failures)
         print(_ui.paint(
-            f"{len(failures)} problem(s) will stop the pipeline. "
-            f"Fix the arrows above.", "red"), file=out)
+            f"{count} problem{'' if count == 1 else 's'} will stop the "
+            f"pipeline. Fix the arrows above.", "red"), file=out)
     elif warnings:
         print(_ui.paint(
             "Ready to run, with limits noted above.", "yellow"), file=out)
@@ -213,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Check that this machine can run the pipeline.",
         epilog="""\
 examples:
-  inob doctor                            what works, what doesn't, what to do
+  inob doctor                             what works, what doesn't, what next
   inob doctor --json                      machine-readable, for CI
   inob doctor --config configs/mine.yaml  check a different setup
 

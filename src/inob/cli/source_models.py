@@ -10,16 +10,23 @@ from inob.analysis.source_models import source_model_summary
 from inob.cli._common import add_common_args, setup
 from inob.viz.source_models_plot import render_source_models
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Compare OPMs against surface electrodes on a stationary and an
+ascending cord source.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob source-models",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
-  inob source-models                     OPM vs electrodes, three source models
-  inob source-models --json-out out.json the numbers, not the figure
-  inob source-models --no-figure         the summary table only
+  inob source-models                      OPM vs electrodes, 3 source models
+  inob source-models --json-out out.json  the numbers, not the figure
+  inob source-models --no-figure          the summary table only
 
 Every ratio it reports is independent of the assumed source strength.
 

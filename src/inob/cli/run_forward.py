@@ -7,6 +7,15 @@ import sys
 from inob.cli._common import add_common_args, setup
 from inob.forward.local import run_forward_local
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Solve the MEG leadfield with DUNEuro, in fT per nA·m.
+
+The sensor array is split across CPU cores and the chunks reduced into a
+single leadfield. Pass --workers 1 for a serial solve.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
@@ -16,13 +25,13 @@ def main(argv: list[str] | None = None) -> int:
         reexec_with_duneuro()
     p = argparse.ArgumentParser(
         prog="inob forward",
-        description=run_forward_local.__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob forward                           MEG leadfield, every core
   inob forward --workers 1               serial, for debugging
   inob forward --source-target spine     solve the cord, write a tagged NPZ
-  inob forward --source-model venant     St. Venant instead of partial integration
+  inob forward --source-model venant     St. Venant, not partial integration
 
 Needs DUNEuro. Writes fT/nA·m into outputs/forward/. Slow: this is the solve.
 

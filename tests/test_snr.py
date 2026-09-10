@@ -1,6 +1,7 @@
 """SNR + noise-floor utility tests (no DUNEuro required)."""
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,6 @@ from inob.analysis.snr import (
     snr_per_source,
 )
 from inob.config import ConfigError, load_config
-from dataclasses import replace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -1,17 +1,83 @@
 # Changelog
 
-All notable changes to the Forward_Model_Vagus_Nerve pipeline. Conforms to
+All notable changes to iNOB. Conforms to
 [Keep a Changelog](https://keepachangelog.com) and uses semantic-ish
 versioning. Dates in ISO-8601.
 
-## [Unreleased] — sensor bandwidth is half of a sensor spec, 2026-08-21
+## [Unreleased] — the help text is the manual, 2026-09-04
+
+An end-to-end audit of everything a user reads. `--help` is the only
+documentation most people will open, and fifteen commands were printing the
+maintainer's module docstring at them instead — Sphinx roles, double
+backticks, internal attribute names and a leading `CLI:` label included.
+
+### Changed
+- **Every command now has its own `description=`,** written for the person
+  running it rather than the person maintaining it. Module docstrings stay as
+  they were; they are simply no longer the help text. Gone with them:
+  unrendered ``markup``, `:mod:` roles, `cfg.outputs.fem_mat`-style internals,
+  "Returns the absolute output path", and the two examples that still taught
+  the legacy `inob-physiology` spelling.
+- **Help fits an 80-column terminal.** `inob run`'s description was one
+  161-character line; `inob sensor-field --level` spilled all 24 vertebral
+  levels into the usage block for want of a `metavar` the other two `--level`
+  flags already had.
+- **Example blocks line their descriptions up again.** Six commands had drifted
+  to two or three different columns, and two had a single space where the gap
+  should be, so the command ran into its own description.
+- **`inob --help` documents `--debug` and `--version`,** and no longer claims
+  `--config` is unavailable to `doctor` and `status`, which both take it.
+- **"Did you mean" pads its suggestions** on the plain command name — the ANSI
+  colour codes were being counted as width, leaving the list ragged.
+- **README's command table lists all 26 commands.** It was missing `ladder`,
+  `torso`, `sensor-field`, `source-models`, `volume-field` and
+  `muscle-sources`, and still advertised "140 tests".
+
+### Fixed
+- **Config warnings are part of the report, not a wall of text above it.**
+  Loading the config is what says where the log file goes, so warnings raised
+  while loading it arrived through logging's last-resort handler: unformatted,
+  unwrapped, ahead of the command's own output, and absent from the log
+  entirely. `doctor` now folds them into the Config check as a warning with
+  hints; `status` gives them a `Note` section and a `notes` key in `--json`;
+  and `logging_setup.begin_capture` buffers them so they reach the log file in
+  the order they happened.
+- **GUI: "halving it halves the trials needed by a factor of four"** — noise
+  and trials-to-detect were being described as halving and quartering in the
+  same breath. Trials go as the square of the noise; the copy now says so.
+
+### Added
+- **Submission-ready packaging (2026-09-10).** `docs/QUICKSTART.md`,
+  `docs/REPRODUCE.md`, `docs/COMPARISON.md` and `docs/CITING.md`;
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and pull-request templates;
+  `.zenodo.json` so a tagged release archives with the right metadata; a
+  `release` workflow that builds the sdist and wheel, checks the version
+  against the tag, attaches them to the GitHub release and publishes to PyPI
+  by trusted publishing; `scripts/package_results.sh` to bundle solved
+  leadfields and figures with a SHA-256 manifest for a results deposit.
+  `pyproject.toml` gains project URLs, keywords and the MIT classifier;
+  `LICENSE` is the bare MIT text again so GitHub detects it (the data note
+  lives in `LICENSE-DATA` and the README); `CHANGELOG` rolls the dated
+  development notes up under `1.0.0`.
+- **`--help` is tested like the published prose it is:** no Sphinx markup, no
+  `CLI:` label, no legacy binary names, nothing wider than 79 columns, and one
+  description column per example block. Plus a test that the README's command
+  table and `inob --help` cannot disagree about which commands exist or which
+  group they belong to.
+
+## [1.0.0] — 2026-08-30
+
+First tagged release (`v1.0.0`). The dated development notes below were
+written as the work landed and are kept as they were.
+
+### sensor bandwidth is half of a sensor spec, 2026-08-21
 
 A magnetometer is two numbers. Quoting the noise density without the bandwidth
 is how a QuSpin QZFM-3 ended up credited with a 30–500 Hz recording band it
 cannot deliver — integrating noise it never sees, and paying nothing for the
 CAP energy its 135 Hz pole cannot pass.
 
-### Added
+#### Added
 - **`inob.sensors.opm_presets`** — OPM presets carrying noise density *and*
   3-dB bandwidth as a pair: `quspin_qzfm3` (7 fT/√Hz, 135 Hz — the default),
   `quspin_qzfm2` (15, 135), `fieldline_v3` (15, 500), `he4_wideband`
@@ -23,7 +89,7 @@ CAP energy its 135 Hz pole cannot pass.
   the equivalent noise bandwidth of the recording band seen through the
   sensor pole: `f₃dB·[atan(hi/f₃dB) − atan(lo/f₃dB)]`.
 
-### Fixed
+#### Fixed
 - **The sensor now rolls off signal and noise alike.** One pole, applied both
   ways: the noise integral saturates above the pole, and the CAP is scaled by
   `1/√(1 + (f_CAP/f₃dB)²)` at its spectral peak `f_CAP = 1/(2πσ)` — exact for
@@ -43,13 +109,13 @@ CAP energy its 135 Hz pole cannot pass.
   the top-right toggle sets it, and `@media print` forces light regardless, so
   a printed page is not a black slab. The 3-D well follows via `useTheme`.
 
-## [Unreleased] — like-for-like modality comparison, 2026-07-29
+### like-for-like modality comparison, 2026-07-29
 
 `inob source-models` answers the spine question that does *not* need the source
 strength to be settled: how do OPMs and surface electrodes compare at measuring
 the same cord activity, stationary versus ascending?
 
-### Added
+#### Added
 - **`inob.analysis.source_models`** — three source models at one moment, one
   orientation and one reduction per modality, so only the spatiotemporal model
   varies: `synchronous` (whole cord in phase — the naive upper bound),
@@ -65,7 +131,7 @@ the same cord activity, stationary versus ascending?
 - `inob.viz.source_models_plot` — SNR, averaging cost, and a panel of just the
   `Q`-independent ratios.
 
-### Result
+#### Result
 At C7 with `Q = 5.11 nA·m` per active source:
 
 | source model | OPM | electrodes | OPM/elec SNR |
@@ -85,7 +151,7 @@ Cross-checks out against `inob detect` (210 vs 215 fT, 411 vs 418 trials — the
 small gap is the longitudinal projection used here versus the best moment
 component used there).
 
-## [Unreleased] — the cervical N13 removed, 2026-07-31
+### the cervical N13 removed, 2026-07-31
 
 The N13 line of work is dropped. The spine model is back to one generator, the
 ascending dorsal-column volley, and the question the package answers for the
@@ -94,7 +160,7 @@ ratios that do not depend on an absolute source strength. The N13 required a
 second, inverted calibration whose two anchors disagreed by ~22x, and closing
 that gap needed cluster work that is not the point of this study.
 
-### Removed
+#### Removed
 - `inob.physiology.n13` and the `inob n13` command, including
   `PostsynapticGenerator`, `estimate_n13` and `SPINE_PROFILE.postsynaptic`.
 - `electrodes.shape: ssep_montage` and its `montage_levels` / `bone_dir`
@@ -104,13 +170,13 @@ that gap needed cluster work that is not the point of this study.
   which had no remaining callers. `docs/COORDINATES.md` remains the reference
   for the +Y-is-posterior convention.
 
-## [Unreleased] — spine EEG detectability, 2026-07-29
+### spine EEG detectability, 2026-07-29
 
 Investigating why the spine EEG amplitudes looked small. Most of the smallness
 turned out to be real physics about patch arrays; what was wrong was how the
 observable, the noise floor, and the source strength were being reported.
 
-### Fixed
+#### Fixed
 - **EEG signal is now the best bipolar pair, not the best single channel.**
   `inob.analysis.snr.per_source_best_bipolar`. A surface potential exists only
   as a difference between contacts, so a per-channel figure depends entirely on
@@ -144,7 +210,7 @@ observable, the noise floor, and the source strength were being reported.
   it, so they cannot drift apart. `cap_compare` output is byte-identical after
   the refactor.
 
-### Added
+#### Added
 - **Clinical averaging budget** (`CLINICAL_AVERAGE_BUDGET`, 500–2000 averages,
   Cruccu et al. 2008) drawn on the detectability panels for evoked targets, and
   `EEG_within_clinical_budget` in the summary. For a stimulus-locked paradigm
@@ -172,21 +238,21 @@ observable, the noise floor, and the source strength were being reported.
   with a warning, and those panels show the stationary bound alone. Measured
   tortuosity: cord 1.06, muscle 57, spine+muscle 45 — threshold 3.
 
-### Result
+#### Result
 At the C7 source with the literature-anchored Q = 5.11 nA·m, the 32-contact
 patch needs ~420 averages under the stationary model (inside the clinical
 500–2000 budget) and ~2,900 under the propagating model (outside it). The
 propagating figure is the honest one for a travelling volley. The 1000-contact
 whole-body array needs ~250 stationary.
 
-### Known-stale artefact (pre-existing, unrelated)
+#### Known-stale artefact (pre-existing, unrelated)
 `inob detect --source-target muscle` fails: `duneuro_leadfield_muscle.npz` has
 736 sources and `duneuro_eeg_leadfield_muscle.npz` has 729, so they are from
 different solves. Needs a muscle EEG re-solve.
 
-## [Unreleased] — Nature-reviewer audit, 2026-05-01
+### Nature-reviewer audit, 2026-05-01
 
-### Fixed (showstopper)
+#### Fixed (showstopper)
 - **EEG forward calibration consistency.** `src/inob/forward/eeg.py`
   applied an *uncalibrated* `L * 1e3` factor in the in-pipeline forward
   solve, while figures used a separately-applied `L * 0.622` empirical
@@ -199,7 +265,7 @@ different solves. Needs a muscle EEG re-solve.
   rather than as a magnetic-only quantity. The historical name is kept
   to preserve schema compatibility with on-disk artefacts.
 
-### Added
+#### Added
 - **Bootstrap confidence intervals** on:
     * The Sarvas-vs-FEM peak ratio
       (`inob.analysis.sarvas_compare._bootstrap_ratio_ci`,
@@ -224,7 +290,7 @@ different solves. Needs a muscle EEG re-solve.
 - This `CHANGELOG.md`.
 - `CITATION.cff` for FAIR-compliant citation metadata.
 
-### Notes
+#### Notes
 - 121 / 121 pytests still pass (1 auto-skipped duneuro smoke test).
 - ruff clean.
 

@@ -111,8 +111,9 @@ export const PARAM_GROUPS: ParamGroup[] = [
         unit: "fT/√Hz",
         help:
           "Intrinsic noise of one magnetometer. 7 fT/√Hz matches a QuSpin " +
-          "Gen-3 sensor. Halving it halves the trials needed by a factor of four. " +
-          "It never travels alone: read it with the sensor bandwidth below.",
+          "Gen-3 sensor. Trials-to-detect goes as the square of it, so halving " +
+          "the noise cuts the trials needed by a factor of four. It never " +
+          "travels alone: read it with the sensor bandwidth below.",
         min: 0.1,
         max: 100,
         step: 0.5,
@@ -123,8 +124,8 @@ export const PARAM_GROUPS: ParamGroup[] = [
         unit: "Hz",
         help:
           "The magnetometer's own 3 dB point — 135 Hz for a QuSpin Gen-3, " +
-          "a few kHz for a helium-4 sensor. It bounds the noise you integrate " +
-          "AND rolls off the signal: a 0.5 ms action potential peaks near " +
+          "a few kHz for a helium-4 sensor. It bounds the noise you integrate, " +
+          "and it also rolls off the signal: a 0.5 ms action potential peaks near " +
           "318 Hz, so a 135 Hz sensor passes under 40% of it. Narrowing this " +
           "always makes detection harder, never easier.",
         min: 10,
@@ -225,7 +226,7 @@ export const PARAM_GROUPS: ParamGroup[] = [
           "neighbours by flux, so a conductivity jump stays a jump instead of " +
           "being smeared over the elements either side — the argument for it in " +
           "a mesh with a thin, high-contrast compartment like a nerve inside " +
-          "muscle. Costs roughly 4x the degrees of freedom. DG only works with " +
+          "muscle. Costs roughly four times the degrees of freedom. DG only works with " +
           "partial integration here.",
       },
       {

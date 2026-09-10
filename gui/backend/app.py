@@ -1114,7 +1114,7 @@ def sampled_sources(
         "tissue": fwd.source_tissue,
         "level": fwd.source_level,
         "spacing_mm": fwd.source_spacing_mm,
-        "count": int(len(pos)),
+        "count": len(pos),
         "sources": [
             {"x": round(float(p[0]), 2), "y": round(float(p[1]), 2), "z": round(float(p[2]), 2)}
             for p in pos

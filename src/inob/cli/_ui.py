@@ -6,9 +6,12 @@ small ANSI layer that degrades to plain text when stdout is not a terminal
 """
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
 import shutil
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -99,3 +102,41 @@ def human_age(mtime: float, *, now: float | None = None) -> str:
             return f"1 {label} ago" if value == 1 else f"{value} {label}s ago"
     weeks = int(delta // 604800)
     return "1 week ago" if weeks == 1 else f"{weeks} weeks ago"
+
+
+def wrap(text: str, indent: str = "", width_hint: int | None = None) -> list[str]:
+    """Fold ``text`` to the terminal, indenting every line including the first.
+
+    Report commands lay out fixed-width tables, so a long sentence dropped in
+    beside them has to be folded by hand — nothing else wraps it.
+    """
+    limit = max(40, (width_hint or width()) - len(indent))
+    return [indent + line for line in textwrap.wrap(text, limit)] or [indent.rstrip()]
+
+
+@contextlib.contextmanager
+def collect_warnings(source: str = "inob.config"):
+    """Yield a list that fills with warnings logged by ``source`` in the block.
+
+    ``doctor`` and ``status`` print a curated report, and a warning logged
+    while the config loads would otherwise land on stderr ahead of it, bare and
+    unwrapped. Catching them here lets each command place them where they
+    belong in its own layout.
+    """
+    messages: list[str] = []
+
+    class _Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    handler = _Collector(level=logging.WARNING)
+    logger = logging.getLogger(source)
+    logger.addHandler(handler)
+    # Stop them reaching the root handlers (or logging's lastResort) as well:
+    # the caller has taken responsibility for showing them.
+    propagate, logger.propagate = logger.propagate, False
+    try:
+        yield messages
+    finally:
+        logger.propagate = propagate
+        logger.removeHandler(handler)

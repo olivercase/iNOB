@@ -18,16 +18,24 @@ from inob.io.npz import load_leadfield
 logger = logging.getLogger(__name__)
 
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Predict the signal-to-noise ratio of every source at the configured
+noise floor, for either modality.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob snr",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
-  inob snr                               per-source SNR at the configured noise
-  inob snr --modality eeg                the electric leadfield instead
-  inob snr --n-averages 100              SNR after averaging 100 trials
-  inob snr --set noise.opm_sensor=fieldline_v3    a different OPM
+  inob snr                                      per-source SNR, as configured
+  inob snr --modality eeg                       the electric leadfield instead
+  inob snr --n-averages 100                     SNR after averaging 100 trials
+  inob snr --set noise.opm_sensor=fieldline_v3  a different OPM
 
 Noise floors come from cfg.noise — a sensor is a density AND a bandwidth.
 

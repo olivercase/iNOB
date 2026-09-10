@@ -22,17 +22,35 @@ from inob.cli._common import add_common_args, setup
 from inob.config import SOURCE_MODEL_TYPES, replace_source_model
 from inob.forward.duneuro_driver import build_source_model_config
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Calibrate and validate the forward solve on a homogeneous sphere.
+
+Two jobs on the same sphere FEM:
+
+  default   the empirical mm-mode to µV/(nA·m) EEG scale factor
+            (Berg–Scherg).
+  --meg     validate the MEG forward against the Sarvas analytic field,
+            reporting RDM (topography) and MAG (magnitude).
+
+--compare-source-models runs the MEG validation once per source model on
+the same mesh and the same analytic reference — the honest way to decide
+whether to move a production solve off partial integration, since only the
+right-hand side differs.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob calibrate",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
-  inob calibrate                         EEG mm-mode to SI, from a sphere FEM
-  inob calibrate --meg                   the MEG sphere validation instead
-  inob calibrate --radius-mm 80          a smaller sphere
-  inob calibrate --compare-source-models partial integration vs St. Venant
+  inob calibrate                          EEG mm-mode to SI, from a sphere FEM
+  inob calibrate --meg                    the MEG sphere validation instead
+  inob calibrate --radius-mm 80           a smaller sphere
+  inob calibrate --compare-source-models  partial integration vs St. Venant
 
 Determines the unit factor empirically rather than by dimensional analysis.
 

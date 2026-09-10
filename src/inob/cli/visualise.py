@@ -8,11 +8,17 @@ from inob.cli._common import add_common_args, setup
 from inob.viz.fem import render_fem
 from inob.viz.geometry import render_geometry
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Render overview PNGs of the anatomical geometry and the FEM mesh.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob visualise",
-        description="Render geometry + FEM PNGs.",
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob visualise                         geometry and FEM overview PNGs

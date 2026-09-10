@@ -11,7 +11,7 @@ cluster; the only thing that changes is `CLUSTER_PROFILE`.
    anything in this repo:
    ```bash
    # ~/.inob.env
-   INOB_LOCAL_DIR=$HOME/code/Forward_Model_Vagus_Nerve
+   INOB_LOCAL_DIR=$HOME/code/iNOB
    INOB_REMOTE_HOST=myriad
    # INOB_REMOTE_BASE=$HOME/Scratch/inob   # default
    ```

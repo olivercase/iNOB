@@ -9,11 +9,18 @@ from inob.cli._common import add_common_args, setup
 from inob.config import source_target_tag, tag_path
 from inob.viz.location_optimisation import render_location_optimisation
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Compare a whole-body electrode array against a cervical paddle, to
+show where electrodes are worth putting.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob location",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob location                          whole-body array vs cervical paddle

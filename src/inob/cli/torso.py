@@ -8,11 +8,17 @@ from pathlib import Path
 from inob.cli._common import add_common_args, setup
 from inob.viz.torso_topoplot import render_torso_topoplot
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Draw a four-panel field map painted on the body surface itself.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob torso",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob torso                             four views, field painted on the body

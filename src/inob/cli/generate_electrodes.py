@@ -8,11 +8,18 @@ from inob.anatomy import VERTEBRA_LEVELS
 from inob.cli._common import add_common_args, setup
 from inob.sensors.electrodes import generate_electrode_array
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Place the high-density surface-electrode patch over the target
+structure.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob electrodes",
-        description=generate_electrode_array.__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob electrodes                        the 32-contact paddle over the target

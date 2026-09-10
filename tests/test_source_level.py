@@ -7,6 +7,8 @@ silently change every existing leadfield.
 """
 from __future__ import annotations
 
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
@@ -16,7 +18,9 @@ from inob.sources.vagus import level_span_z_band
 class _Bone:
     """Stand-in for a bone dir: fixed, made-up bands, no segmentation needed."""
 
-    BANDS = {"c1": (100.0, 110.0), "c7": (40.0, 52.0), "t1": (30.0, 43.0)}
+    BANDS: ClassVar[dict[str, tuple[float, float]]] = {
+        "c1": (100.0, 110.0), "c7": (40.0, 52.0), "t1": (30.0, 43.0),
+    }
 
 
 def _band(bone_dir, level):

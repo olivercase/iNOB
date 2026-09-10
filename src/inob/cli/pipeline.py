@@ -231,9 +231,11 @@ def _parse_stages(arg: str | None) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob run",
-        description="Build anatomy, mesh, sensors and leadfield, in order. "
-                    "Stages whose outputs already exist are skipped. Figures "
-                    "are not drawn unless you ask for them (--with-viz).",
+        description=(
+            "Build anatomy, mesh, sensors and leadfield, in order.\n"
+            "Stages whose outputs already exist are skipped. Figures are not\n"
+            "drawn unless you ask for them (--with-viz)."
+        ),
         epilog=(
             "examples:\n"
             "  inob run                          build and solve, no figures\n"

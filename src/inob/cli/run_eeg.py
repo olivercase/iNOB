@@ -7,6 +7,14 @@ import sys
 from inob.cli._common import add_common_args, setup
 from inob.forward.eeg import run_eeg_forward
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Solve the EEG leadfield with DUNEuro, in µV per nA·m — on the same
+mesh and the same conductivities as the MEG solve, so the two compare
+like for like.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
@@ -15,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
         reexec_with_duneuro()
     p = argparse.ArgumentParser(
         prog="inob eeg",
-        description=run_eeg_forward.__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob eeg                               surface-potential leadfield (µV/nA·m)

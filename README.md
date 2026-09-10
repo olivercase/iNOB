@@ -37,7 +37,7 @@ git clone https://github.com/olivercase/iNOB.git
 cd iNOB
 git lfs pull                         # fetch the meshes if the clone didn't
 python3 -m pip install -e .[dev]     # editable install with dev deps (Python 3.11+)
-make test                            # 140 tests, no DUNEuro required
+make test                            # the full suite, no DUNEuro required
 ```
 
 The DUNEuro forward solve needs the `duneuropy` extension. Every other stage
@@ -142,10 +142,10 @@ inob detect            # trials-to-detect for the configured sources
 | --- | --- |
 | Start here | `doctor` · `status` · `run` |
 | Build the model | `build-geom` · `build-fem` · `sensors` · `electrodes` |
-| Solve | `forward` (MEG) · `eeg` |
-| Analyse | `detect` · `snr` · `sensitivity` · `location` · `cross` · `physiology` · `cap-compare` |
-| Validate | `sarvas` · `calibrate` |
-| Figures | `topoplot` · `visualise` |
+| Solve | `forward` (MEG) · `eeg` · `volume-field` |
+| Analyse | `detect` · `snr` · `sensitivity` · `location` · `cross` · `physiology` · `cap-compare` · `source-models` |
+| Validate | `ladder` · `sarvas` · `calibrate` |
+| Figures | `topoplot` · `torso` · `sensor-field` · `visualise` · `muscle-sources` |
 
 `inob --help` lists them all; `inob <command> --help` documents one. The older
 `inob-*` binaries (`inob-pipeline`, `inob-build-fem`, …) still work unchanged —
@@ -210,6 +210,32 @@ ssh myriad "cd ~/Scratch/inob/code && CLUSTER_PROFILE=myriad bash cluster/submit
 Profiles live in `cluster/profiles/*.env`. The GUI's "Run on cluster" button
 drives the same flow.
 
+## Documentation
+
+| Read | For |
+| --- | --- |
+| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | fresh clone to a leadfield and a trials-to-detect number |
+| [`configs/default.yaml`](configs/default.yaml) | every field of the reference configuration, commented |
+| [`docs/REPRODUCE.md`](docs/REPRODUCE.md) | regenerate the paper's figures from `data/` |
+| [`docs/COMPARISON.md`](docs/COMPARISON.md) | what iNOB reuses and how it differs from MNE, FieldTrip, Brainstorm, SimNIBS, OpenMEEG, DUNEuro, ASCENT |
+| [`docs/CITING.md`](docs/CITING.md) | what to cite: iNOB and the packages under it |
+| [`docs/COORDINATES.md`](docs/COORDINATES.md) | the axis convention, fixed once |
+| [`cluster/README.md`](cluster/README.md) | SGE array jobs and the cluster DUNEuro build |
+| [`gui/web/API_CONTRACT.md`](gui/web/API_CONTRACT.md) | the GUI backend API |
+
+`inob <command> --help` is the reference for each command and is tested to
+stay readable.
+
+## Validation
+
+Every leadfield magnitude is checked against closed-form solutions: `inob
+sarvas` and `inob ladder` compare the FEM with the Sarvas sphere and
+Biot–Savart, and `inob calibrate` fixes the absolute units (fT, µV per nA·m).
+The same comparisons run as tests (`tests/test_meg_sphere_validation.py`,
+`tests/test_venant_sphere_validation.py`) every week in CI against a real
+DUNEuro build ([duneuro-validation](.github/workflows/duneuro-validation.yml)).
+The rest of the suite (`make test`, 880+ tests) runs on every push.
+
 ## Repository layout
 
 ```
@@ -220,10 +246,20 @@ gui/             web/ (Next.js frontend) + backend/ (FastAPI)
 cluster/         SGE job scripts + DUNEuro build for UCL Myriad/Kathleen
 scripts/         standalone tools (muscle field, FEM/atlas viewers)
 tests/           pytest suite (no DUNEuro required)
+docs/            quickstart, reproduction, comparison, citing, coordinates
 ```
 
-## License
+## Contributing
 
-Code under the MIT License (`LICENSE`). Anatomical data under `LICENSE-DATA`.
-Cite via `CITATION.cff` — software DOI:
-[10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS).
+Bug reports about numbers are as welcome as bug reports about crashes; see
+[`CONTRIBUTING.md`](CONTRIBUTING.md). `make lint && make test` before a pull
+request.
+
+## License and citation
+
+Code under the MIT License (`LICENSE`). Anatomical data are BodyParts3D
+derivatives under CC BY-SA 2.1 JP (`LICENSE-DATA`). Cite via `CITATION.cff` —
+software DOI: [10.17605/OSF.IO/U4MDS](https://doi.org/10.17605/OSF.IO/U4MDS)
+— and cite the packages iNOB is built on; [`docs/CITING.md`](docs/CITING.md)
+lists them. DUNEuro (LGPL) does the forward solves and must be cited with any
+leadfield produced here.

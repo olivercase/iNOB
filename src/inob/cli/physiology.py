@@ -24,10 +24,26 @@ from inob.viz.physiology_plot import render_physiology
 logger = logging.getLogger(__name__)
 
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Simulate physiological activity as a dipole moving along the nerve.
+
+Which scenarios run is decided by the target's physiology profile, chosen
+with --source-target:
+
+  inob physiology --source-target vagus   baroreceptor + deep breathing
+  inob physiology --source-target spine   median- and tibial-nerve SSEP
+
+The per-scenario options below apply to whichever scenarios the target
+defines; the rest are ignored.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob physiology",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob physiology                                the target's own scenarios

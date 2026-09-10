@@ -14,11 +14,18 @@ from inob.viz.topoplot import (
     render_meg_topoplot,
 )
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Draw MEG and EEG field maps of a source on the body surface, side
+by side.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob topoplot",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob topoplot                          field map for the strongest source

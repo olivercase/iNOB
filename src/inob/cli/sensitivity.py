@@ -78,10 +78,27 @@ def _run_modality(cfg: Config, modality: str, *, skip_unit: bool) -> Path:
     return out_path
 
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Measure how much the answer moves when a tissue conductivity is
+wrong.
+
+Each tissue in turn has its conductivity scaled by the factors in the
+config, the leadfield is re-solved, and the per-channel change against the
+unperturbed baseline is summarised to JSON. --plot draws the comparison;
+--plot-only redraws from JSON already on disk.
+
+Re-solving is the expensive part, and MEG on the full array is much slower
+than EEG. Use --modality to run the two independently — EEG locally, MEG on
+the cluster.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob sensitivity",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob sensitivity                       sweep both modalities and plot

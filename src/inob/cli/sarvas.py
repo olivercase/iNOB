@@ -14,11 +14,18 @@ from inob.cli._common import add_common_args, setup
 from inob.config import source_region_label, target_output
 from inob.viz.sarvas_plot import render_sarvas_vs_fem
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Benchmark the FEM against the Sarvas analytic sphere for the
+cervical vagus.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob sarvas",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob sarvas                            FEM against the analytic sphere

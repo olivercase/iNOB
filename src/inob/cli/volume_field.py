@@ -28,17 +28,32 @@ from inob.forward.volume_field import (
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Read the solved field inside the body, not just at the sensors.
+
+Two modes:
+
+  --source        one dipole's potential over the whole mesh, written as
+                  VTK (potential per vertex, gradient per cell) for
+                  ParaView.
+  --stimulation   the field a bipolar electrode montage drives through the
+                  volume, sampled on a grid inside the mesh and written as
+                  an NPZ the GUI renders as a 3-D cloud.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob volume-field",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob volume-field --source                     one dipole's own field, to VTK
   inob volume-field --evaluate --spacing-mm 5    the field as numbers on a grid
-  inob volume-field --stimulation --anode e01 --cathode e17 --current-mA 1.0
-                                                 a tDCS-style montage's field
+  inob volume-field --stimulation \\
+      --anode e01 --cathode e17 --current-mA 1.0   a 1 mA bipolar montage
 
 Reads the FEM solution inside the body rather than only at the sensors.
 

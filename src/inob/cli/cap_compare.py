@@ -8,11 +8,18 @@ from pathlib import Path
 from inob.cli._common import add_common_args, setup
 from inob.viz.cap_compare import render_cap_compare
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Compare a propagating action potential against the stationary
+dipole usually assumed in its place.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob cap-compare",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob cap-compare                       propagating volley vs lumped dipole

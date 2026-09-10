@@ -19,11 +19,22 @@ from inob.viz.muscle_sources import (
     render_muscle_source_pairs,
 )
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Draw the muscle source dipoles before any solve: left/right pairing
+and fibre orientation.
+
+Needs a built FEM (inob build-fem) that includes the muscle compartment. It
+does not need a forward solve, or --source-target muscle, because the mesh
+carries every tissue whatever the current target.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob muscle-sources",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob muscle-sources                    pairing and fibre-orientation figures

@@ -7,17 +7,24 @@ import sys
 from inob.cli._common import add_common_args, setup
 from inob.geometry.builder import build_geometry, check_existing
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Turn the raw anatomical STLs into watertight, non-overlapping
+compartments that the mesher can use.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob build-geom",
-        description=build_geometry.__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob build-geom                        watertighten every configured tissue
   inob build-geom --only skin,bone       just two compartments
   inob build-geom --check-only           report what exists; build nothing
-  inob build-geom --shrinkwrap-only      skip repair/union, force the voxel path
+  inob build-geom --shrinkwrap-only      skip repair/union, use the voxel path
 
 Writes outputs/geometry/geometry.mat. `inob run` calls this as its first stage.
 

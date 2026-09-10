@@ -67,15 +67,23 @@ def _resolve_source_idx(cfg: Config, level: str | None, source_idx: int) -> int:
     return idx
 
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Work out how many averaged trials each source needs before it
+clears the noise floor, and draw the charts that show it.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob detect",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob detect                            trials to detect, for the whole array
   inob detect --snr-threshold 5          a stricter detection criterion
-  inob detect --q-nAm 20                   assume a 20 nA·m source
+  inob detect --q-nAm 20                 assume a 20 nA·m source
   inob detect --level c7                 only sources at one vertebral level
   inob detect --print-summary            JSON to stdout as well as the figure
 

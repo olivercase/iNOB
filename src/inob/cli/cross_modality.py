@@ -8,16 +8,22 @@ from pathlib import Path
 from inob.cli._common import add_common_args, setup
 from inob.viz.cross_modality_plot import render_cross_modality
 
+# The user-facing summary in `--help`. Kept separate from the module
+# docstring, which is written for whoever maintains the code.
+_DESCRIPTION = """\
+Show how strongly MEG and EEG see the same source, side by side.
+"""
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="inob cross",
-        description=__doc__,
+        description=_DESCRIPTION,
         epilog="""\
 examples:
   inob cross                             MEG/EEG coupling for the same source
   inob cross --source-idx 40             at one point on the polyline
-  inob cross --noise-uV 0.5               bootstrap with 0.5 µV of EEG noise
+  inob cross --noise-uV 0.5              bootstrap with 0.5 µV of EEG noise
 
 Not an inverse solution: the source position is assumed known.
 

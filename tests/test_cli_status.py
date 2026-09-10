@@ -85,3 +85,36 @@ def test_failed_marker_reports_failed_and_suggests_force(tmp_path) -> None:
     geom = next(s for s in stages if s.name == "geom")
     assert geom.state == "failed"
     assert cli_mod.next_step(stages).startswith("inob build-geom --force")
+
+
+def test_status_folds_a_config_warning_into_the_report(capsys) -> None:
+    """A config warning belongs in the report, not on stderr above it.
+
+    `inob status` prints a fixed-width table. A 300-character warning logged
+    while the config loads used to land ahead of it, unwrapped and unstyled,
+    and was the first thing the user saw.
+    """
+    from inob.cli import _ui
+
+    long_note = (
+        "recording band reaches 500 Hz but the OPM is a single pole at "
+        "135 Hz: above the pole the band contributes little noise and less "
+        "signal, so the answer is honest rather than wrong."
+    )
+    folded = _ui.wrap(long_note, "  ", width_hint=80)
+    assert len(folded) > 1, "a long note must be folded, not printed as one line"
+    assert all(len(line) <= 79 for line in folded)
+
+
+def test_collect_warnings_keeps_them_off_stderr(capsys) -> None:
+    """The report takes responsibility for them, so they must not also leak."""
+    import logging
+
+    from inob.cli import _ui
+
+    with _ui.collect_warnings("inob.config") as notes:
+        logging.getLogger("inob.config").warning("[noise] band too wide")
+    assert notes == ["[noise] band too wide"]
+    assert "[noise]" not in capsys.readouterr().err
+    # Propagation is restored, or every later warning would vanish.
+    assert logging.getLogger("inob.config").propagate

@@ -106,7 +106,7 @@ COMMANDS: tuple[Command, ...] = (
     Command("visualise", "inob.cli.visualise", "Figures",
             "Render geometry and FEM mesh PNGs"),
     Command("muscle-sources", "inob.cli.muscle_sources", "Figures",
-            "Muscle source dipoles: L/R pairing + fibre orientation (pre-solve)"),
+            "Muscle dipoles before the solve: pairing and fibre axis"),
 )
 
 BY_NAME: dict[str, Command] = {}
@@ -149,11 +149,13 @@ def _usage(out) -> None:
         print("", file=out)
 
     print(f"{_ui.heading('Common options')}  "
-          f"(accepted by every command except doctor/status)", file=out)
+          f"(doctor and status take --config and --debug only)", file=out)
     print("  --config PATH        YAML config to use "
           "(default configs/default.yaml)", file=out)
     print("  --set KEY=VALUE      Override one config field; repeatable", file=out)
-    print("  --log-level LEVEL    DEBUG / INFO / WARNING / ERROR\n", file=out)
+    print("  --log-level LEVEL    DEBUG / INFO / WARNING / ERROR", file=out)
+    print("  --debug              Full traceback instead of a short message\n",
+          file=out)
 
     print(f"{_ui.heading('Examples')}", file=out)
     print("  inob run --stages geom,fem        build anatomy and mesh only",
@@ -165,6 +167,7 @@ def _usage(out) -> None:
 
     print(f"Detailed help for any command: "
           f"{_ui.paint('inob <command> --help', 'cyan')}", file=out)
+    print(f"Version: {_ui.paint('inob --version', 'cyan')}", file=out)
 
 
 def _greeting(out) -> None:
@@ -181,9 +184,14 @@ def _unknown(name: str, out) -> int:
     close = difflib.get_close_matches(name, sorted(BY_NAME), n=3, cutoff=0.5)
     if close:
         print("Did you mean:", file=out)
+        # Pad on the plain name: the ANSI escapes around it have no width on
+        # screen but do count towards len(), so padding the painted string
+        # would leave the summaries ragged.
+        pad = max(len(m) for m in close)
         for match in close:
-            print(f"  {_ui.paint(f'inob {match}', 'cyan')}"
-                  f"   {BY_NAME[match].summary}", file=out)
+            spelling = _ui.paint(f"inob {match}", "cyan")
+            gap = " " * (pad - len(match) + 3)
+            print(f"  {spelling}{gap}{BY_NAME[match].summary}", file=out)
         print("", file=out)
     print(f"See all commands: {_ui.paint('inob --help', 'cyan')}", file=out)
     return 2
