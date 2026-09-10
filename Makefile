@@ -1,4 +1,4 @@
-.PHONY: install install-dev hooks lint format-check secrets test coverage build ci doctor status gui pipeline geom fem sensors forward viz clean clean-outputs
+.PHONY: install install-dev hooks lint format format-check secrets test coverage build ci doctor status gui pipeline geom fem sensors forward viz clean clean-outputs
 
 PYTHON ?= python3
 CONFIG ?= configs/default.yaml
@@ -18,9 +18,11 @@ hooks:
 lint:
 	$(PYTHON) -m ruff check .
 
-# Reports what `ruff format` would change; not a gate (see CONTRIBUTING.md).
+format:
+	$(PYTHON) -m ruff format .
+
 format-check:
-	$(PYTHON) -m ruff format --check . || true
+	$(PYTHON) -m ruff format --check .
 
 # Secret scan over the whole history. Needs gitleaks (brew install gitleaks).
 secrets:
@@ -37,7 +39,7 @@ build:
 	rm -rf dist && $(PYTHON) -m build && $(PYTHON) -m twine check dist/*
 
 # The full local gate: what CI runs, in one target.
-ci: lint test build
+ci: lint format-check test build
 
 doctor:
 	$(INOB) doctor --config $(CONFIG)

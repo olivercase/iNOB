@@ -18,6 +18,10 @@ versioning. Dates in ISO-8601.
   and the rules an agent must follow here. `make ci` runs the same gate
   locally.
 
+- **`ruff format` across the repository, enforced from here on** (hook, CI
+  and `make ci`). One commit, no logic change; it is listed in
+  `.git-blame-ignore-revs` so `git blame` looks through it.
+
 ### Fixed
 - **Six `except Exception: pass` sites now say something.** Five decorative
   skin backdrops in the topoplot and cross-modality figures log at debug

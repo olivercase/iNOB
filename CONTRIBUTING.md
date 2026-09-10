@@ -23,9 +23,9 @@ make test      # pytest; DUNEuro tests auto-skip without duneuropy
 make ci        # lint + test + package build, the same gate CI runs
 ```
 
-`ruff format` is not enforced: the codebase predates it and a whole-repo
-reformat would bury the history. `make format-check` shows what it would
-change; format new files, leave old ones as they are.
+Formatting is `ruff format`, enforced by the hooks and CI. `make format`
+applies it; `git blame` past the one-off reformat commit with
+`--ignore-revs-file .git-blame-ignore-revs`.
 
 Before opening a pull request:
 

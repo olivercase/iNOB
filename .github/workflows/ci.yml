@@ -79,7 +79,7 @@ jobs:
       - name: Ruff lint
         # Whole repo, not just src/tests — scripts/ and gui/ are shipped code
         # too, and lint drift there used to go unnoticed.
-        run: ruff check .
+        run: ruff check . && ruff format --check .
 
       - name: Pytest
         # DUNEuro smoke tests auto-skip when duneuropy is unavailable; the
