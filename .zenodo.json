@@ -1,17 +1,68 @@
 {
-  "title": "iNOB — imaging neuroscience outside the brain: whole-body forward modelling and sensor planning for non-invasive recording of peripheral and autonomic nerves",
+  "title": "iNOB: imaging neuroscience outside the brain: an open software package for whole-body bioelectromagnetic forward modelling",
   "upload_type": "software",
   "creators": [
-    {"name": "Case, Oliver", "affiliation": "University College London"}
+    {
+      "name": "Case, Oliver",
+      "affiliation": "UCL Centre for Neurocardiology, Institute of Cardiovascular Science, University College London",
+      "orcid": "0009-0007-4499-0682"
+    },
+    {
+      "name": "Schmidt, Maike",
+      "affiliation": "Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London",
+      "orcid": "0009-0001-6307-0095"
+    },
+    {
+      "name": "Cook, Harry",
+      "affiliation": "Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London",
+      "orcid": "0000-0002-4794-4119"
+    },
+    {
+      "name": "Lambiase, Pier D.",
+      "affiliation": "UCL Centre for Neurocardiology, Institute of Cardiovascular Science, University College London",
+      "orcid": "0000-0002-9055-9267"
+    },
+    {
+      "name": "Garfinkel, Sarah N.",
+      "affiliation": "Institute of Cognitive Neuroscience, University College London",
+      "orcid": "0000-0002-5961-1012"
+    },
+    {
+      "name": "Barnes, Gareth R.",
+      "affiliation": "Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London",
+      "orcid": "0000-0002-5396-7712"
+    }
   ],
   "description": "A whole-body forward-modelling and sensor-planning package for non-invasive OPM-MEG and surface-EEG recording of peripheral and autonomic nerves. Atlas meshes to a multi-tissue tetrahedral FEM to calibrated MEG and EEG leadfields via DUNEuro, with noise, SNR, trials-to-detect and sensor-placement analyses, a CLI and a browser GUI.",
   "license": "MIT",
   "access_right": "open",
-  "keywords": ["magnetoencephalography", "OPM", "EEG", "vagus nerve", "spinal cord", "finite-element method", "forward modelling", "sensor planning"],
+  "keywords": [
+    "magnetoencephalography",
+    "OPM",
+    "EEG",
+    "vagus nerve",
+    "spinal cord",
+    "finite-element method",
+    "forward modelling",
+    "sensor planning"
+  ],
   "related_identifiers": [
-    {"identifier": "https://github.com/olivercase/iNOB", "relation": "isSupplementTo", "scheme": "url"},
-    {"identifier": "10.17605/OSF.IO/U4MDS", "relation": "isPartOf", "scheme": "doi"},
-    {"identifier": "10.1093/nar/gkn613", "relation": "isDerivedFrom", "scheme": "doi", "resource_type": "dataset"}
+    {
+      "identifier": "https://github.com/olivercase/iNOB",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "10.17605/OSF.IO/U4MDS",
+      "relation": "isPartOf",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.1093/nar/gkn613",
+      "relation": "isDerivedFrom",
+      "scheme": "doi",
+      "resource_type": "dataset"
+    }
   ],
   "notes": "Anatomical meshes under data/ are BodyParts3D derivatives, CC BY-SA 2.1 JP (see LICENSE-DATA); the MIT licence covers the code only."
 }

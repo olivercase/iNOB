@@ -1,16 +1,35 @@
 cff-version: 1.2.0
 title: >
-  iNOB — imaging neuroscience outside the brain: a whole-body
-  forward-modelling and sensor-planning package for non-invasive recording
-  of peripheral and autonomic nerves
+  iNOB: imaging neuroscience outside the brain: an open software package for whole-body bioelectromagnetic forward modelling
 message: >
   If you use this software, please cite it using these metadata.
 type: software
 authors:
   - family-names: Case
     given-names: Oliver
+    orcid: https://orcid.org/0009-0007-4499-0682
+    affiliation: UCL Centre for Neurocardiology, Institute of Cardiovascular Science, University College London
     email: oliver@fizzymilk.com
-    affiliation: University College London
+  - family-names: Schmidt
+    given-names: Maike
+    orcid: https://orcid.org/0009-0001-6307-0095
+    affiliation: Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London
+  - family-names: Cook
+    given-names: Harry
+    orcid: https://orcid.org/0000-0002-4794-4119
+    affiliation: Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London
+  - family-names: Lambiase
+    given-names: Pier D.
+    orcid: https://orcid.org/0000-0002-9055-9267
+    affiliation: UCL Centre for Neurocardiology, Institute of Cardiovascular Science, University College London
+  - family-names: Garfinkel
+    given-names: Sarah N.
+    orcid: https://orcid.org/0000-0002-5961-1012
+    affiliation: Institute of Cognitive Neuroscience, University College London
+  - family-names: Barnes
+    given-names: Gareth R.
+    orcid: https://orcid.org/0000-0002-5396-7712
+    affiliation: Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London
 repository-code: https://github.com/olivercase/iNOB
 url: https://github.com/olivercase/iNOB
 identifiers:
@@ -32,11 +51,32 @@ keywords:
 preferred-citation:
   type: software
   title: >
-    iNOB: a whole-body forward-modelling and sensor-planning package for
-    non-invasive recording of peripheral and autonomic nerves
+    iNOB: imaging neuroscience outside the brain: an open software package for whole-body bioelectromagnetic forward modelling
   authors:
     - family-names: Case
       given-names: Oliver
+      orcid: https://orcid.org/0009-0007-4499-0682
+      affiliation: UCL Centre for Neurocardiology, Institute of Cardiovascular Science, University College London
+    - family-names: Schmidt
+      given-names: Maike
+      orcid: https://orcid.org/0009-0001-6307-0095
+      affiliation: Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London
+    - family-names: Cook
+      given-names: Harry
+      orcid: https://orcid.org/0000-0002-4794-4119
+      affiliation: Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London
+    - family-names: Lambiase
+      given-names: Pier D.
+      orcid: https://orcid.org/0000-0002-9055-9267
+      affiliation: UCL Centre for Neurocardiology, Institute of Cardiovascular Science, University College London
+    - family-names: Garfinkel
+      given-names: Sarah N.
+      orcid: https://orcid.org/0000-0002-5961-1012
+      affiliation: Institute of Cognitive Neuroscience, University College London
+    - family-names: Barnes
+      given-names: Gareth R.
+      orcid: https://orcid.org/0000-0002-5396-7712
+      affiliation: Department of Imaging Neuroscience, UCL Queen Square Institute of Neurology, University College London
   year: 2026
   doi: 10.17605/OSF.IO/U4MDS
 references:

@@ -8,7 +8,14 @@ description = "Whole-body FEM forward modelling and sensor planning for OPM-MEG 
 readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["version"]
-authors = [{ name = "Oliver Case", email = "oliver@fizzymilk.com" }]
+authors = [
+    { name = "Oliver Case", email = "oliver@fizzymilk.com" },
+    { name = "Maike Schmidt" },
+    { name = "Harry Cook" },
+    { name = "Pier D. Lambiase" },
+    { name = "Sarah N. Garfinkel" },
+    { name = "Gareth R. Barnes" },
+]
 license = { text = "MIT" }
 keywords = ["MEG", "OPM", "EEG", "forward model", "FEM", "vagus nerve", "spinal cord", "DUNEuro"]
 classifiers = [
