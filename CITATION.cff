@@ -18,6 +18,8 @@ identifiers:
     value: 10.17605/OSF.IO/U4MDS
     description: Software Project DOI (OSF)
 license: MIT
+version: 1.1.0
+date-released: '2026-09-10'
 keywords:
   - magnetoencephalography
   - MEG

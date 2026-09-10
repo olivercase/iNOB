@@ -4,7 +4,9 @@ All notable changes to iNOB. Conforms to
 [Keep a Changelog](https://keepachangelog.com) and uses semantic-ish
 versioning. Dates in ISO-8601.
 
-## [Unreleased] — the help text is the manual, 2026-09-04
+## [1.1.0] — 2026-09-10
+
+The help text is the manual, and the repository is packaged for review.
 
 An end-to-end audit of everything a user reads. `--help` is the only
 documentation most people will open, and fifteen commands were printing the
