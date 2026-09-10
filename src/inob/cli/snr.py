@@ -1,4 +1,5 @@
 """CLI: predict per-source SNR for a leadfield (MEG or EEG)."""
+
 from __future__ import annotations
 
 import argparse
@@ -44,14 +45,18 @@ see `inob --help` for the full list.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_args(p)
-    p.add_argument("--leadfield", type=Path, default=None,
-                   help="Override leadfield NPZ path (default: cfg.outputs.forward_npz).")
+    p.add_argument(
+        "--leadfield",
+        type=Path,
+        default=None,
+        help="Override leadfield NPZ path (default: cfg.outputs.forward_npz).",
+    )
     p.add_argument("--modality", choices=("meg", "eeg"), default="meg")
     p.add_argument("--moment", choices=("rms", "max"), default="rms")
-    p.add_argument("--n-averages", type=int, default=1,
-                   help="Number of trial averages (SNR ∝ √n).")
-    p.add_argument("--out", type=Path, default=None,
-                   help="JSON output path (default: stdout only).")
+    p.add_argument("--n-averages", type=int, default=1, help="Number of trial averages (SNR ∝ √n).")
+    p.add_argument(
+        "--out", type=Path, default=None, help="JSON output path (default: stdout only)."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix=f"snr_{args.modality}")
 
@@ -60,10 +65,11 @@ see `inob --help` for the full list.""",
     )
     lf = load_leadfield(lf_path)
     floors = compute_noise_floors(cfg)
-    sigma = floors.meg_per_channel_fT if args.modality == "meg" \
-            else floors.eeg_per_channel_uV
+    sigma = floors.meg_per_channel_fT if args.modality == "meg" else floors.eeg_per_channel_uV
     snr = snr_per_source(
-        lf.L_fT_per_nAm, sigma, moment=args.moment,
+        lf.L_fT_per_nAm,
+        sigma,
+        moment=args.moment,
         n_averages=args.n_averages,
     )
     summary = {

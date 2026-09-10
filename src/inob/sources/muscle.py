@@ -13,6 +13,7 @@ axis of the individual muscle it belongs to (a fibre-direction proxy — neck
 strap/scalene muscles run roughly along their long axis), computed per connected
 component of the muscle tissue.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,9 +30,7 @@ logger = logging.getLogger(__name__)
 def _muscle_tet_centroids(fem: FemMesh, tissue_label: str = "muscle") -> np.ndarray:
     """Centroids ``(M, 3)`` mm of every tet tagged ``tissue_label``."""
     if tissue_label not in fem.tissue_labels:
-        raise ValueError(
-            f"tissue {tissue_label!r} not in FEM (have {list(fem.tissue_labels)})"
-        )
+        raise ValueError(f"tissue {tissue_label!r} not in FEM (have {list(fem.tissue_labels)})")
     tissue_id = fem.label_to_id[tissue_label]
     mask = fem.tissue == tissue_id
     if not mask.any():
@@ -40,7 +39,10 @@ def _muscle_tet_centroids(fem: FemMesh, tissue_label: str = "muscle") -> np.ndar
 
 
 def muscle_sources(
-    fem: FemMesh, *, spacing_mm: float, tissue_label: str = "muscle",
+    fem: FemMesh,
+    *,
+    spacing_mm: float,
+    tissue_label: str = "muscle",
 ) -> np.ndarray:
     """Volume-fill dipole positions inside the muscle tissue, ``(S, 3)`` mm.
 
@@ -64,17 +66,20 @@ def muscle_sources(
 
     picked: list[np.ndarray] = []
     for s, e in zip(starts, ends, strict=True):
-        vc = origin + (vox_s[s] + 0.5) * spacing_mm      # voxel centre
+        vc = origin + (vox_s[s] + 0.5) * spacing_mm  # voxel centre
         group = cent_s[s:e]
         picked.append(group[np.argmin(np.sum((group - vc) ** 2, axis=1))])
     pos = np.asarray(picked, dtype=np.float64)
     logger.info(
-        "%d muscle dipole positions (volume-fill, spacing %g mm, "
-        "X=%g..%g Y=%g..%g Z=%g..%g)",
-        len(pos), spacing_mm,
-        pos[:, 0].min(), pos[:, 0].max(),
-        pos[:, 1].min(), pos[:, 1].max(),
-        pos[:, 2].min(), pos[:, 2].max(),
+        "%d muscle dipole positions (volume-fill, spacing %g mm, X=%g..%g Y=%g..%g Z=%g..%g)",
+        len(pos),
+        spacing_mm,
+        pos[:, 0].min(),
+        pos[:, 0].max(),
+        pos[:, 1].min(),
+        pos[:, 1].max(),
+        pos[:, 2].min(),
+        pos[:, 2].max(),
     )
     return pos
 
@@ -89,7 +94,7 @@ def _muscle_components(fem: FemMesh, tissue_label: str = "muscle"):
     """
     tissue_id = fem.label_to_id[tissue_label]
     mask = fem.tissue == tissue_id
-    tets = fem.tets[mask]                              # (M, 4) node indices
+    tets = fem.tets[mask]  # (M, 4) node indices
     centroids = fem.nodes[tets].mean(axis=1)
     n_tets = len(tets)
 
@@ -111,7 +116,7 @@ def _principal_axis(pts: np.ndarray) -> np.ndarray:
     cov = np.cov((pts - pts.mean(axis=0)).T)
     eigvals, eigvecs = np.linalg.eigh(cov)
     axis = eigvecs[:, np.argmax(eigvals)]
-    if axis[2] < 0:                                    # consistent sign (superior)
+    if axis[2] < 0:  # consistent sign (superior)
         axis = -axis
     return axis / max(np.linalg.norm(axis), 1e-12)
 
@@ -143,7 +148,10 @@ def _muscle_stl_axes(muscle_dir) -> tuple[np.ndarray, np.ndarray]:
 
 
 def muscle_tet_fibre_axes(
-    fem: FemMesh, *, muscle_dir, tissue_label: str = "muscle",
+    fem: FemMesh,
+    *,
+    muscle_dir,
+    tissue_label: str = "muscle",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Fibre axis of every muscle tet, for anisotropic conductivity.
 
@@ -158,7 +166,7 @@ def muscle_tet_fibre_axes(
     mask = fem.tissue == tissue_id
     if not mask.any():
         raise ValueError(f"no tets with tissue id {tissue_id} ({tissue_label!r})")
-    centroids = fem.nodes[fem.tets[mask]].mean(axis=1)          # (M, 3)
+    centroids = fem.nodes[fem.tets[mask]].mean(axis=1)  # (M, 3)
     axes, centres = _muscle_stl_axes(muscle_dir)
     # nearest STL centre for each muscle tet
     d2 = np.sum((centroids[:, None, :] - centres[None, :, :]) ** 2, axis=2)  # (M, K)
@@ -188,8 +196,11 @@ def muscle_source_stl_assignment(positions: np.ndarray, *, muscle_dir) -> np.nda
 
 
 def muscle_source_orientations(
-    fem: FemMesh, positions: np.ndarray, *,
-    tissue_label: str = "muscle", muscle_dir=None,
+    fem: FemMesh,
+    positions: np.ndarray,
+    *,
+    tissue_label: str = "muscle",
+    muscle_dir=None,
 ) -> np.ndarray:
     """Unit long-axis (fibre-direction proxy) per source, ``(S, 3)``.
 

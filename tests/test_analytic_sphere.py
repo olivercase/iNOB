@@ -5,6 +5,7 @@ solver should match to within ~5% RMS for sensors well outside the source.
 We test the analytic formulas in isolation here (the FEM-vs-analytic test
 lives behind the duneuro marker in test_analytic_validation.py).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -21,11 +22,11 @@ from inob.analysis.analytic_sphere import (
 def test_biot_savart_closed_form_value() -> None:
     """B = μ₀/4π · Q × r̂ / r² for a dipole in an unbounded medium."""
     r0 = np.zeros(3)
-    Q = np.array([1e-9, 0.0, 0.0])             # 1 nA·m along +x
-    sensors = np.array([[0.0, 0.05, 0.0]])     # 5 cm along +y
+    Q = np.array([1e-9, 0.0, 0.0])  # 1 nA·m along +x
+    sensors = np.array([[0.0, 0.05, 0.0]])  # 5 cm along +y
     B = infinite_medium_meg_field(r0, Q, sensors)
     # Q × r̂ = x̂ × ŷ = ẑ, so B is +z with magnitude μ₀ Q / (4π r²)
-    expected = MU_0 * 1e-9 / (4.0 * np.pi * 0.05 ** 2)
+    expected = MU_0 * 1e-9 / (4.0 * np.pi * 0.05**2)
     np.testing.assert_allclose(B[0], [0.0, 0.0, expected], rtol=1e-12, atol=1e-20)
 
 
@@ -86,20 +87,22 @@ def test_biot_savart_radial_dipole_is_not_silent() -> None:
 
 def test_sarvas_radial_dipole_zero_field() -> None:
     """A purely radial dipole produces zero magnetic field outside a sphere."""
-    r0 = np.array([0.0, 0.0, 0.05])           # 5 cm radial offset
+    r0 = np.array([0.0, 0.0, 0.05])  # 5 cm radial offset
     Q_radial = r0 / np.linalg.norm(r0) * 1e-9
-    sensors = np.array([
-        [0.10, 0.0, 0.0],
-        [0.08, 0.04, 0.05],
-        [0.0, 0.10, 0.10],
-    ])
+    sensors = np.array(
+        [
+            [0.10, 0.0, 0.0],
+            [0.08, 0.04, 0.05],
+            [0.0, 0.10, 0.10],
+        ]
+    )
     B = sarvas_meg_field(r0, Q_radial, sensors)
     np.testing.assert_allclose(B, 0.0, atol=1e-15)
 
 
 def test_sarvas_tangential_dipole_finite_field() -> None:
     r0 = np.array([0.0, 0.0, 0.05])
-    Q_tan = np.array([1e-9, 0.0, 0.0])         # tangential to r0
+    Q_tan = np.array([1e-9, 0.0, 0.0])  # tangential to r0
     sensors = np.array([[0.10, 0.0, 0.05], [0.08, 0.04, 0.05]])
     B = sarvas_meg_field(r0, Q_tan, sensors)
     assert np.isfinite(B).all()
@@ -116,18 +119,23 @@ def test_eeg_centred_dipole_dipolar_pattern() -> None:
     extrema.
     """
     R = 0.1
-    sensors = R * np.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, -1.0],
-    ])
-    V = homogeneous_sphere_eeg_potential(
-        np.zeros(3), np.array([0.0, 0.0, 1e-9]), sensors,
-        sphere_radius_m=R, sigma_S_per_m=0.33,
+    sensors = R * np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
+        ]
     )
-    np.testing.assert_allclose(V[:2], 0.0, atol=1e-7)         # equator
-    assert np.sign(V[2]) == -np.sign(V[3])                    # poles antipodal
+    V = homogeneous_sphere_eeg_potential(
+        np.zeros(3),
+        np.array([0.0, 0.0, 1e-9]),
+        sensors,
+        sphere_radius_m=R,
+        sigma_S_per_m=0.33,
+    )
+    np.testing.assert_allclose(V[:2], 0.0, atol=1e-7)  # equator
+    assert np.sign(V[2]) == -np.sign(V[3])  # poles antipodal
     np.testing.assert_allclose(abs(V[2]), abs(V[3]), rtol=1e-6)
 
 
@@ -135,14 +143,20 @@ def test_eeg_radial_dipole_axisymmetric_about_axis() -> None:
     """Radial dipole on +z: potential is axisymmetric about z."""
     R = 0.1
     r0 = np.array([0.0, 0.0, 0.05])
-    Q = np.array([0.0, 0.0, 1e-9])         # radial w.r.t. r0
-    sensors = R * np.array([
-        [np.cos(0),         np.sin(0),         0.0],
-        [np.cos(np.pi / 2), np.sin(np.pi / 2), 0.0],
-        [np.cos(np.pi),     np.sin(np.pi),     0.0],
-    ])
+    Q = np.array([0.0, 0.0, 1e-9])  # radial w.r.t. r0
+    sensors = R * np.array(
+        [
+            [np.cos(0), np.sin(0), 0.0],
+            [np.cos(np.pi / 2), np.sin(np.pi / 2), 0.0],
+            [np.cos(np.pi), np.sin(np.pi), 0.0],
+        ]
+    )
     V = homogeneous_sphere_eeg_potential(
-        r0, Q, sensors, sphere_radius_m=R, sigma_S_per_m=0.33,
+        r0,
+        Q,
+        sensors,
+        sphere_radius_m=R,
+        sigma_S_per_m=0.33,
     )
     # All sensors at θ=π/2 → same potential by axisymmetry
     np.testing.assert_allclose(V, V[0], rtol=1e-9, atol=1e-15)
@@ -156,8 +170,11 @@ def test_eeg_tangential_dipole_dipolar_pattern() -> None:
     p_pos = np.array([R, 0.0, 0.0])
     p_neg = np.array([-R, 0.0, 0.0])
     V = homogeneous_sphere_eeg_potential(
-        r0, Q, np.stack([p_pos, p_neg]),
-        sphere_radius_m=R, sigma_S_per_m=0.33,
+        r0,
+        Q,
+        np.stack([p_pos, p_neg]),
+        sphere_radius_m=R,
+        sigma_S_per_m=0.33,
     )
     assert np.sign(V[0]) == -np.sign(V[1])
     np.testing.assert_allclose(abs(V[0]), abs(V[1]), rtol=1e-6)
@@ -170,7 +187,7 @@ def _mne_sphere_field_or_skip():
     """Return MNE's _do_sphere_field, skipping the test if unavailable."""
     try:
         from mne.forward._compute_forward import _do_sphere_field
-    except ImportError:                    # pragma: no cover
+    except ImportError:  # pragma: no cover
         pytest.skip("mne-python not available")
     return _do_sphere_field
 
@@ -178,11 +195,10 @@ def _mne_sphere_field_or_skip():
 @pytest.mark.parametrize(
     "src_pos_m,Q_Am",
     [
-        (np.array([0.0, 0.0, 0.05]),   np.array([1e-9, 0.0, 0.0])),     # tangential
+        (np.array([0.0, 0.0, 0.05]), np.array([1e-9, 0.0, 0.0])),  # tangential
         (np.array([0.03, 0.02, 0.04]), np.array([0.0, 1e-9, 0.0])),
-        (np.array([0.04, 0.0, 0.0]),   np.array([0.0, 0.0, 1e-9])),     # longitudinal
-        (np.array([-0.02, 0.03, 0.04]),
-         np.array([2.0e-9, -1.0e-9, 0.5e-9])),                         # mixed
+        (np.array([0.04, 0.0, 0.0]), np.array([0.0, 0.0, 1e-9])),  # longitudinal
+        (np.array([-0.02, 0.03, 0.04]), np.array([2.0e-9, -1.0e-9, 0.5e-9])),  # mixed
     ],
 )
 def test_sarvas_matches_mne_to_machine_precision(src_pos_m, Q_Am) -> None:
@@ -195,13 +211,15 @@ def test_sarvas_matches_mne_to_machine_precision(src_pos_m, Q_Am) -> None:
     """
     do_sphere_field = _mne_sphere_field_or_skip()
     r0_sphere = np.zeros(3, dtype=np.float64)
-    sensors_m = np.array([
-        [0.10, 0.00, 0.05],
-        [0.08, 0.04, 0.05],
-        [0.0, 0.10, 0.10],
-        [-0.07, 0.05, 0.06],
-        [0.06, -0.07, 0.04],
-    ])
+    sensors_m = np.array(
+        [
+            [0.10, 0.00, 0.05],
+            [0.08, 0.04, 0.05],
+            [0.0, 0.10, 0.10],
+            [-0.07, 0.05, 0.06],
+            [0.06, -0.07, 0.04],
+        ]
+    )
     n_sensors = sensors_m.shape[0]
     ws = np.ones(n_sensors)
     bins = np.arange(n_sensors, dtype=np.int64)

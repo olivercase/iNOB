@@ -4,6 +4,7 @@ The point of :mod:`inob.physiology.profiles` is that adding spinal physiology
 must not change what a vagus run produces, and that nothing downstream hard-
 codes one target's assumptions onto another. These tests pin both directions.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -83,19 +84,18 @@ def test_stationary_ok_agrees_with_transit_vs_ap_width() -> None:
     for name, p in PROFILES.items():
         span = p.propagation_span_mm
         if span is None:
-            continue      # whole-polyline span is only known at render time
+            continue  # whole-polyline span is only known at render time
         ratio = p.transit_ms(span) / p.ap_width_ms
         if p.stationary_ok:
             assert ratio < 5.0, f"{name}: transit/AP = {ratio:.1f} but marked OK"
 
 
 def test_transit_scales_with_span() -> None:
-    assert SPINE_PROFILE.transit_ms(400) == pytest.approx(
-        4 * SPINE_PROFILE.transit_ms(100)
-    )
+    assert SPINE_PROFILE.transit_ms(400) == pytest.approx(4 * SPINE_PROFILE.transit_ms(100))
 
 
 # ── SSEP scenarios ─────────────────────────────────────────────────────────
+
 
 def test_ssep_entry_segments_are_far_apart() -> None:
     """Median enters cervically, tibial lumbosacrally — the depth difference
@@ -115,7 +115,7 @@ def test_ssep_scenarios_carry_their_own_ap_width() -> None:
 
 def test_ssep_event_count_follows_rate_and_duration() -> None:
     sc = median_nerve_ssep_scenario(duration_s=4.0, rate_hz=5.0)
-    assert len(sc.events) == 21          # 4 s x 5 Hz + 1
+    assert len(sc.events) == 21  # 4 s x 5 Hz + 1
 
 
 def test_ssep_rate_avoids_mains_harmonics() -> None:
@@ -143,6 +143,7 @@ def test_muscle_profile_refuses_to_invent_scenarios() -> None:
 
 # ── generator placement ────────────────────────────────────────────────────
 
+
 def _positions(z_values) -> np.ndarray:
     pos = np.zeros((len(z_values), 3))
     pos[:, 2] = z_values
@@ -166,6 +167,7 @@ def test_tibial_and_median_resolve_to_different_sources() -> None:
 def test_scenario_without_generator_uses_most_rostral_source() -> None:
     """Vagal scenarios keep the historical 'highest Z' behaviour."""
     from inob.physiology.scenarios import baroreceptor_scenario
+
     pos = _positions([1100.0, 1300.0, 1500.0, 1200.0])
     assert resolve_source_index(pos, baroreceptor_scenario()) == 2
 

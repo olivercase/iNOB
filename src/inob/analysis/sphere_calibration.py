@@ -12,6 +12,7 @@ correct value empirically).
 
 Outputs to ``outputs/calibration/`` so the calibration is reproducible.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── geometry ───────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class SphereCalibration:
@@ -72,11 +74,14 @@ def build_sphere_fem(
     ys = mn[1] + (np.arange(n) + 0.5) * pitch_mm
     zs = mn[2] + (np.arange(n) + 0.5) * pitch_mm
     X, Y, Z = np.meshgrid(xs, ys, zs, indexing="ij")
-    inside = (X ** 2 + Y ** 2 + Z ** 2) <= radius_mm ** 2
-    label_vol = inside.astype(np.uint8)        # tissue id = 1 inside, 0 outside
+    inside = (X**2 + Y**2 + Z**2) <= radius_mm**2
+    label_vol = inside.astype(np.uint8)  # tissue id = 1 inside, 0 outside
     logger.info(
         "sphere voxel grid: shape=%s  (%.0fM voxels)  R=%.0f mm  pitch=%.1f mm",
-        label_vol.shape, np.prod(label_vol.shape) / 1e6, radius_mm, pitch_mm,
+        label_vol.shape,
+        np.prod(label_vol.shape) / 1e6,
+        radius_mm,
+        pitch_mm,
     )
 
     node, elem, _face = im.cgalv2m(label_vol, radbound, maxvol)
@@ -96,7 +101,10 @@ def build_sphere_fem(
 
 
 def build_sphere_electrodes(
-    radius_mm: float, n_electrodes: int = 200, *, seed: int = 0,
+    radius_mm: float,
+    n_electrodes: int = 200,
+    *,
+    seed: int = 0,
 ) -> SensorArray:
     """Sample ``n_electrodes`` near-uniform points on a sphere of radius ``r``."""
     # Fibonacci lattice — deterministic and almost-uniform
@@ -106,19 +114,22 @@ def build_sphere_electrodes(
     theta = 2.0 * np.pi * indices / phi
     z = 1.0 - (2.0 * indices + 1.0) / n_electrodes
     r = np.sqrt(np.maximum(1.0 - z * z, 0.0))
-    pos = np.column_stack([
-        radius_mm * r * np.cos(theta),
-        radius_mm * r * np.sin(theta),
-        radius_mm * z,
-    ])
-    pos = pos + rng.normal(0.0, 1e-4, pos.shape)   # tiny jitter for numerical safety
+    pos = np.column_stack(
+        [
+            radius_mm * r * np.cos(theta),
+            radius_mm * r * np.sin(theta),
+            radius_mm * z,
+        ]
+    )
+    pos = pos + rng.normal(0.0, 1e-4, pos.shape)  # tiny jitter for numerical safety
     pos = pos / np.linalg.norm(pos, axis=1, keepdims=True) * radius_mm
-    ori = pos / radius_mm                           # outward normal
+    ori = pos / radius_mm  # outward normal
     n = len(pos)
     width = max(4, int(np.ceil(np.log10(max(n, 10)))))
     labels = tuple(f"sph-{i:0{width}d}" for i in range(n))
     return SensorArray(
-        coilpos=pos, coilori=ori,
+        coilpos=pos,
+        coilori=ori,
         labels=labels,
         chantype=tuple(["eeg"] * n),
         chanunit=tuple(["V"] * n),
@@ -128,9 +139,13 @@ def build_sphere_electrodes(
 
 # ── DUNEuro forward on the sphere ──────────────────────────────────────────
 
+
 def run_sphere_eeg_forward(
-    sphere_fem: FemMesh, electrodes: SensorArray,
-    *, source_pos_mm: np.ndarray, sigma_S_per_m: float = 0.43,
+    sphere_fem: FemMesh,
+    electrodes: SensorArray,
+    *,
+    source_pos_mm: np.ndarray,
+    sigma_S_per_m: float = 0.43,
     duneuro_path: Path | None = None,
     source_model: dict[str, str] | None = None,
 ) -> np.ndarray:
@@ -147,12 +162,13 @@ def run_sphere_eeg_forward(
     """
     source_model = source_model or {"type": "partial_integration"}
     import sys
+
     if duneuro_path is not None:
         if str(duneuro_path) not in sys.path:
             sys.path.insert(0, str(duneuro_path))
     import duneuropy as dp
 
-    sigma_mm = sigma_S_per_m * 1e-3        # mm-mode: σ in S/mm
+    sigma_mm = sigma_S_per_m * 1e-3  # mm-mode: σ in S/mm
 
     driver_cfg = {
         "type": "fitted",
@@ -169,8 +185,7 @@ def run_sphere_eeg_forward(
             "weights": "tensorOnly",
         },
         "volume_conductor": {
-            "grid": {"nodes": sphere_fem.nodes,
-                     "elements": sphere_fem.tets.astype(np.int64)},
+            "grid": {"nodes": sphere_fem.nodes, "elements": sphere_fem.tets.astype(np.int64)},
             "tensors": {
                 "labels": (sphere_fem.tissue.astype(np.int64) - 1),
                 "conductivities": np.array([sigma_mm], dtype=np.float64),
@@ -190,13 +205,16 @@ def run_sphere_eeg_forward(
     driver_cfg["source_model"] = source_model
     fields_raw, _ = driver.applyEEGTransfer(T, dipoles, driver_cfg)
     L = np.column_stack([np.asarray(f) for f in fields_raw])
-    L = L - L.mean(axis=0, keepdims=True)        # common-average reference
-    return L          # shape (n_elec, 3)
+    L = L - L.mean(axis=0, keepdims=True)  # common-average reference
+    return L  # shape (n_elec, 3)
 
 
 def _per_dipole_analytic(
-    src_pos_mm: np.ndarray, electrode_pos_mm: np.ndarray,
-    *, radius_mm: float, sigma_S_per_m: float,
+    src_pos_mm: np.ndarray,
+    electrode_pos_mm: np.ndarray,
+    *,
+    radius_mm: float,
+    sigma_S_per_m: float,
 ) -> np.ndarray:
     """Berg-Scherg potentials for X, Y, Z moments of unit dipole.
 
@@ -209,13 +227,16 @@ def _per_dipole_analytic(
     out = np.zeros((len(electrode_pos_mm), 3), dtype=np.float64)
     for k in range(3):
         Q = np.zeros(3)
-        Q[k] = 1.0     # unit dipole moment, A·m  (so output is V/(A·m))
+        Q[k] = 1.0  # unit dipole moment, A·m  (so output is V/(A·m))
         v = homogeneous_sphere_eeg_potential(
-            src_m, Q, elec_m,
-            sphere_radius_m=R_m, sigma_S_per_m=sigma_S_per_m,
+            src_m,
+            Q,
+            elec_m,
+            sphere_radius_m=R_m,
+            sigma_S_per_m=sigma_S_per_m,
         )
         out[:, k] = v
-    return out         # V/(A·m), shape (n_elec, 3)
+    return out  # V/(A·m), shape (n_elec, 3)
 
 
 def calibrate_eeg_factor(
@@ -245,16 +266,20 @@ def calibrate_eeg_factor(
     src_pos_mm = np.array([0.0, 0.0, source_radius_mm], dtype=np.float64)
 
     L_raw = run_sphere_eeg_forward(
-        fem, electrodes,
-        source_pos_mm=src_pos_mm, sigma_S_per_m=sigma_S_per_m,
+        fem,
+        electrodes,
+        source_pos_mm=src_pos_mm,
+        sigma_S_per_m=sigma_S_per_m,
         duneuro_path=duneuro_path,
     )
     np.save(out_dir / "sphere_L_raw.npy", L_raw)
 
     V_analytic = _per_dipole_analytic(
-        src_pos_mm, electrodes.coilpos,
-        radius_mm=radius_mm, sigma_S_per_m=sigma_S_per_m,
-    )                                      # V/(A·m)
+        src_pos_mm,
+        electrodes.coilpos,
+        radius_mm=radius_mm,
+        sigma_S_per_m=sigma_S_per_m,
+    )  # V/(A·m)
     # In our human-friendly slot we report µV/(nA·m).
     # 1 V/(A·m) = 1e6 µV / 1e9 nA·m = 1e-3 µV/(nA·m)
     V_analytic_uV_per_nAm = V_analytic * 1e-3
@@ -266,11 +291,10 @@ def calibrate_eeg_factor(
     keep = (np.abs(flat_V) > 0.05 * np.abs(flat_V).max()) & (np.abs(flat_L) > 0)
     ratio = flat_V[keep] / flat_L[keep]
     factor_median = float(np.median(ratio))
-    factor_geomean = float(np.exp(np.mean(np.log(np.abs(ratio[ratio != 0]))))
-                             * np.sign(np.median(ratio)))
-    factor_peak = float(
-        np.abs(V_analytic_uV_per_nAm).max() / max(np.abs(L_raw).max(), 1e-30)
+    factor_geomean = float(
+        np.exp(np.mean(np.log(np.abs(ratio[ratio != 0])))) * np.sign(np.median(ratio))
     )
+    factor_peak = float(np.abs(V_analytic_uV_per_nAm).max() / max(np.abs(L_raw).max(), 1e-30))
     summary = SphereCalibration(
         radius_mm=radius_mm,
         pitch_mm=pitch_mm,
@@ -280,9 +304,9 @@ def calibrate_eeg_factor(
         n_nodes=len(fem.nodes),
         n_tets=len(fem.tets),
         raw_peak=float(np.abs(L_raw).max()),
-        raw_rms=float(np.sqrt(np.mean(L_raw ** 2))),
+        raw_rms=float(np.sqrt(np.mean(L_raw**2))),
         analytic_peak_uV_per_nAm=float(np.abs(V_analytic_uV_per_nAm).max()),
-        analytic_rms_uV_per_nAm=float(np.sqrt(np.mean(V_analytic_uV_per_nAm ** 2))),
+        analytic_rms_uV_per_nAm=float(np.sqrt(np.mean(V_analytic_uV_per_nAm**2))),
         factor_peak=factor_peak,
         factor_median=factor_median,
         factor_geomean=factor_geomean,
@@ -291,13 +315,17 @@ def calibrate_eeg_factor(
     logger.info(
         "[calibration] raw peak=%.3e  analytic peak=%.3e µV/nAm  "
         "factor: peak=%.3e  median=%.3e  geomean=%.3e",
-        summary.raw_peak, summary.analytic_peak_uV_per_nAm,
-        summary.factor_peak, summary.factor_median, summary.factor_geomean,
+        summary.raw_peak,
+        summary.analytic_peak_uV_per_nAm,
+        summary.factor_peak,
+        summary.factor_median,
+        summary.factor_geomean,
     )
     return summary
 
 
 # ── MEG sphere validation (Sarvas analytic) ────────────────────────────────
+
 
 @dataclass(frozen=True)
 class MegSphereValidation:
@@ -310,15 +338,20 @@ class MegSphereValidation:
     n_tets: int
     fem_peak_fT_per_nAm: float
     sarvas_peak_fT_per_nAm: float
-    rdm: float          # relative difference measure (topography); 0 = perfect
-    mag: float          # magnitude ratio FEM / analytic; 1 = perfect
+    rdm: float  # relative difference measure (topography); 0 = perfect
+    mag: float  # magnitude ratio FEM / analytic; 1 = perfect
     mm_mode_to_si: float  # calibration constant relating raw → SI (should be 0.1)
 
 
 def run_sphere_meg_forward(
-    sphere_fem: FemMesh, coilpos_mm: np.ndarray, coilori: np.ndarray,
-    *, source_pos_mm: np.ndarray, moment: np.ndarray,
-    sigma_S_per_m: float = 0.33, duneuro_path: Path | None = None,
+    sphere_fem: FemMesh,
+    coilpos_mm: np.ndarray,
+    coilori: np.ndarray,
+    *,
+    source_pos_mm: np.ndarray,
+    moment: np.ndarray,
+    sigma_S_per_m: float = 0.33,
+    duneuro_path: Path | None = None,
     source_model: dict[str, str] | None = None,
 ) -> np.ndarray:
     """DUNEuro MEG forward on the sphere. Returns the SI field (n_coils,) fT/nAm.
@@ -335,6 +368,7 @@ def run_sphere_meg_forward(
     """
     source_model = source_model or {"type": "partial_integration"}
     import sys
+
     if duneuro_path is not None and str(duneuro_path) not in sys.path:
         sys.path.insert(0, str(duneuro_path))
     import duneuropy as dp
@@ -343,14 +377,25 @@ def run_sphere_meg_forward(
 
     sigma_mm = sigma_S_per_m * 1e-3
     driver_cfg = {
-        "type": "fitted", "solver_type": "cg", "element_type": "tetrahedron",
-        "post_process": "false", "post_process_meg": "true", "subtract_mean": "false",
-        "solver": {"reduction": "1e-10", "edge_norm_type": "houston", "penalty": "20",
-                   "scheme": "sipg", "weights": "tensorOnly"},
+        "type": "fitted",
+        "solver_type": "cg",
+        "element_type": "tetrahedron",
+        "post_process": "false",
+        "post_process_meg": "true",
+        "subtract_mean": "false",
+        "solver": {
+            "reduction": "1e-10",
+            "edge_norm_type": "houston",
+            "penalty": "20",
+            "scheme": "sipg",
+            "weights": "tensorOnly",
+        },
         "volume_conductor": {
             "grid": {"nodes": sphere_fem.nodes, "elements": sphere_fem.tets.astype(np.int64)},
-            "tensors": {"labels": (sphere_fem.tissue.astype(np.int64) - 1),
-                        "conductivities": np.array([sigma_mm], dtype=np.float64)},
+            "tensors": {
+                "labels": (sphere_fem.tissue.astype(np.int64) - 1),
+                "conductivities": np.array([sigma_mm], dtype=np.float64),
+            },
         },
         "meg": {"intorderadd": "5", "type": "physical"},
     }
@@ -363,8 +408,8 @@ def run_sphere_meg_forward(
     T = np.array(T_raw)
     driver_cfg["source_model"] = source_model
     dipole = [dp.Dipole3d(np.asarray(source_pos_mm, float), np.asarray(moment, float))]
-    L_si = compute_meg_leadfield(driver, T, dipole, driver_cfg)   # (n_coils, 1), T/(A·m)
-    return L_si[:, 0] * 1e6                                        # → fT/nAm
+    L_si = compute_meg_leadfield(driver, T, dipole, driver_cfg)  # (n_coils, 1), T/(A·m)
+    return L_si[:, 0] * 1e6  # → fT/nAm
 
 
 def validate_meg_sphere(
@@ -396,22 +441,26 @@ def validate_meg_sphere(
     source model differs.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    fem = build_sphere_fem(radius_mm=radius_mm, pitch_mm=pitch_mm,
-                           radbound=1.5, maxvol=4.0)
+    fem = build_sphere_fem(radius_mm=radius_mm, pitch_mm=pitch_mm, radbound=1.5, maxvol=4.0)
 
     rng = np.random.default_rng(seed)
     u = rng.normal(size=(4 * n_coils, 3))
     u /= np.linalg.norm(u, axis=1, keepdims=True)
-    u = u[u[:, 2] > 0.2][:n_coils]                    # upper cap, near the source
+    u = u[u[:, 2] > 0.2][:n_coils]  # upper cap, near the source
     coilpos = u * coil_radius_mm
-    coilori = u.copy()                                # radial magnetometers
+    coilori = u.copy()  # radial magnetometers
 
     src = np.array([0.0, 0.0, source_radius_mm], dtype=np.float64)
-    moment = np.array([1.0, 0.0, 0.0], dtype=np.float64)   # tangential → non-silent
+    moment = np.array([1.0, 0.0, 0.0], dtype=np.float64)  # tangential → non-silent
 
     fem_fT = run_sphere_meg_forward(
-        fem, coilpos, coilori, source_pos_mm=src, moment=moment,
-        sigma_S_per_m=sigma_S_per_m, duneuro_path=duneuro_path,
+        fem,
+        coilpos,
+        coilori,
+        source_pos_mm=src,
+        moment=moment,
+        sigma_S_per_m=sigma_S_per_m,
+        duneuro_path=duneuro_path,
         source_model=source_model,
     )
     B = sarvas_meg_field(src * 1e-3, moment * 1e-9, coilpos * 1e-3)
@@ -424,17 +473,25 @@ def validate_meg_sphere(
     from inob.forward.duneuro_driver import MEG_MM_MODE_TO_SI
 
     summary = MegSphereValidation(
-        radius_mm=radius_mm, pitch_mm=pitch_mm, coil_radius_mm=coil_radius_mm,
-        source_radius_mm=source_radius_mm, n_coils=len(coilpos),
-        n_nodes=len(fem.nodes), n_tets=len(fem.tets),
+        radius_mm=radius_mm,
+        pitch_mm=pitch_mm,
+        coil_radius_mm=coil_radius_mm,
+        source_radius_mm=source_radius_mm,
+        n_coils=len(coilpos),
+        n_nodes=len(fem.nodes),
+        n_tets=len(fem.tets),
         fem_peak_fT_per_nAm=float(np.abs(fem_fT).max()),
         sarvas_peak_fT_per_nAm=float(np.abs(sarvas_fT).max()),
-        rdm=rdm, mag=mag, mm_mode_to_si=float(MEG_MM_MODE_TO_SI),
+        rdm=rdm,
+        mag=mag,
+        mm_mode_to_si=float(MEG_MM_MODE_TO_SI),
     )
     (out_dir / "meg_sphere_validation.json").write_text(json.dumps(asdict(summary), indent=2))
     logger.info(
         "[MEG sphere] FEM peak=%.3f  Sarvas peak=%.3f fT/nAm  RDM=%.4f  MAG=%.4f",
-        summary.fem_peak_fT_per_nAm, summary.sarvas_peak_fT_per_nAm,
-        summary.rdm, summary.mag,
+        summary.fem_peak_fT_per_nAm,
+        summary.sarvas_peak_fT_per_nAm,
+        summary.rdm,
+        summary.mag,
     )
     return summary

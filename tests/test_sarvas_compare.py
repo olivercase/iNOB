@@ -1,4 +1,5 @@
 """Tests for the Sarvas-vs-FEM comparison helpers (no DUNEuro/leadfield needed)."""
+
 from __future__ import annotations
 
 import json
@@ -24,23 +25,26 @@ from inob.io.hdf5 import FemMesh
 def test_hamalainen_dipole_moment_matches_hand_calc() -> None:
     # Q = pi * d^2 * sigma * dV / 4, with d in m, dV in V, sigma in S/m.
     Q = hamalainen_dipole_moment_nAm(
-        fibre_diameter_um=10.0, sigma_intracellular_S_per_m=1.0,
+        fibre_diameter_um=10.0,
+        sigma_intracellular_S_per_m=1.0,
         action_potential_mV=80.0,
     )
     d_m = 10.0e-6
     dV_V = 80.0e-3
-    expected_Am = np.pi * d_m ** 2 * 1.0 * dV_V / 4.0
+    expected_Am = np.pi * d_m**2 * 1.0 * dV_V / 4.0
     assert Q == pytest.approx(expected_Am * 1e9)
     assert Q > 0
 
 
 def test_hamalainen_dipole_moment_scales_with_diameter_squared() -> None:
     Q1 = hamalainen_dipole_moment_nAm(
-        fibre_diameter_um=5.0, sigma_intracellular_S_per_m=1.0,
+        fibre_diameter_um=5.0,
+        sigma_intracellular_S_per_m=1.0,
         action_potential_mV=70.0,
     )
     Q2 = hamalainen_dipole_moment_nAm(
-        fibre_diameter_um=10.0, sigma_intracellular_S_per_m=1.0,
+        fibre_diameter_um=10.0,
+        sigma_intracellular_S_per_m=1.0,
         action_potential_mV=70.0,
     )
     assert Q2 == pytest.approx(Q1 * 4.0)
@@ -49,19 +53,35 @@ def test_hamalainen_dipole_moment_scales_with_diameter_squared() -> None:
 def _fem_with_bone_and_vagus() -> FemMesh:
     # Two "bone" tets centred at (10, 0, z) and two "vagus_left" tets whose
     # centroid ends up off-axis, so the weighted estimate is checkable.
-    nodes = np.array([
-        [10.0, 0.0, 0.0], [11.0, 0.0, 0.0], [10.0, 1.0, 0.0], [10.0, 0.0, 1.0],
-        [10.0, 0.0, 5.0], [11.0, 0.0, 5.0], [10.0, 1.0, 5.0], [10.0, 0.0, 6.0],
-        [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
-    ], dtype=np.float64)
-    tets = np.array([
-        [0, 1, 2, 3],
-        [4, 5, 6, 7],
-        [8, 9, 10, 11],
-    ], dtype=np.int32)
+    nodes = np.array(
+        [
+            [10.0, 0.0, 0.0],
+            [11.0, 0.0, 0.0],
+            [10.0, 1.0, 0.0],
+            [10.0, 0.0, 1.0],
+            [10.0, 0.0, 5.0],
+            [11.0, 0.0, 5.0],
+            [10.0, 1.0, 5.0],
+            [10.0, 0.0, 6.0],
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    tets = np.array(
+        [
+            [0, 1, 2, 3],
+            [4, 5, 6, 7],
+            [8, 9, 10, 11],
+        ],
+        dtype=np.int32,
+    )
     tissue = np.array([1, 1, 2], dtype=np.int32)  # bone, bone, vagus_left
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                    tissue_labels=("bone", "vagus_left"), unit="mm")
+    return FemMesh(
+        nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("bone", "vagus_left"), unit="mm"
+    )
 
 
 def test_estimate_cervical_axis_xy_weights_toward_bone() -> None:
@@ -75,13 +95,18 @@ def test_estimate_cervical_axis_xy_weights_toward_bone() -> None:
 
 
 def test_estimate_cervical_axis_xy_falls_back_without_bone() -> None:
-    nodes = np.array([
-        [2.0, 4.0, 0.0], [3.0, 4.0, 0.0], [2.0, 5.0, 0.0], [2.0, 4.0, 1.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [2.0, 4.0, 0.0],
+            [3.0, 4.0, 0.0],
+            [2.0, 5.0, 0.0],
+            [2.0, 4.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3]], dtype=np.int32)
     tissue = np.array([1], dtype=np.int32)
-    fem = FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                   tissue_labels=("vagus_left",), unit="mm")
+    fem = FemMesh(nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("vagus_left",), unit="mm")
     src_pos = nodes[:1].repeat(2, axis=0)
     axis_xy = estimate_cervical_axis_xy(fem, src_pos)
     np.testing.assert_allclose(axis_xy, src_pos[:, :2].mean(axis=0))
@@ -101,13 +126,16 @@ def test_sarvas_predict_at_coils_zero_off_axis_gives_zero_field() -> None:
     # A radial dipole (moment along r0) produces zero magnetic field
     # everywhere (Sarvas/Biot-Savart symmetry for the radial component).
     sphere_centre = np.zeros(3)
-    source_pos_mm = np.array([0.0, 0.0, 40.0])   # r0 along +Z
+    source_pos_mm = np.array([0.0, 0.0, 40.0])  # r0 along +Z
     moment_direction = np.array([0.0, 0.0, 1.0])  # radial moment
     coil_pos_mm = np.array([[60.0, 0.0, 0.0], [0.0, 60.0, 0.0]])
     coil_orient = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     B = sarvas_predict_at_coils(
-        source_pos_mm, moment_direction, Q_nAm=70.0,
-        coil_pos_mm=coil_pos_mm, coil_orient=coil_orient,
+        source_pos_mm,
+        moment_direction,
+        Q_nAm=70.0,
+        coil_pos_mm=coil_pos_mm,
+        coil_orient=coil_orient,
         sphere_centre_mm=sphere_centre,
     )
     assert B.shape == (2,)
@@ -121,8 +149,11 @@ def test_sarvas_predict_at_coils_tangential_moment_nonzero() -> None:
     coil_pos_mm = np.array([[0.0, 60.0, 0.0]])
     coil_orient = np.array([[0.0, 0.0, 1.0]])
     B = sarvas_predict_at_coils(
-        source_pos_mm, moment_direction, Q_nAm=70.0,
-        coil_pos_mm=coil_pos_mm, coil_orient=coil_orient,
+        source_pos_mm,
+        moment_direction,
+        Q_nAm=70.0,
+        coil_pos_mm=coil_pos_mm,
+        coil_orient=coil_orient,
         sphere_centre_mm=sphere_centre,
     )
     assert B.shape == (1,)
@@ -130,9 +161,13 @@ def test_sarvas_predict_at_coils_tangential_moment_nonzero() -> None:
 
 
 def test_vagus_tangents_straight_line() -> None:
-    pos = np.column_stack([
-        np.zeros(5), np.zeros(5), np.arange(5, dtype=np.float64) * 2.0,
-    ])
+    pos = np.column_stack(
+        [
+            np.zeros(5),
+            np.zeros(5),
+            np.arange(5, dtype=np.float64) * 2.0,
+        ]
+    )
     tangents = vagus_tangents(pos)
     assert tangents.shape == pos.shape
     for row in tangents:
@@ -181,7 +216,8 @@ def test_bootstrap_ratio_ci_deterministic_and_ordered() -> None:
 
 def test_bootstrap_ratio_ci_empty_input() -> None:
     lo, med, hi = _bootstrap_ratio_ci(
-        sarvas_band=np.array([]), fem_band=np.array([]),
+        sarvas_band=np.array([]),
+        fem_band=np.array([]),
     )
     assert np.isnan(lo) and np.isnan(med) and np.isnan(hi)
 
@@ -196,7 +232,8 @@ def test_save_comparison_summary_writes_expected_keys(tmp_path: Path) -> None:
     geom = SarvasGeometry(sphere_centres_mm=centres, axis_xy_mm=axis_xy)
     coil_pos = np.array([[98.5, 0.0, 0.0], [0.0, 98.5, 5.0]])
     distances = np.linalg.norm(
-        coil_pos[:, None, :] - centres[None, :, :], axis=2,
+        coil_pos[:, None, :] - centres[None, :, :],
+        axis=2,
     )
     result = SarvasVsFemResult(
         geometry=geom,
@@ -212,8 +249,12 @@ def test_save_comparison_summary_writes_expected_keys(tmp_path: Path) -> None:
     assert out.exists()
     data = json.loads(out.read_text())
     for key in (
-        "Q_nAm", "n_sources", "n_radial_coils", "n_band_pairs",
-        "sarvas_peak_fT_per_nAm_full", "fem_peak_fT_per_nAm_full",
+        "Q_nAm",
+        "n_sources",
+        "n_radial_coils",
+        "n_band_pairs",
+        "sarvas_peak_fT_per_nAm_full",
+        "fem_peak_fT_per_nAm_full",
         "ratio_fem_to_sarvas_peak_band",
     ):
         assert key in data

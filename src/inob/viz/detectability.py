@@ -32,6 +32,7 @@ fractional trial count that has no physical meaning — you cannot average a
 fraction of a trial. Such sources are reported as "detectable in one trial"
 (N = 1), and the recording-time panel bottoms out at one trial period (1/rate).
 """
+
 from __future__ import annotations
 
 import logging
@@ -70,6 +71,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class DetectabilityScenario:
     """A named source-strength + per-trial-event-rate scenario."""
+
     label: str
     Q_nAm: float
     description: str = ""
@@ -88,17 +90,23 @@ class DetectabilityScenario:
 # result. It is kept in the top rung's description rather than as a rung, so
 # the reference is not lost; `--q-nAm 70` still runs it explicitly.
 DEFAULT_SCENARIOS: tuple[DetectabilityScenario, ...] = (
-    DetectabilityScenario("Q = 1 nA·m  (calibration unit)", 1.0,
-                           "Reference scale, leadfield calibration."),
-    DetectabilityScenario("Q = 5.11 nA·m  (cord anchor)", 5.11,
-                           "The cervical-cord magnetospinography figure, run "
-                           "here so vagus and spine share a rung exactly."),
-    DetectabilityScenario("Q = 10 nA·m  (modest CAP)", 10.0,
-                           "Reflex / mild evoked activation."),
-    DetectabilityScenario("Q = 20 nA·m  (strong CAP)", 20.0,
-                           "Top of the planning range. Full A+C summation "
-                           "(70 nA·m, Bu et al. 2024) is 3.5x higher again and "
-                           "is an upper bound, not a planning figure."),
+    DetectabilityScenario(
+        "Q = 1 nA·m  (calibration unit)", 1.0, "Reference scale, leadfield calibration."
+    ),
+    DetectabilityScenario(
+        "Q = 5.11 nA·m  (cord anchor)",
+        5.11,
+        "The cervical-cord magnetospinography figure, run "
+        "here so vagus and spine share a rung exactly.",
+    ),
+    DetectabilityScenario("Q = 10 nA·m  (modest CAP)", 10.0, "Reflex / mild evoked activation."),
+    DetectabilityScenario(
+        "Q = 20 nA·m  (strong CAP)",
+        20.0,
+        "Top of the planning range. Full A+C summation "
+        "(70 nA·m, Bu et al. 2024) is 3.5x higher again and "
+        "is an upper bound, not a planning figure.",
+    ),
 )
 
 # Muscle (magnetomyography) source-strength range. Muscle fibres are ~60 µm —
@@ -120,14 +128,22 @@ DEFAULT_SCENARIOS: tuple[DetectabilityScenario, ...] = (
 # Refs: Hämäläinen 1993 (Q = π d² σ ΔV/4); Cohen & Givler 1972; Broser 2018/2021
 # (OPM-MMG single-MU fields); Farina & Merletti 2004 (MU / MUAP physiology).
 MUSCLE_SCENARIOS: tuple[DetectabilityScenario, ...] = (
-    DetectabilityScenario("Q = 10 nA·m  (single MUAP)", 10.0,
-                           "One motor unit, ~10²–10³ fibres near-synchronous."),
-    DetectabilityScenario("Q = 50 nA·m  (weak contraction)", 50.0,
-                           "A few motor units recruited (low voluntary force)."),
-    DetectabilityScenario("Q = 200 nA·m  (moderate contraction)", 200.0,
-                           "Many motor units; moderate voluntary force."),
-    DetectabilityScenario("Q = 1000 nA·m  (evoked M-wave)", 1000.0,
-                           "Whole-muscle synchronous compound MAP (stimulated)."),
+    DetectabilityScenario(
+        "Q = 10 nA·m  (single MUAP)", 10.0, "One motor unit, ~10²–10³ fibres near-synchronous."
+    ),
+    DetectabilityScenario(
+        "Q = 50 nA·m  (weak contraction)",
+        50.0,
+        "A few motor units recruited (low voluntary force).",
+    ),
+    DetectabilityScenario(
+        "Q = 200 nA·m  (moderate contraction)", 200.0, "Many motor units; moderate voluntary force."
+    ),
+    DetectabilityScenario(
+        "Q = 1000 nA·m  (evoked M-wave)",
+        1000.0,
+        "Whole-muscle synchronous compound MAP (stimulated).",
+    ),
 )
 
 
@@ -147,19 +163,27 @@ MUSCLE_SCENARIOS: tuple[DetectabilityScenario, ...] = (
 def spine_scenarios() -> tuple[DetectabilityScenario, ...]:
     """Q ladder for the spinal SSEP, built around the literature anchor."""
     from inob.physiology.profiles import SPINE_PROFILE
+
     anchor = SPINE_PROFILE.default_strength_nAm
     return (
-        DetectabilityScenario("Q = 1 nA·m  (calibration unit)", 1.0,
-                              "Reference scale; also the low end of reported "
-                              "cervical-cord equivalent dipoles."),
-        DetectabilityScenario(f"Q = {anchor:.2f} nA·m  (median-nerve SSEP)", anchor,
-                              "Magnetospinography-derived cervical volley "
-                              "(Kawabata 2002, Sasaki 2008) — the anchor."),
-        DetectabilityScenario("Q = 10 nA·m  (strong volley)", 10.0,
-                              "Upper end of the reported cord-ECD range."),
-        DetectabilityScenario("Q = 20 nA·m  (optimistic bound)", 20.0,
-                              "Above anything reported for the cord; shown as "
-                              "a bound, not an expectation."),
+        DetectabilityScenario(
+            "Q = 1 nA·m  (calibration unit)",
+            1.0,
+            "Reference scale; also the low end of reported cervical-cord equivalent dipoles.",
+        ),
+        DetectabilityScenario(
+            f"Q = {anchor:.2f} nA·m  (median-nerve SSEP)",
+            anchor,
+            "Magnetospinography-derived cervical volley (Kawabata 2002, Sasaki 2008) — the anchor.",
+        ),
+        DetectabilityScenario(
+            "Q = 10 nA·m  (strong volley)", 10.0, "Upper end of the reported cord-ECD range."
+        ),
+        DetectabilityScenario(
+            "Q = 20 nA·m  (optimistic bound)",
+            20.0,
+            "Above anything reported for the cord; shown as a bound, not an expectation.",
+        ),
     )
 
 
@@ -180,9 +204,11 @@ def fixed_q_scenarios(*Q_nAm: float) -> tuple[DetectabilityScenario, ...]:
     if not Q_nAm:
         raise ValueError("fixed_q_scenarios needs at least one source strength")
     return tuple(
-        DetectabilityScenario(f"Q = {q:g} nA·m", float(q),
-                              "Explicit source strength (--q-nAm), not the "
-                              "target's own physiology anchor.")
+        DetectabilityScenario(
+            f"Q = {q:g} nA·m",
+            float(q),
+            "Explicit source strength (--q-nAm), not the target's own physiology anchor.",
+        )
         for q in sorted(float(q) for q in Q_nAm)
     )
 
@@ -216,7 +242,7 @@ def per_source_rms_amplitude(L: np.ndarray) -> np.ndarray:
     C, three_S = L.shape
     S = three_S // 3
     L3 = L.reshape(C, S, 3)
-    return np.sqrt(np.mean(L3 ** 2, axis=(0, 2)))
+    return np.sqrt(np.mean(L3**2, axis=(0, 2)))
 
 
 def per_source_eeg_amplitude(L: np.ndarray) -> np.ndarray:
@@ -259,13 +285,18 @@ class PropagationCorrection:
     decomposition (see that module's Scope note). Applied uniformly across the
     source axis, and the figure says so.
     """
+
     meg: float
     eeg: float | None
     profile_name: str
 
 
 def propagation_correction(
-    cfg: Config, meg_lf, eeg_lf, *, source_idx: int,
+    cfg: Config,
+    meg_lf,
+    eeg_lf,
+    *,
+    source_idx: int,
 ) -> PropagationCorrection | None:
     """Propagating/stationary factors, or ``None`` where lumping is defensible.
 
@@ -316,7 +347,8 @@ def propagation_correction(
         )
     logger.info(
         "propagation correction (%s profile): MEG ×%.3f, EEG ×%s",
-        profile.name, meg_factor,
+        profile.name,
+        meg_factor,
         "n/a" if eeg_factor is None else f"{eeg_factor:.3f}",
     )
     return PropagationCorrection(meg_factor, eeg_factor, profile.name)
@@ -329,14 +361,16 @@ def clinical_average_budget(cfg: Config) -> tuple[int, int] | None:
     coherently — the spinal SSEP targets. Spontaneous vagal traffic has no
     equivalent budget, so it gets ``None`` and no band is drawn.
     """
-    return (CLINICAL_AVERAGE_BUDGET
-            if source_target_tag(cfg).startswith("spine") else None)
+    return CLINICAL_AVERAGE_BUDGET if source_target_tag(cfg).startswith("spine") else None
 
 
 # ── core detectability math ────────────────────────────────────────────────
 
+
 def required_trials(
-    signal_per_trial: float, sigma_per_trial: float, snr_target: float = 3.0,
+    signal_per_trial: float,
+    sigma_per_trial: float,
+    snr_target: float = 3.0,
 ) -> float:
     """How many averaged trials to reach the SNR target.
 
@@ -353,7 +387,9 @@ def required_trials(
 
 
 def snr_after_n_trials(
-    signal_per_trial: float, sigma_per_trial: float, n_trials: float,
+    signal_per_trial: float,
+    sigma_per_trial: float,
+    n_trials: float,
 ) -> float:
     """SNR after averaging ``n_trials`` repetitions (white noise)."""
     if sigma_per_trial <= 0:
@@ -394,7 +430,8 @@ def _compatible_eeg_leadfield(meg_lf, eeg_lf):
             "different source set (stale cache or a re-run that only "
             "regenerated one modality). Rendering MEG-only until a matching "
             "EEG solve is available.",
-            eeg_lf.source_pos.shape[0], meg_lf.source_pos.shape[0],
+            eeg_lf.source_pos.shape[0],
+            meg_lf.source_pos.shape[0],
         )
         return None
     return eeg_lf
@@ -424,10 +461,14 @@ def default_source_idx(meg_lf, eeg_lf) -> int:
 
 
 def render_detectability(
-    cfg: Config, *, source_idx: int = -1, out_path: Path | None = None,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
+    out_path: Path | None = None,
     dpi: int = 300,
     scenarios: tuple[DetectabilityScenario, ...] | None = None,
-    snr_threshold: float = 3.0, max_trials: int = 1_000_000,
+    snr_threshold: float = 3.0,
+    max_trials: int = 1_000_000,
 ) -> Path:
     """Six-panel detectability figure (3 MEG + 3 EEG).
 
@@ -443,13 +484,12 @@ def render_detectability(
         scenarios = scenarios_for_target(cfg)
     apply_nature_style()
     floors = compute_noise_floors(cfg)
-    sigma_meg = floors.meg_per_channel_fT          # fT per trial, broadband
-    sigma_eeg = floors.eeg_per_channel_uV          # µV per trial
+    sigma_meg = floors.meg_per_channel_fT  # fT per trial, broadband
+    sigma_eeg = floors.eeg_per_channel_uV  # µV per trial
 
     region = source_region_label(cfg)
     meg_lf = load_leadfield(cfg.outputs.forward_npz)
-    eeg_lf = _compatible_eeg_leadfield(
-        meg_lf, _optional_leadfield(cfg.outputs.forward_eeg_npz))
+    eeg_lf = _compatible_eeg_leadfield(meg_lf, _optional_leadfield(cfg.outputs.forward_eeg_npz))
     has_eeg = eeg_lf is not None
     if source_idx < 0:
         source_idx = default_source_idx(meg_lf, eeg_lf)
@@ -457,9 +497,12 @@ def render_detectability(
 
     # One signal number per Z position. MEG: best-channel peak. EEG: best
     # bipolar pair, since a potential is only measurable as a difference.
-    meg_peak = per_source_peak_amplitude(meg_lf.L_fT_per_nAm)   # fT/nAm
-    eeg_peak = (per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)   # µV/nAm
-                if has_eeg else None)
+    meg_peak = per_source_peak_amplitude(meg_lf.L_fT_per_nAm)  # fT/nAm
+    eeg_peak = (
+        per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)  # µV/nAm
+        if has_eeg
+        else None
+    )
     z = meg_lf.source_pos[:, 2]
     # A volume-fill source set (muscle) has no meaningful order along its
     # source list — connecting points by list order in a line plot draws
@@ -486,16 +529,20 @@ def render_detectability(
         "Malliaras-group PEDOT:PSS textile-electrode noise = amplifier + Johnson "
         f"(R = {cfg.noise.eeg_electrode_skin_kohm:g} kΩ), integrated over the "
         f"{cfg.noise.band_label} recording band). "
-        + ("Solid curves lump the event into one stationary dipole at the "
-           "quoted source — an upper bound. Dashed curves apply the "
-           "propagating-source model (inob.analysis.propagation, the same code "
-           "behind cap_compare), measured per modality on that panel's own "
-           "observable and against its own stationary reference, so the "
-           f"factors ({prop.meg:.2f} MEG"
-           + (f", {prop.eeg:.2f} EEG" if prop.eeg is not None else "")
-           + ") differ from the best-radial-channel ratio cap_compare prints. "
-           "One event sweeps the whole structure, so the correction is a "
-           "scalar with no per-source form. " if prop is not None else "")
+        + (
+            "Solid curves lump the event into one stationary dipole at the "
+            "quoted source — an upper bound. Dashed curves apply the "
+            "propagating-source model (inob.analysis.propagation, the same code "
+            "behind cap_compare), measured per modality on that panel's own "
+            "observable and against its own stationary reference, so the "
+            f"factors ({prop.meg:.2f} MEG"
+            + (f", {prop.eeg:.2f} EEG" if prop.eeg is not None else "")
+            + ") differ from the best-radial-channel ratio cap_compare prints. "
+            "One event sweeps the whole structure, so the correction is a "
+            "scalar with no per-source form. "
+            if prop is not None
+            else ""
+        )
         + "Trial counts assume independent white noise across averages — "
         "spatially / temporally correlated environmental MEG noise (heartbeat "
         "artefacts, magnetic shielding residual; cf. Boto et al. 2018) inflates "
@@ -520,16 +567,25 @@ def render_detectability(
     # so the panel label and suptitle text overlap. Reserve a constant ~0.85 in
     # regardless of row count.
     top = 1.0 - 0.85 / fig_h
-    gs = GridSpec(2 if has_eeg else 1, 3, figure=fig,
-                  left=0.06, right=0.97, top=top,
-                  bottom=0.055 + 0.115 * caption_lines / fig_h,
-                  hspace=0.36, wspace=0.30)
+    gs = GridSpec(
+        2 if has_eeg else 1,
+        3,
+        figure=fig,
+        left=0.06,
+        right=0.97,
+        top=top,
+        bottom=0.055 + 0.115 * caption_lines / fig_h,
+        hspace=0.36,
+        wspace=0.30,
+    )
 
     n_grid = np.logspace(0, np.log10(max_trials), 200)
 
     scenario_colors = [
-        NATURE_PALETTE["blue"], NATURE_PALETTE["teal"],
-        NATURE_PALETTE["orange"], NATURE_PALETTE["red"],
+        NATURE_PALETTE["blue"],
+        NATURE_PALETTE["teal"],
+        NATURE_PALETTE["orange"],
+        NATURE_PALETTE["red"],
     ]
 
     def _model_proxies(ax, factor):
@@ -542,34 +598,60 @@ def render_detectability(
         if factor is None:
             return []
         return [
-            Line2D([], [], color=NATURE_PALETTE["axis"], lw=1.4,
-                   label="stationary (upper bound)"),
-            Line2D([], [], color=NATURE_PALETTE["axis"], lw=1.4, ls=(0, (4, 2)),
-                   label=f"propagating (×{factor:.2f})"),
+            Line2D([], [], color=NATURE_PALETTE["axis"], lw=1.4, label="stationary (upper bound)"),
+            Line2D(
+                [],
+                [],
+                color=NATURE_PALETTE["axis"],
+                lw=1.4,
+                ls=(0, (4, 2)),
+                label=f"propagating (×{factor:.2f})",
+            ),
         ]
 
-    def _plot_snr_curves(ax, peak_one_source: float, sigma: float, ylabel: str,
-                         factor: float | None = None):
+    def _plot_snr_curves(
+        ax, peak_one_source: float, sigma: float, ylabel: str, factor: float | None = None
+    ):
         if budget is not None:
-            ax.axvspan(*budget, color=NATURE_PALETTE["axis"], alpha=0.10, lw=0,
-                       label=f"clinical SSEP averages ({budget[0]}–{budget[1]})")
+            ax.axvspan(
+                *budget,
+                color=NATURE_PALETTE["axis"],
+                alpha=0.10,
+                lw=0,
+                label=f"clinical SSEP averages ({budget[0]}–{budget[1]})",
+            )
         for sc, col in zip(scenarios, scenario_colors, strict=False):
             sig = peak_one_source * sc.Q_nAm
-            ax.plot(n_grid, sig / sigma * np.sqrt(n_grid),
-                    color=col, lw=1.6, label=sc.label)
+            ax.plot(n_grid, sig / sigma * np.sqrt(n_grid), color=col, lw=1.6, label=sc.label)
             if factor is not None:
-                ax.plot(n_grid, sig * factor / sigma * np.sqrt(n_grid),
-                        color=col, lw=1.3, ls=(0, (4, 2)), alpha=0.9)
-        ax.axhline(snr_threshold, color=NATURE_PALETTE["axis"], lw=0.8,
-                   linestyle="--", label=f"SNR = {snr_threshold:g}")
+                ax.plot(
+                    n_grid,
+                    sig * factor / sigma * np.sqrt(n_grid),
+                    color=col,
+                    lw=1.3,
+                    ls=(0, (4, 2)),
+                    alpha=0.9,
+                )
+        ax.axhline(
+            snr_threshold,
+            color=NATURE_PALETTE["axis"],
+            lw=0.8,
+            linestyle="--",
+            label=f"SNR = {snr_threshold:g}",
+        )
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel("Number of averaged trials")
         ax.set_ylabel(ylabel)
         handles, labels = ax.get_legend_handles_labels()
         proxies = _model_proxies(ax, factor)
-        ax.legend(handles + proxies, labels + [h.get_label() for h in proxies],
-                  loc="lower right", fontsize=7, handlelength=1.6)
+        ax.legend(
+            handles + proxies,
+            labels + [h.get_label() for h in proxies],
+            loc="lower right",
+            fontsize=7,
+            handlelength=1.6,
+        )
 
     def _line_or_scatter(ax, y, *, color, lw, label=None, ls="-", alpha=1.0):
         """Line for an ordered polyline source set, scatter otherwise.
@@ -581,22 +663,32 @@ def render_detectability(
         if ordered_sources:
             ax.plot(z, y, color=color, lw=lw, label=label, ls=ls, alpha=alpha)
         else:
-            ax.scatter(z, y, color=color, s=6, label=label, alpha=max(alpha, 0.35),
-                       edgecolors="none")
+            ax.scatter(
+                z, y, color=color, s=6, label=label, alpha=max(alpha, 0.35), edgecolors="none"
+            )
 
-    def _plot_trials_per_source(ax, peak_arr: np.ndarray, sigma: float,
-                                  *, ymax: float | None = None,
-                                  factor: float | None = None):
+    def _plot_trials_per_source(
+        ax,
+        peak_arr: np.ndarray,
+        sigma: float,
+        *,
+        ymax: float | None = None,
+        factor: float | None = None,
+    ):
         all_n = []
         if budget is not None:
-            ax.axhspan(*budget, color=NATURE_PALETTE["axis"], alpha=0.10, lw=0,
-                       label=f"clinical SSEP averages ({budget[0]}–{budget[1]})")
+            ax.axhspan(
+                *budget,
+                color=NATURE_PALETTE["axis"],
+                alpha=0.10,
+                lw=0,
+                label=f"clinical SSEP averages ({budget[0]}–{budget[1]})",
+            )
 
         def trials(sig):
             # Floor at 1 trial: a source already above threshold in a single
             # trial needs N = 1, not the fractional N the raw formula gives.
-            return np.maximum(
-                1.0, (snr_threshold * sigma / np.maximum(sig, 1e-30)) ** 2)
+            return np.maximum(1.0, (snr_threshold * sigma / np.maximum(sig, 1e-30)) ** 2)
 
         for sc, col in zip(scenarios, scenario_colors, strict=False):
             sig = peak_arr * sc.Q_nAm
@@ -609,8 +701,7 @@ def render_detectability(
                 # so it has no per-source form to plot.
                 n_prop = trials(sig * factor)
                 all_n.append(n_prop)
-                _line_or_scatter(ax, n_prop, color=col, lw=1.2, ls=(0, (4, 2)),
-                                 alpha=0.9)
+                _line_or_scatter(ax, n_prop, color=col, lw=1.2, ls=(0, (4, 2)), alpha=0.9)
         ax.set_xlabel("Source z (mm)")
         ax.set_ylabel(f"Trials needed for SNR ≥ {snr_threshold:g}")
         ax.set_yscale("log")
@@ -629,10 +720,15 @@ def render_detectability(
         # approach it, and an off-axis text position with clip_on=False (the
         # default) blows up the bbox_inches="tight" save to include it.
         if ymin <= max_trials <= ymax:
-            ax.axhline(max_trials, color=NATURE_PALETTE["axis"], lw=0.5,
-                       linestyle=":", alpha=0.6)
-            ax.text(z.min(), max_trials * 1.4, f"{max_trials:.0e} trials",
-                    fontsize=6.5, color=NATURE_PALETTE["axis"], alpha=0.8)
+            ax.axhline(max_trials, color=NATURE_PALETTE["axis"], lw=0.5, linestyle=":", alpha=0.6)
+            ax.text(
+                z.min(),
+                max_trials * 1.4,
+                f"{max_trials:.0e} trials",
+                fontsize=6.5,
+                color=NATURE_PALETTE["axis"],
+                alpha=0.8,
+            )
 
     def _floors_everywhere(peak_arr: np.ndarray, sigma: float) -> bool:
         """True when every scenario clears threshold in one trial at every z.
@@ -651,8 +747,9 @@ def render_detectability(
         snr1 = peak_arr * weakest.Q_nAm / sigma
         return bool(np.all(snr1 >= snr_threshold))
 
-    def _plot_snr_margin_per_source(ax, peak_arr: np.ndarray, sigma: float,
-                                     *, factor: float | None = None):
+    def _plot_snr_margin_per_source(
+        ax, peak_arr: np.ndarray, sigma: float, *, factor: float | None = None
+    ):
         """Single-trial SNR along the source axis (dB above threshold).
 
         Used instead of :func:`_plot_trials_per_source` when every scenario
@@ -666,14 +763,19 @@ def render_detectability(
         """
         for sc, col in zip(scenarios, scenario_colors, strict=False):
             snr = np.maximum(peak_arr * sc.Q_nAm / sigma, 1e-30)
-            _line_or_scatter(ax, 20 * np.log10(snr), color=col, lw=1.4,
-                             label=sc.label)
+            _line_or_scatter(ax, 20 * np.log10(snr), color=col, lw=1.4, label=sc.label)
             if factor is not None:
                 snr_prop = np.maximum(peak_arr * sc.Q_nAm * factor / sigma, 1e-30)
-                _line_or_scatter(ax, 20 * np.log10(snr_prop), color=col, lw=1.2,
-                                 ls=(0, (4, 2)), alpha=0.9)
-        ax.axhline(20 * np.log10(snr_threshold), color=NATURE_PALETTE["axis"],
-                   lw=0.8, linestyle="--", label=f"SNR = {snr_threshold:g}")
+                _line_or_scatter(
+                    ax, 20 * np.log10(snr_prop), color=col, lw=1.2, ls=(0, (4, 2)), alpha=0.9
+                )
+        ax.axhline(
+            20 * np.log10(snr_threshold),
+            color=NATURE_PALETTE["axis"],
+            lw=0.8,
+            linestyle="--",
+            label=f"SNR = {snr_threshold:g}",
+        )
         ax.set_xlabel("Source z (mm)")
         ax.set_ylabel("Single-trial SNR (dB above 1)")
 
@@ -685,8 +787,9 @@ def render_detectability(
     rate_label = "MU firing rate" if is_muscle else "CAP rate"
     rec_rates = (8.0, 15.0, 30.0) if is_muscle else (1.0, 5.0, 20.0)
 
-    def _plot_recording_time(ax, peak_one_source: float, sigma: float, rates_hz,
-                             factor: float | None = None):
+    def _plot_recording_time(
+        ax, peak_one_source: float, sigma: float, rates_hz, factor: float | None = None
+    ):
         def seconds_for(rate, scale):
             out = []
             for sc in scenarios:
@@ -699,26 +802,49 @@ def render_detectability(
             return out
 
         Qs = [sc.Q_nAm for sc in scenarios]
-        for rate, col in zip(rates_hz, scenario_colors[:len(rates_hz)], strict=False):
-            ax.plot(Qs, seconds_for(rate, 1.0), marker="o", lw=1.4, color=col,
-                    label=f"{rate:g} Hz {rate_label}")
+        for rate, col in zip(rates_hz, scenario_colors[: len(rates_hz)], strict=False):
+            ax.plot(
+                Qs,
+                seconds_for(rate, 1.0),
+                marker="o",
+                lw=1.4,
+                color=col,
+                label=f"{rate:g} Hz {rate_label}",
+            )
             if factor is not None:
-                ax.plot(Qs, seconds_for(rate, factor), marker="o", ms=3, lw=1.2,
-                        ls=(0, (4, 2)), color=col, alpha=0.9)
+                ax.plot(
+                    Qs,
+                    seconds_for(rate, factor),
+                    marker="o",
+                    ms=3,
+                    lw=1.2,
+                    ls=(0, (4, 2)),
+                    color=col,
+                    alpha=0.9,
+                )
         ax.set_xlabel("Source dipole moment Q (nA·m)")
         ax.set_ylabel(f"Recording duration for SNR ≥ {snr_threshold:g} (s)")
         ax.set_xscale("log")
         ax.set_yscale("log")
         handles, labels = ax.get_legend_handles_labels()
         proxies = _model_proxies(ax, factor)
-        ax.legend(handles + proxies, labels + [h.get_label() for h in proxies],
-                  loc="upper right", fontsize=7, handlelength=1.6)
+        ax.legend(
+            handles + proxies,
+            labels + [h.get_label() for h in proxies],
+            loc="upper right",
+            fontsize=7,
+            handlelength=1.6,
+        )
 
     # ── MEG row ────────────────────────────────────────────────────────────
     ax_a = fig.add_subplot(gs[0, 0])
-    _plot_snr_curves(ax_a, meg_peak[source_idx], sigma_meg,
-                     "MEG SNR (best-channel)",
-                     factor=None if prop is None else prop.meg)
+    _plot_snr_curves(
+        ax_a,
+        meg_peak[source_idx],
+        sigma_meg,
+        "MEG SNR (best-channel)",
+        factor=None if prop is None else prop.meg,
+    )
     ax_a.set_title(f"MEG  ·  SNR vs N trials  ·  noise σ = {sigma_meg:.0f} fT")
     add_panel_label(ax_a, "a")
 
@@ -726,8 +852,7 @@ def render_detectability(
     meg_factor = None if prop is None else prop.meg
     if _floors_everywhere(meg_peak, sigma_meg):
         _plot_snr_margin_per_source(ax_b, meg_peak, sigma_meg, factor=meg_factor)
-        ax_b.set_title(f"MEG  ·  single-trial SNR along the {region} "
-                       "(detects in N=1 everywhere)")
+        ax_b.set_title(f"MEG  ·  single-trial SNR along the {region} (detects in N=1 everywhere)")
     else:
         _plot_trials_per_source(ax_b, meg_peak, sigma_meg, factor=meg_factor)
         ax_b.set_title(f"MEG  ·  trials-to-detect along the {region}")
@@ -735,18 +860,26 @@ def render_detectability(
     add_panel_label(ax_b, "b")
 
     ax_c = fig.add_subplot(gs[0, 2])
-    _plot_recording_time(ax_c, meg_peak[source_idx], sigma_meg,
-                         rates_hz=rec_rates,
-                         factor=None if prop is None else prop.meg)
+    _plot_recording_time(
+        ax_c,
+        meg_peak[source_idx],
+        sigma_meg,
+        rates_hz=rec_rates,
+        factor=None if prop is None else prop.meg,
+    )
     ax_c.set_title(f"MEG  ·  recording time @ source z = {src[2]:.0f} mm")
     add_panel_label(ax_c, "c")
 
     # ── EEG row (only when an EEG leadfield was computed) ──────────────────
     if has_eeg:
         ax_d = fig.add_subplot(gs[1, 0])
-        _plot_snr_curves(ax_d, eeg_peak[source_idx], sigma_eeg,
-                         "EEG SNR (best bipolar pair)",
-                         factor=None if prop is None else prop.eeg)
+        _plot_snr_curves(
+            ax_d,
+            eeg_peak[source_idx],
+            sigma_eeg,
+            "EEG SNR (best bipolar pair)",
+            factor=None if prop is None else prop.eeg,
+        )
         ax_d.set_title(f"EEG  ·  SNR vs N trials  ·  noise σ = {sigma_eeg:.1f} µV")
         add_panel_label(ax_d, "d")
 
@@ -754,8 +887,9 @@ def render_detectability(
         eeg_factor = None if prop is None else prop.eeg
         if _floors_everywhere(eeg_peak, sigma_eeg):
             _plot_snr_margin_per_source(ax_e, eeg_peak, sigma_eeg, factor=eeg_factor)
-            ax_e.set_title(f"EEG  ·  single-trial SNR along the {region} "
-                           "(detects in N=1 everywhere)")
+            ax_e.set_title(
+                f"EEG  ·  single-trial SNR along the {region} (detects in N=1 everywhere)"
+            )
         else:
             _plot_trials_per_source(ax_e, eeg_peak, sigma_eeg, factor=eeg_factor)
             ax_e.set_title(f"EEG  ·  trials-to-detect along the {region}")
@@ -763,25 +897,36 @@ def render_detectability(
         add_panel_label(ax_e, "e")
 
         ax_f = fig.add_subplot(gs[1, 2])
-        _plot_recording_time(ax_f, eeg_peak[source_idx], sigma_eeg,
-                             rates_hz=rec_rates,
-                             factor=None if prop is None else prop.eeg)
+        _plot_recording_time(
+            ax_f,
+            eeg_peak[source_idx],
+            sigma_eeg,
+            rates_hz=rec_rates,
+            factor=None if prop is None else prop.eeg,
+        )
         ax_f.set_title(f"EEG  ·  recording time @ source z = {src[2]:.0f} mm")
         add_panel_label(ax_f, "f")
 
     fig.suptitle(
         f"Detectability — N trials × noise floor × source strength  "
         f"(SNR threshold = {snr_threshold:g}, band = {cfg.noise.band_label})",
-        fontsize=12, fontweight="bold", y=0.985,
+        fontsize=12,
+        fontweight="bold",
+        y=0.985,
     )
     # Wrap explicitly. Matplotlib does not wrap fig.text, and save_figure uses
     # bbox_inches="tight", so an unwrapped caption silently stretches the saved
     # PNG to the width of one very long line — the figure came out 4:1 instead
     # of its 15:11.5 figsize.
     fig.text(
-        0.5, 0.008, caption,
-        ha="center", va="bottom", fontsize=7,
-        color=NATURE_PALETTE["axis"], style="italic",
+        0.5,
+        0.008,
+        caption,
+        ha="center",
+        va="bottom",
+        fontsize=7,
+        color=NATURE_PALETTE["axis"],
+        style="italic",
     )
 
     return save_figure(fig, out_path or target_output(cfg, "detectability.png"), dpi=dpi)
@@ -789,8 +934,11 @@ def render_detectability(
 
 # ── headline numbers (printed in the CLI) ──────────────────────────────────
 
+
 def detectability_summary(
-    cfg: Config, *, source_idx: int = -1,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
     scenarios: tuple[DetectabilityScenario, ...] | None = None,
 ) -> dict:
     """Compute headline detectability numbers as a JSON-serialisable dict.
@@ -804,20 +952,22 @@ def detectability_summary(
     sigma_eeg = floors.eeg_per_channel_uV
 
     meg_lf = load_leadfield(cfg.outputs.forward_npz)
-    eeg_lf = _compatible_eeg_leadfield(
-        meg_lf, _optional_leadfield(cfg.outputs.forward_eeg_npz))
+    eeg_lf = _compatible_eeg_leadfield(meg_lf, _optional_leadfield(cfg.outputs.forward_eeg_npz))
     if source_idx < 0:
         source_idx = default_source_idx(meg_lf, eeg_lf)
 
     meg_peak = float(per_source_peak_amplitude(meg_lf.L_fT_per_nAm)[source_idx])
-    eeg_peak = (float(per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)[source_idx])
-                if eeg_lf is not None else None)
+    eeg_peak = (
+        float(per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)[source_idx])
+        if eeg_lf is not None
+        else None
+    )
     src = meg_lf.source_pos[source_idx]
     budget = clinical_average_budget(cfg)
     prop = propagation_correction(cfg, meg_lf, eeg_lf, source_idx=source_idx)
 
     rows = {}
-    for sc in (scenarios if scenarios is not None else scenarios_for_target(cfg)):
+    for sc in scenarios if scenarios is not None else scenarios_for_target(cfg):
         sig_meg = meg_peak * sc.Q_nAm
         row = {
             "Q_nAm": sc.Q_nAm,
@@ -828,15 +978,18 @@ def detectability_summary(
         if prop is not None:
             row["MEG_per_trial_fT_propagating"] = sig_meg * prop.meg
             row["MEG_trials_for_SNR3_propagating"] = required_trials(
-                sig_meg * prop.meg, sigma_meg, 3.0)
+                sig_meg * prop.meg, sigma_meg, 3.0
+            )
         if eeg_peak is not None:
             sig_eeg = eeg_peak * sc.Q_nAm
             n_eeg = required_trials(sig_eeg, sigma_eeg, 3.0)
-            row.update({
-                "EEG_per_trial_uV": sig_eeg,
-                "EEG_single_trial_SNR": sig_eeg / sigma_eeg if sigma_eeg else float("inf"),
-                "EEG_trials_for_SNR3": n_eeg,
-            })
+            row.update(
+                {
+                    "EEG_per_trial_uV": sig_eeg,
+                    "EEG_single_trial_SNR": sig_eeg / sigma_eeg if sigma_eeg else float("inf"),
+                    "EEG_trials_for_SNR3": n_eeg,
+                }
+            )
             if prop is not None and prop.eeg is not None:
                 # The propagating source model is the honest case wherever the
                 # profile says lumping is invalid; report both so the headline
@@ -850,8 +1003,7 @@ def detectability_summary(
                 # feasibility question for an evoked paradigm.
                 row["EEG_within_clinical_budget"] = bool(n_eeg <= budget[1])
                 if prop is not None and prop.eeg is not None:
-                    row["EEG_within_clinical_budget_propagating"] = bool(
-                        n_eeg_prop <= budget[1])
+                    row["EEG_within_clinical_budget_propagating"] = bool(n_eeg_prop <= budget[1])
         rows[sc.label] = row
     return {
         "source_idx": int(source_idx),

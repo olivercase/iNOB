@@ -1,4 +1,5 @@
 """CLI: DUNEuro EEG forward solve."""
+
 from __future__ import annotations
 
 import argparse
@@ -20,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         # `inob-eeg` console script — see inob.cli.run_forward for why.
         from inob.duneuro_env import reexec_with_duneuro
+
         reexec_with_duneuro()
     p = argparse.ArgumentParser(
         prog="inob eeg",

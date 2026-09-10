@@ -1,4 +1,5 @@
 """Tests for inob.viz.sensitivity_plot (MEG-vs-EEG sensitivity bar chart)."""
+
 from __future__ import annotations
 
 import json

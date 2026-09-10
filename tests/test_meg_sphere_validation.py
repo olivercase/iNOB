@@ -9,6 +9,7 @@ to within a few percent (RDM) at unit magnitude ratio (MAG).
 Auto-skips when duneuropy is not importable (same convention as the other
 real-DUNEuro tests).
 """
+
 from __future__ import annotations
 
 import pytest

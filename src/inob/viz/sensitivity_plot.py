@@ -7,6 +7,7 @@ visible asymmetry: MEG bars are near-flat while EEG bars are large for the
 bone/skin perturbations — i.e. the magnetic forward is insensitive to the
 dominant volume-conductor conductivity uncertainty.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,10 @@ def _key(r: dict) -> str:
 
 
 def render_sensitivity(
-    cfg: Config, *, out_path: Path | None = None, dpi: int = 300,
+    cfg: Config,
+    *,
+    out_path: Path | None = None,
+    dpi: int = 300,
 ) -> Path:
     """Render the MEG-vs-EEG sensitivity comparison bar figure.
 
@@ -54,9 +58,7 @@ def render_sensitivity(
     meg = _load_results(sdir / "sensitivity_meg.json")
     eeg = _load_results(sdir / "sensitivity_eeg.json")
     if not meg and not eeg:
-        raise FileNotFoundError(
-            f"no sensitivity_*.json under {sdir}; run inob-sensitivity first"
-        )
+        raise FileNotFoundError(f"no sensitivity_*.json under {sdir}; run inob-sensitivity first")
 
     # Union of perturbation keys, preserving config tissue/factor order.
     order: list[str] = []
@@ -74,10 +76,8 @@ def render_sensitivity(
     w = 0.38
 
     fig, ax = plt.subplots(figsize=(max(4.5, 0.9 * len(order) + 1.5), 3.2))
-    ax.bar(x - w / 2, meg_vals, w, label="OPM-MEG",
-           color=NATURE_PALETTE["blue"])
-    ax.bar(x + w / 2, eeg_vals, w, label="HD-EEG",
-           color=NATURE_PALETTE["red"])
+    ax.bar(x - w / 2, meg_vals, w, label="OPM-MEG", color=NATURE_PALETTE["blue"])
+    ax.bar(x + w / 2, eeg_vals, w, label="HD-EEG", color=NATURE_PALETTE["red"])
 
     ax.set_xticks(x)
     ax.set_xticklabels(order, rotation=20, ha="right")
@@ -88,14 +88,26 @@ def render_sensitivity(
     # Annotate each bar with its value so small MEG bars stay legible.
     for xi, v in zip(x - w / 2, meg_vals, strict=True):
         if np.isfinite(v):
-            ax.annotate(f"{v:.1f}", (xi, v), textcoords="offset points",
-                        xytext=(0, 2), ha="center", fontsize=6.5,
-                        color=NATURE_PALETTE["blue"])
+            ax.annotate(
+                f"{v:.1f}",
+                (xi, v),
+                textcoords="offset points",
+                xytext=(0, 2),
+                ha="center",
+                fontsize=6.5,
+                color=NATURE_PALETTE["blue"],
+            )
     for xi, v in zip(x + w / 2, eeg_vals, strict=True):
         if np.isfinite(v):
-            ax.annotate(f"{v:.1f}", (xi, v), textcoords="offset points",
-                        xytext=(0, 2), ha="center", fontsize=6.5,
-                        color=NATURE_PALETTE["red"])
+            ax.annotate(
+                f"{v:.1f}",
+                (xi, v),
+                textcoords="offset points",
+                xytext=(0, 2),
+                ha="center",
+                fontsize=6.5,
+                color=NATURE_PALETTE["red"],
+            )
 
     add_panel_label(ax, "a")
     fig.tight_layout()

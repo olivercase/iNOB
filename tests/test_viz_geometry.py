@@ -1,4 +1,5 @@
 """Tests for inob.viz.geometry (4-panel geometry overview render)."""
+
 from __future__ import annotations
 
 import matplotlib

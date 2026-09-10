@@ -4,6 +4,7 @@ Companion to tests/test_forward_chunk.py's fake-driver tests: this one runs
 the actual compiled duneuropy extension (skips automatically when it isn't
 importable, same convention as tests/test_forward_smoke.py).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -36,22 +37,28 @@ def _fem_bipyramid() -> FemMesh:
     nodes = np.array([a, b, c, top, bot], dtype=np.float64)
     tets = np.array([[0, 1, 2, 3], [0, 1, 2, 4]], dtype=np.int32)
     tissue = np.array([1, 1], dtype=np.int32)
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                    tissue_labels=("vagus_left",), unit="mm")
+    return FemMesh(nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("vagus_left",), unit="mm")
 
 
 def _sensors(n: int) -> SensorArray:
-    pos = np.array([
-        [100.0, 0.0, 0.0],
-        [0.0, 100.0, 0.0],
-        [0.0, 0.0, 100.0],
-        [-100.0, 0.0, 0.0],
-    ])[:n]
+    pos = np.array(
+        [
+            [100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0],
+            [0.0, 0.0, 100.0],
+            [-100.0, 0.0, 0.0],
+        ]
+    )[:n]
     ori = pos / np.linalg.norm(pos, axis=1, keepdims=True)
     labels = tuple(f"mag-{i:04d}-R" for i in range(n))
-    return SensorArray(coilpos=pos, coilori=ori, labels=labels,
-                        chantype=tuple(["megmag"] * n), chanunit=tuple(["T"] * n),
-                        unit="mm")
+    return SensorArray(
+        coilpos=pos,
+        coilori=ori,
+        labels=labels,
+        chantype=tuple(["megmag"] * n),
+        chanunit=tuple(["T"] * n),
+        unit="mm",
+    )
 
 
 @pytest.mark.duneuro

@@ -1,4 +1,5 @@
 """CLI: render the propagating-CAP vs stationary-dipole comparison figure."""
+
 from __future__ import annotations
 
 import argparse
@@ -34,23 +35,51 @@ see `inob --help` for the full list.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_args(p)
-    p.add_argument("--ap-width-ms", type=float, default=None,
-                   help="Width parameter (σ) of the biphasic action-potential "
-                        "shape. Default: the target's physiology profile.")
-    p.add_argument("--n-fibres", type=int, default=None,
-                   help="Fibres in the synchronous event. Default: profile.")
-    p.add_argument("--ap-amplitude-mV", type=float, default=None,
-                   help="Intracellular AP amplitude (mV). Default: profile.")
-    p.add_argument("--segment-mm", type=float, default=None,
-                   help="Arc length over which the event propagates. Default: "
-                        "the profile's span (whole polyline for the spine).")
-    p.add_argument("--fs-hz", type=float, default=30_000.0,
-                   help="Sampling frequency (Hz). Default 30 kHz captures sub-AP detail.")
-    p.add_argument("--duration-ms", type=float, default=None,
-                   help="Trace duration (ms). Default: sized to the target's "
-                        "transit time (30 ms vagus, ~50 ms spine).")
-    p.add_argument("--out", type=Path, default=None,
-                   help="Output PNG (default: cfg.outputs.base/cap_compare_<target>.png).")
+    p.add_argument(
+        "--ap-width-ms",
+        type=float,
+        default=None,
+        help="Width parameter (σ) of the biphasic action-potential "
+        "shape. Default: the target's physiology profile.",
+    )
+    p.add_argument(
+        "--n-fibres",
+        type=int,
+        default=None,
+        help="Fibres in the synchronous event. Default: profile.",
+    )
+    p.add_argument(
+        "--ap-amplitude-mV",
+        type=float,
+        default=None,
+        help="Intracellular AP amplitude (mV). Default: profile.",
+    )
+    p.add_argument(
+        "--segment-mm",
+        type=float,
+        default=None,
+        help="Arc length over which the event propagates. Default: "
+        "the profile's span (whole polyline for the spine).",
+    )
+    p.add_argument(
+        "--fs-hz",
+        type=float,
+        default=30_000.0,
+        help="Sampling frequency (Hz). Default 30 kHz captures sub-AP detail.",
+    )
+    p.add_argument(
+        "--duration-ms",
+        type=float,
+        default=None,
+        help="Trace duration (ms). Default: sized to the target's "
+        "transit time (30 ms vagus, ~50 ms spine).",
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output PNG (default: cfg.outputs.base/cap_compare_<target>.png).",
+    )
     p.add_argument("--dpi", type=int, default=300)
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="cap_compare")

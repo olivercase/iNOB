@@ -10,6 +10,7 @@ nerve instead.
 
 Found by running the GUI end to end against a real DUNEuro build.
 """
+
 from __future__ import annotations
 
 import ast
@@ -62,11 +63,9 @@ def _unit_cube_fem():
     """A single-tetra 'mesh' big enough to contain the points we test."""
     from inob.io.hdf5 import FemMesh
 
-    nodes = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0],
-                      [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]])
+    nodes = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]])
     tets = np.array([[0, 1, 2, 3]])
-    return FemMesh(nodes=nodes, tets=tets, tissue=np.array([1]),
-                   tissue_labels=("vagus_left",))
+    return FemMesh(nodes=nodes, tets=tets, tissue=np.array([1]), tissue_labels=("vagus_left",))
 
 
 def test_explicit_point_sources_are_returned_verbatim() -> None:
@@ -83,5 +82,5 @@ def test_sources_outside_the_mesh_raise_a_readable_error() -> None:
         resolve_source_positions(_Cfg(pts), _unit_cube_fem())
     msg = str(e.value)
     assert "outside the FEM model" in msg
-    assert "source 2" in msg          # names which one
-    assert "500" in msg               # and where it was
+    assert "source 2" in msg  # names which one
+    assert "500" in msg  # and where it was

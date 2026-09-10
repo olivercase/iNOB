@@ -10,6 +10,7 @@ The analytic rungs need only the geometry (FEM mesh + sensor array); the fem
 rung additionally needs the forward leadfield. Run one rung, a subset, or all
 three to compare them side by side.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,9 +31,7 @@ def _parse_rungs(arg: str) -> list[str]:
         if not r:
             continue
         if r not in LADDER_RUNGS:
-            raise ValueError(
-                f"unknown rung {r!r}; choose from {', '.join(LADDER_RUNGS)} or 'all'"
-            )
+            raise ValueError(f"unknown rung {r!r}; choose from {', '.join(LADDER_RUNGS)} or 'all'")
         if r not in out:
             out.append(r)
     if not out:
@@ -41,18 +40,24 @@ def _parse_rungs(arg: str) -> list[str]:
 
 
 def _render(result: dict, out) -> None:
-    print(f"{_ui.heading('Forward-model ladder')}  "
-          f"source #{result['source_index'] + 1} of {result['n_sources']} "
-          f"at {tuple(result['source_pos_mm'])} mm  ·  "
-          f"{result['n_radial_coils']} radial coils", file=out)
+    print(
+        f"{_ui.heading('Forward-model ladder')}  "
+        f"source #{result['source_index'] + 1} of {result['n_sources']} "
+        f"at {tuple(result['source_pos_mm'])} mm  ·  "
+        f"{result['n_radial_coils']} radial coils",
+        file=out,
+    )
     print(f"{_ui.paint('peak field, fT per nA·m', 'dim')}\n", file=out)
 
     order = [r for r in LADDER_RUNGS if r in result["rungs"]]
     for name in order:
         rung = result["rungs"][name]
-        print(f"  {_ui.mark('ok')} {name:<7}"
-              f"{rung['peak_fT_per_nAm']:>10.2f}   "
-              f"{_ui.paint(rung['label'], 'dim')}", file=out)
+        print(
+            f"  {_ui.mark('ok')} {name:<7}"
+            f"{rung['peak_fT_per_nAm']:>10.2f}   "
+            f"{_ui.paint(rung['label'], 'dim')}",
+            file=out,
+        )
 
     ratios = result["ratios"]
     if ratios:
@@ -64,8 +69,7 @@ def _render(result: dict, out) -> None:
         }
         for key, label in pretty.items():
             if key in ratios:
-                print(f"  {label}: {_ui.paint(f'{ratios[key]:.2f}x', 'cyan')}",
-                      file=out)
+                print(f"  {label}: {_ui.paint(f'{ratios[key]:.2f}x', 'cyan')}", file=out)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -83,15 +87,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     add_common_args(p)
     p.add_argument(
-        "--rungs", default="all",
+        "--rungs",
+        default="all",
         help="Comma-separated rungs (biot,sarvas,fem) or 'all' (default).",
     )
-    p.add_argument("--Q-nAm", type=float, default=1.0,
-                   help="Source dipole moment in nA·m (default 1).")
-    p.add_argument("--source-idx", type=int, default=-1,
-                   help="Source index along the polyline (default: middle).")
-    p.add_argument("--json", action="store_true",
-                   help="Emit JSON instead of a table.")
+    p.add_argument(
+        "--Q-nAm", type=float, default=1.0, help="Source dipole moment in nA·m (default 1)."
+    )
+    p.add_argument(
+        "--source-idx",
+        type=int,
+        default=-1,
+        help="Source index along the polyline (default: middle).",
+    )
+    p.add_argument("--json", action="store_true", help="Emit JSON instead of a table.")
     args = p.parse_args(argv)
 
     cfg = setup(args, log_prefix="ladder")
@@ -101,8 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         print(_ui.paint(str(e), "red"), file=sys.stderr)
         return 2
 
-    result = run_ladder(cfg, rungs=rungs, Q_nAm=args.Q_nAm,
-                        source_idx=args.source_idx)
+    result = run_ladder(cfg, rungs=rungs, Q_nAm=args.Q_nAm, source_idx=args.source_idx)
 
     if args.json:
         json.dump(result, sys.stdout, indent=2)

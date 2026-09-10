@@ -17,6 +17,7 @@ All physiology comes from the target's
 stationary approximation survives is measured, and the profile's own
 prediction is reported alongside so the two can be compared.
 """
+
 from __future__ import annotations
 
 import logging
@@ -105,8 +106,7 @@ def render_cap_compare(
 
     # Profile supplies the physiology; explicit kwargs override it.
     n_fibres = profile.n_fibres if n_fibres is None else n_fibres
-    ap_amplitude_mV = (profile.ap_amplitude_mV if ap_amplitude_mV is None
-                       else ap_amplitude_mV)
+    ap_amplitude_mV = profile.ap_amplitude_mV if ap_amplitude_mV is None else ap_amplitude_mV
     sigma_in_Sm = profile.sigma_in_Sm if sigma_in_Sm is None else sigma_in_Sm
     ap_width_ms = profile.ap_width_ms if ap_width_ms is None else ap_width_ms
 
@@ -116,7 +116,8 @@ def render_cap_compare(
             "[cap-compare] PHYSIOLOGY-TODO: no validated physiology for '%s' "
             "(%s); output reuses nerve-CAP assumptions and is NOT "
             "physiologically validated. Treat as provisional.",
-            region, profile.paradigm,
+            region,
+            profile.paradigm,
         )
     logger.info("[cap-compare] physiology profile:\n%s", profile.describe())
 
@@ -134,10 +135,15 @@ def render_cap_compare(
     # that inob.viz.detectability measures the same ratio this figure prints —
     # the two used to disagree by the full propagation factor.
     sig = compute_propagation_signals(
-        lf, profile,
-        n_fibres=n_fibres, ap_amplitude_mV=ap_amplitude_mV,
-        sigma_in_Sm=sigma_in_Sm, ap_width_ms=ap_width_ms,
-        fs_hz=fs_hz, duration_ms=duration_ms, segment_mm=segment_mm,
+        lf,
+        profile,
+        n_fibres=n_fibres,
+        ap_amplitude_mV=ap_amplitude_mV,
+        sigma_in_Sm=sigma_in_Sm,
+        ap_width_ms=ap_width_ms,
+        fs_hz=fs_hz,
+        duration_ms=duration_ms,
+        segment_mm=segment_mm,
     )
     t_ms = sig.t_ms
     sig_stat, sig_seg, sig_whole = sig.stationary, sig.segment, sig.whole
@@ -154,8 +160,11 @@ def render_cap_compare(
     # per-source wavelet timing is still keyed to real 3-D position via
     # nearest-neighbour search, not this statistic — so only the reported
     # length/transit are gated, not sig_seg/p_seg.
-    seg_len_label = (f"{seg_len_m * 1000:.0f} mm" if ordered_sources
-                     else "n/a (volume-fill sources, not an ordered path)")
+    seg_len_label = (
+        f"{seg_len_m * 1000:.0f} mm"
+        if ordered_sources
+        else "n/a (volume-fill sources, not an ordered path)"
+    )
     seg_len_legend = f"{seg_len_m * 1000:.0f} mm" if ordered_sources else "arc length n/a"
     # A segment holding fewer than a few sources is not resolving a wavefront —
     # it is one dipole with a delay (see MIN_WAVEFRONT_SOURCES). Say so on the
@@ -166,10 +175,12 @@ def render_cap_compare(
     if undersampled:
         plural = "" if sig.n_segment_sources == 1 else "s"
         seg_len_legend += f", only {sig.n_segment_sources} source{plural}"
-        segment_line = (f"Active segment: {seg_len_label}"
-                        f"  [UNDER-SAMPLED: {sig.n_segment_sources} "
-                        f"source{plural}]\n")
-    transit_seg_label = (f"{transit_seg_ms:.2f} ms" if ordered_sources else "n/a")
+        segment_line = (
+            f"Active segment: {seg_len_label}"
+            f"  [UNDER-SAMPLED: {sig.n_segment_sources} "
+            f"source{plural}]\n"
+        )
+    transit_seg_label = f"{transit_seg_ms:.2f} ms" if ordered_sources else "n/a"
     Q_total_nAm = sig.Q_total_nAm
     mean_diameter_um = float(np.sum(profile.fibres.diameters_um * profile.fibres.weights))
 
@@ -178,7 +189,7 @@ def render_cap_compare(
     # the comparison is "at the channel the simulator highlights, what does
     # propagation do?".
     radial = _radial_channel_mask(list(lf.channel_names))
-    best_c = int(np.argmax(np.sqrt(np.mean(sig_stat ** 2, axis=1)) * radial))
+    best_c = int(np.argmax(np.sqrt(np.mean(sig_stat**2, axis=1)) * radial))
 
     sig_stat_fT = sig_stat * 1e15
     sig_seg_fT = sig_seg * 1e15
@@ -193,23 +204,26 @@ def render_cap_compare(
     peak_whole = float(np.abs(p_whole).max())
     fwhm_stat = _fwhm_ms(p_stat, t_ms)
     fwhm_seg = _fwhm_ms(p_seg, t_ms)
-    rms_residual = float(np.sqrt(np.mean(residual ** 2)))
-    rms_stat = float(np.sqrt(np.mean(p_stat ** 2)))
+    rms_residual = float(np.sqrt(np.mean(residual**2)))
+    rms_stat = float(np.sqrt(np.mean(p_stat**2)))
 
     whole_log = (
         f"whole-{region} prop={peak_whole:.2f} fT "
         f"(ratio {peak_whole / max(peak_stat, 1e-30):.3f})  ·  "
-        if ordered_sources else
-        "whole-polyline: n/a (volume-fill sources)  ·  "
+        if ordered_sources
+        else "whole-polyline: n/a (volume-fill sources)  ·  "
     )
     logger.info(
         "[cap-compare] best MEG #%d  ·  stat=%.2f fT  ·  active-segment prop=%.2f fT "
         "(ratio %.3f)  ·  %sFWHM stat/prop=%.2f/%.2f ms "
         " ·  rms residual / rms stat=%.3f",
-        best_c, peak_stat,
-        peak_seg, peak_seg / max(peak_stat, 1e-30),
+        best_c,
+        peak_stat,
+        peak_seg,
+        peak_seg / max(peak_stat, 1e-30),
         whole_log,
-        fwhm_stat, fwhm_seg,
+        fwhm_stat,
+        fwhm_seg,
         rms_residual / max(rms_stat, 1e-30),
     )
     # The headline result is whether the lumped approximation survives. Say so
@@ -223,7 +237,10 @@ def render_cap_compare(
         logger.info(
             "[cap-compare] %s: transit %.2f ms vs AP width %.2f ms — stationary "
             "approximation holds (peak error %.0f%%)",
-            region, transit_seg_ms, ap_width_ms, 100.0 * stat_error,
+            region,
+            transit_seg_ms,
+            ap_width_ms,
+            100.0 * stat_error,
         )
     elif not profile.stationary_ok:
         logger.warning(
@@ -231,8 +248,13 @@ def render_cap_compare(
             "the stationary approximation is NOT valid for this target; it "
             "misestimates the peak by %.0f%% and the width by %.2fx. Use the "
             "propagating model for %s figures.",
-            region, transit_seg_label, seg_len_label, ap_width_ms,
-            100.0 * stat_error, fwhm_seg / max(fwhm_stat, 1e-30), region,
+            region,
+            transit_seg_label,
+            seg_len_label,
+            ap_width_ms,
+            100.0 * stat_error,
+            fwhm_seg / max(fwhm_stat, 1e-30),
+            region,
         )
     else:
         logger.warning(
@@ -241,35 +263,57 @@ def render_cap_compare(
             "the measured peak error is %.0f%%. Either the profile's propagation "
             "span is wrong for this target or the source geometry is not a "
             "polyline (arc length is only meaningful for a linear structure).",
-            region, profile.name, transit_seg_ms, ap_width_ms, 100.0 * stat_error,
+            region,
+            profile.name,
+            transit_seg_ms,
+            ap_width_ms,
+            100.0 * stat_error,
         )
 
-    seg_label = ("whole cord" if profile.propagation_span_mm is None
-                 else "active segment")
+    seg_label = "whole cord" if profile.propagation_span_mm is None else "active segment"
 
     fig = plt.figure(figsize=(13.5, 4.6))
-    gs = GridSpec(1, 3, figure=fig, left=0.06, right=0.98, top=0.82, bottom=0.16,
-                  wspace=0.32, width_ratios=[1.3, 1.0, 0.95])
+    gs = GridSpec(
+        1,
+        3,
+        figure=fig,
+        left=0.06,
+        right=0.98,
+        top=0.82,
+        bottom=0.16,
+        wspace=0.32,
+        width_ratios=[1.3, 1.0, 0.95],
+    )
 
     ax0 = fig.add_subplot(gs[0])
-    ax0.plot(t_ms, p_stat, color=NATURE_PALETTE["blue"], lw=1.6,
-             label="Stationary at generator")
-    ax0.plot(t_ms, p_seg, color=NATURE_PALETTE["red"], lw=1.4, alpha=0.95,
-             label=f"Propagating, {seg_label} ({seg_len_legend})")
+    ax0.plot(t_ms, p_stat, color=NATURE_PALETTE["blue"], lw=1.6, label="Stationary at generator")
+    ax0.plot(
+        t_ms,
+        p_seg,
+        color=NATURE_PALETTE["red"],
+        lw=1.4,
+        alpha=0.95,
+        label=f"Propagating, {seg_label} ({seg_len_legend})",
+    )
     # When the profile has no localised generator the active segment IS the
     # whole polyline, so the third curve would be an exact duplicate of the
     # second. Draw it only when it is a distinct model.
     whole_is_distinct = ordered_sources and abs(seg_len_m - arc_total_m) > 1e-6
     if whole_is_distinct:
-        ax0.plot(t_ms, p_whole, color=NATURE_PALETTE["axis"], lw=1.0, alpha=0.7,
-                 linestyle="--",
-                 label=f"Propagating whole {region} ({arc_total_m * 1000:.0f} mm)")
+        ax0.plot(
+            t_ms,
+            p_whole,
+            color=NATURE_PALETTE["axis"],
+            lw=1.0,
+            alpha=0.7,
+            linestyle="--",
+            label=f"Propagating whole {region} ({arc_total_m * 1000:.0f} mm)",
+        )
     ax0.axhline(0, color=NATURE_PALETTE["axis"], lw=0.5, alpha=0.4)
     ax0.set_xlabel("Time (ms)")
     ax0.set_ylabel(f"Best radial MEG channel #{best_c}  (fT)")
     n_models = 3 if whole_is_distinct else 2
-    ax0.set_title(f"Single event, same total moment, {n_models} source models",
-                  fontsize=10)
+    ax0.set_title(f"Single event, same total moment, {n_models} source models", fontsize=10)
     ax0.legend(loc="upper right", fontsize=8, handlelength=1.6)
     add_panel_label(ax0, "a")
 
@@ -278,9 +322,9 @@ def render_cap_compare(
     ax1.axhline(0, color=NATURE_PALETTE["axis"], lw=0.4, alpha=0.4)
     ax1.set_xlabel("Time (ms)")
     ax1.set_ylabel("Propagating − stationary  (fT)")
-    verdict = ("propagation is a small correction"
-               if profile.stationary_ok else
-               "propagation dominates")
+    verdict = (
+        "propagation is a small correction" if profile.stationary_ok else "propagation dominates"
+    )
     ax1.set_title(f"Residual — {verdict}", fontsize=10)
     add_panel_label(ax1, "b")
 
@@ -288,8 +332,8 @@ def render_cap_compare(
     ax2.axis("off")
     verdict_line = (
         "Stationary approximation VALID\n  (transit ≈ AP width)"
-        if profile.stationary_ok else
-        "Stationary approximation INVALID\n  (transit >> AP width)"
+        if profile.stationary_ok
+        else "Stationary approximation INVALID\n  (transit >> AP width)"
     )
     # The whole-polyline arc length/transit/peak are only meaningful when the
     # sources are an ordered path (see ``ordered_sources`` above) — for a
@@ -297,16 +341,15 @@ def render_cap_compare(
     # physical referent.
     whole_lines = (
         f"Whole {region} polyline: {arc_total_m * 1000:.0f} mm\n"
-        if ordered_sources else
-        f"Whole {region}: n/a (volume-fill sources, not an ordered path)\n"
+        if ordered_sources
+        else f"Whole {region}: n/a (volume-fill sources, not an ordered path)\n"
     )
-    whole_transit_line = (
-        f"Transit, whole: {transit_whole_ms:.2f} ms\n" if ordered_sources else ""
-    )
+    whole_transit_line = f"Transit, whole: {transit_whole_ms:.2f} ms\n" if ordered_sources else ""
     whole_peak_lines = (
         f"Propagating (whole): {peak_whole:8.2f} fT\n"
         f"  P/S ratio:         {peak_whole / max(peak_stat, 1e-30):8.3f}\n\n"
-        if ordered_sources else ""
+        if ordered_sources
+        else ""
     )
     summary = (
         f"{profile.paradigm}\n"
@@ -329,26 +372,40 @@ def render_cap_compare(
         f"RMS(prop − stat) / RMS(stat): {rms_residual / max(rms_stat, 1e-30):.3f}\n\n"
         f"{verdict_line}"
     )
-    ax2.text(0.02, 0.97, summary, transform=ax2.transAxes,
-             va="top", ha="left", fontsize=7.8,
-             family="monospace", color=NATURE_PALETTE["axis"])
+    ax2.text(
+        0.02,
+        0.97,
+        summary,
+        transform=ax2.transAxes,
+        va="top",
+        ha="left",
+        fontsize=7.8,
+        family="monospace",
+        color=NATURE_PALETTE["axis"],
+    )
     add_panel_label(ax2, "c")
 
     fig.suptitle(
         "Propagating CAP vs stationary-dipole approximation  —  "
         f"{profile.label}, {n_fibres} fibres",
-        fontsize=11.5, fontweight="bold", y=0.97,
+        fontsize=11.5,
+        fontweight="bold",
+        y=0.97,
     )
 
     if provisional:
         # Self-documenting stamp: figures escape into slides/papers, so any
         # unvalidated export must carry its own caveat.
         fig.text(
-            0.5, 0.005,
+            0.5,
+            0.005,
             f"PROVISIONAL — no validated physiology for '{region}': "
             f"{profile.paradigm}. Reuses nerve-CAP assumptions; NOT "
             f"physiologically validated.",
-            ha="center", va="bottom", fontsize=8, style="italic",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            style="italic",
             color=NATURE_PALETTE.get("red", "#CC3311"),
         )
 

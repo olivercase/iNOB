@@ -1,4 +1,5 @@
 """CLI: generate the triaxial OPM sensor array."""
+
 from __future__ import annotations
 
 import argparse
@@ -32,10 +33,15 @@ see `inob --help` for the full list.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_args(p)
-    p.add_argument("--zmin", type=float, default=None,
-                   help="Lower head-foot crop (mm). Default: from sensors.z_crop_low_factor.")
-    p.add_argument("--zmax", type=float, default=None,
-                   help="Upper head-foot crop (mm). Default: top of mesh.")
+    p.add_argument(
+        "--zmin",
+        type=float,
+        default=None,
+        help="Lower head-foot crop (mm). Default: from sensors.z_crop_low_factor.",
+    )
+    p.add_argument(
+        "--zmax", type=float, default=None, help="Upper head-foot crop (mm). Default: top of mesh."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="sensors")
     generate_sensor_array(cfg, z_min=args.zmin, z_max=args.zmax)

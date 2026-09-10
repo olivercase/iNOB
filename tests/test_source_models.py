@@ -1,4 +1,5 @@
 """Like-for-like OPM vs electrode comparison across cord source models."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -19,8 +20,7 @@ def _cord_sources() -> np.ndarray:
     return np.column_stack([np.zeros(N_SRC), np.full(N_SRC, -60.0), z])
 
 
-def _leadfield(source_pos, *, n_chan: int, scale: float, kind: str,
-               seed: int = 0) -> Leadfield:
+def _leadfield(source_pos, *, n_chan: int, scale: float, kind: str, seed: int = 0) -> Leadfield:
     """Channels with Gaussian sensitivity bumps at staggered arc positions.
 
     Tangent (Z) component only, so the longitudinal projection the comparison
@@ -30,30 +30,43 @@ def _leadfield(source_pos, *, n_chan: int, scale: float, kind: str,
     z = source_pos[:, 2]
     L3 = np.zeros((n_chan, len(source_pos), 3))
     for c, z0 in enumerate(np.linspace(z[0], z[-1], n_chan)):
-        L3[c, :, 2] = scale * np.exp(-((z - z0) ** 2) / (2 * 40.0 ** 2))
+        L3[c, :, 2] = scale * np.exp(-((z - z0) ** 2) / (2 * 40.0**2))
     L = L3.reshape(n_chan, 3 * len(source_pos))
     prefix = "mag" if kind == "meg" else "elec"
     return Leadfield(
-        L=L * 1e-6, L_fT_per_nAm=L, source_pos=source_pos,
+        L=L * 1e-6,
+        L_fT_per_nAm=L,
+        source_pos=source_pos,
         coil_pos=rng.normal(size=(n_chan, 3)),
         coil_orient=np.tile([0.0, 0.0, 1.0], (n_chan, 1)),
         channel_names=tuple(f"{prefix}-{i:03d}" for i in range(n_chan)),
-        conductivities=np.array([0.33]), tissue_labels=("skin",), seed=0,
+        conductivities=np.array([0.33]),
+        tissue_labels=("skin",),
+        seed=0,
     )
 
 
-def _compare(*, Q_nAm: float = 5.0, meg_scale: float = 40.0,
-             eeg_scale: float = 0.06, source_idx: int = N_SRC // 2):
+def _compare(
+    *,
+    Q_nAm: float = 5.0,
+    meg_scale: float = 40.0,
+    eeg_scale: float = 0.06,
+    source_idx: int = N_SRC // 2,
+):
     src = _cord_sources()
     return compare_source_models(
         _leadfield(src, n_chan=12, scale=meg_scale, kind="meg"),
         _leadfield(src, n_chan=8, scale=eeg_scale, kind="eeg"),
-        SPINE_PROFILE, Q_nAm=Q_nAm, source_idx=source_idx,
-        meg_sigma_fT=150.0, eeg_sigma_uV=2.2,
+        SPINE_PROFILE,
+        Q_nAm=Q_nAm,
+        source_idx=source_idx,
+        meg_sigma_fT=150.0,
+        eeg_sigma_uV=2.2,
     )
 
 
 # ── the point of the whole module: Q cancels out of every ratio ────────────
+
 
 def test_modality_gap_is_independent_of_the_assumed_source_strength():
     """The comparison must survive not knowing the true source strength.
@@ -78,8 +91,7 @@ def test_trial_ratios_are_q_independent_until_the_one_trial_floor():
     """
     weak, strong = _compare(Q_nAm=0.5), _compare(Q_nAm=5.0)
     unsaturated = weak.by_name("ascending")
-    assert np.isclose(unsaturated.trials_ratio,
-                      strong.by_name("ascending").trials_ratio)
+    assert np.isclose(unsaturated.trials_ratio, strong.by_name("ascending").trials_ratio)
     assert strong.by_name("synchronous").meg_trials == 1.0
 
 
@@ -99,6 +111,7 @@ def test_modality_gap_tracks_the_leadfield_ratio_not_the_source():
 
 
 # ── the three source models ────────────────────────────────────────────────
+
 
 def test_synchronous_is_the_largest_and_ascending_the_smallest():
     cmp = _compare()
@@ -143,20 +156,24 @@ def test_geometry_is_reported_so_the_reader_can_judge_the_lumping():
 
 # ── reductions and guards ──────────────────────────────────────────────────
 
+
 def test_eeg_uses_a_bipolar_pair_and_is_reference_invariant():
     """A common offset on every electrode must not change the EEG amplitude."""
     src = _cord_sources()
     eeg = _leadfield(src, n_chan=8, scale=0.06, kind="eeg")
     shifted = Leadfield(
-        L=eeg.L, L_fT_per_nAm=eeg.L_fT_per_nAm + 3.7,
-        source_pos=eeg.source_pos, coil_pos=eeg.coil_pos,
-        coil_orient=eeg.coil_orient, channel_names=eeg.channel_names,
-        conductivities=eeg.conductivities, tissue_labels=eeg.tissue_labels,
+        L=eeg.L,
+        L_fT_per_nAm=eeg.L_fT_per_nAm + 3.7,
+        source_pos=eeg.source_pos,
+        coil_pos=eeg.coil_pos,
+        coil_orient=eeg.coil_orient,
+        channel_names=eeg.channel_names,
+        conductivities=eeg.conductivities,
+        tissue_labels=eeg.tissue_labels,
         seed=eeg.seed,
     )
     meg = _leadfield(src, n_chan=12, scale=40.0, kind="meg")
-    kw = dict(Q_nAm=5.0, source_idx=N_SRC // 2, meg_sigma_fT=150.0,
-              eeg_sigma_uV=2.2)
+    kw = dict(Q_nAm=5.0, source_idx=N_SRC // 2, meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
     a = compare_source_models(meg, eeg, SPINE_PROFILE, **kw)
     b = compare_source_models(meg, shifted, SPINE_PROFILE, **kw)
     for ra, rb in zip(a.rows, b.rows, strict=True):
@@ -169,8 +186,9 @@ def test_mismatched_source_spaces_are_rejected():
     meg = _leadfield(src, n_chan=12, scale=40.0, kind="meg")
     eeg = _leadfield(src[:-1], n_chan=8, scale=0.06, kind="eeg")
     with pytest.raises(ValueError, match="different source spaces"):
-        compare_source_models(meg, eeg, SPINE_PROFILE, Q_nAm=5.0, source_idx=3,
-                              meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
+        compare_source_models(
+            meg, eeg, SPINE_PROFILE, Q_nAm=5.0, source_idx=3, meg_sigma_fT=150.0, eeg_sigma_uV=2.2
+        )
 
 
 def test_unordered_sources_are_rejected_for_the_ascending_model():
@@ -179,21 +197,21 @@ def test_unordered_sources_are_rejected_for_the_ascending_model():
     meg = _leadfield(cloud, n_chan=12, scale=40.0, kind="meg")
     eeg = _leadfield(cloud, n_chan=8, scale=0.06, kind="eeg")
     with pytest.raises(ValueError, match="not an ordered path"):
-        compare_source_models(meg, eeg, SPINE_PROFILE, Q_nAm=5.0, source_idx=3,
-                              meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
+        compare_source_models(
+            meg, eeg, SPINE_PROFILE, Q_nAm=5.0, source_idx=3, meg_sigma_fT=150.0, eeg_sigma_uV=2.2
+        )
 
 
 # ── trial arithmetic ───────────────────────────────────────────────────────
 
+
 def test_trials_ratio_is_the_square_of_the_snr_gap():
-    row = ModelRow("t", "", meg_fT=30.0, eeg_uV=0.01,
-                   meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
-    assert np.isclose(row.trials_ratio, row.modality_gap ** 2)
+    row = ModelRow("t", "", meg_fT=30.0, eeg_uV=0.01, meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
+    assert np.isclose(row.trials_ratio, row.modality_gap**2)
 
 
 def test_a_single_trial_is_the_floor_on_trial_count():
     """You cannot average a fraction of a trial."""
-    row = ModelRow("t", "", meg_fT=10_000.0, eeg_uV=100.0,
-                   meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
+    row = ModelRow("t", "", meg_fT=10_000.0, eeg_uV=100.0, meg_sigma_fT=150.0, eeg_sigma_uV=2.2)
     assert row.meg_trials == 1.0
     assert row.eeg_trials == 1.0

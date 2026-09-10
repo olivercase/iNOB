@@ -54,13 +54,13 @@ GEOM = ROOT / "outputs/geometry/geometry.mat"
 MUSCLE_DIR = ROOT / "data/muscle"
 # Sarvas (analytic-sphere) figures live in their own folder so they are never
 # confused with the FEM forward-model figures under outputs/.
-SARVAS_DIR      = ROOT / "outputs/sarvas"
-OUT_PNG         = SARVAS_DIR / "muscle_skin_topoplot.png"
-OUT_PNG_TANG1   = SARVAS_DIR / "muscle_skin_topoplot_tang1.png"
-OUT_PNG_TANG2   = SARVAS_DIR / "muscle_skin_topoplot_tang2.png"
+SARVAS_DIR = ROOT / "outputs/sarvas"
+OUT_PNG = SARVAS_DIR / "muscle_skin_topoplot.png"
+OUT_PNG_TANG1 = SARVAS_DIR / "muscle_skin_topoplot_tang1.png"
+OUT_PNG_TANG2 = SARVAS_DIR / "muscle_skin_topoplot_tang2.png"
 OUT_PNG_VECTORS = SARVAS_DIR / "muscle_skin_topoplot_vectors.png"
-OUT_PNG_DIST    = SARVAS_DIR / "muscle_skin_distance_decay.png"
-OUT_JSON        = SARVAS_DIR / "muscle_skin_topoplot.json"
+OUT_PNG_DIST = SARVAS_DIR / "muscle_skin_distance_decay.png"
+OUT_JSON = SARVAS_DIR / "muscle_skin_topoplot.json"
 
 DEFAULT_PATTERNS = [
     "scalenus anter",
@@ -71,19 +71,25 @@ DEFAULT_PATTERNS = [
     "longus capitis",
 ]
 
-Q_NAM = 1.0           # report as leadfield: fT per nA·m
-SKIN_MARGIN_MM = 80.0 # skin band extends this far beyond the outermost source in z
+Q_NAM = 1.0  # report as leadfield: fT per nA·m
+SKIN_MARGIN_MM = 80.0  # skin band extends this far beyond the outermost source in z
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Sarvas muscle-field topoplot on the skin surface.",
     )
     p.add_argument(
-        "patterns", nargs="*", default=DEFAULT_PATTERNS,
+        "patterns",
+        nargs="*",
+        default=DEFAULT_PATTERNS,
         help="Muscle name patterns to match (default: scalenes + strap muscles)",
     )
     p.add_argument(
-        "--Q-nAm", type=float, default=1.0, dest="Q_nAm",
+        "--Q-nAm",
+        type=float,
+        default=1.0,
+        dest="Q_nAm",
         metavar="Q",
         help=(
             "Physiological dipole moment in nA·m. "
@@ -93,6 +99,7 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     return p.parse_args()
+
 
 def muscle_sources(patterns: list[str]):
     """One dipole per matching muscle STL: centroid + PCA long axis (z-up)."""
@@ -139,12 +146,12 @@ def tangential_frame(normals: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     bad = (norms < 1e-12).ravel()
     norms = np.where(norms < 1e-12, 1.0, norms)
     n = normals / norms
-    n[bad] = [0., 0., 1.]           # fallback for degenerate vertices
+    n[bad] = [0.0, 0.0, 1.0]  # fallback for degenerate vertices
 
     ref = np.zeros_like(n)
-    use_z = np.abs(n[:, 2]) < 0.9   # use [0,0,1] unless nearly parallel
-    ref[use_z] = [0., 0., 1.]
-    ref[~use_z] = [1., 0., 0.]
+    use_z = np.abs(n[:, 2]) < 0.9  # use [0,0,1] unless nearly parallel
+    ref[use_z] = [0.0, 0.0, 1.0]
+    ref[~use_z] = [1.0, 0.0, 0.0]
 
     t1 = ref - (ref * n).sum(axis=1, keepdims=True) * n
     t1_norms = np.linalg.norm(t1, axis=1, keepdims=True)
@@ -198,9 +205,17 @@ def _make_figure(
     pp = _band_plot_params(band_v, z_lo, z_hi)
 
     fig = plt.figure(figsize=(20, 14))
-    outer = GridSpec(2, 1, figure=fig,
-                     left=0.03, right=0.91, top=0.88, bottom=0.08,
-                     hspace=0.25, height_ratios=[1.35, 1.0])
+    outer = GridSpec(
+        2,
+        1,
+        figure=fig,
+        left=0.03,
+        right=0.91,
+        top=0.88,
+        bottom=0.08,
+        hspace=0.25,
+        height_ratios=[1.35, 1.0],
+    )
     gs_top = GridSpecFromSubplotSpec(1, 3, subplot_spec=outer[0], wspace=0.05)
     gs_bot = GridSpecFromSubplotSpec(1, 3, subplot_spec=outer[1], wspace=0.50)
 
@@ -210,18 +225,28 @@ def _make_figure(
         f" {component_label})\n"
         "one dipole at each muscle centre along its long axis · fT per nA·m"
         + _phys_label(Q_phys_nAm, lim),
-        fontsize=13, fontweight="bold", y=0.95,
+        fontsize=13,
+        fontweight="bold",
+        y=0.95,
     )
 
     views = [("anterior", 12, -90), ("left lateral", 8, 0), ("posterior", 12, 90)]
     ax3d = []
     for i, (vname, elev, azim) in enumerate(views):
         ax = fig.add_subplot(gs_top[0, i], projection="3d")
-        _draw_skin_coloured(ax, band_v, band_f, combined, vmin=-lim, vmax=lim,
-                            cmap=cmap, alpha=0.97)
-        ax.scatter(srcs[:, 0], srcs[:, 1], srcs[:, 2], s=70,
-                   c=NATURE_PALETTE["glow"], edgecolor=NATURE_PALETTE["axis"],
-                   linewidths=0.6, marker="*")
+        _draw_skin_coloured(
+            ax, band_v, band_f, combined, vmin=-lim, vmax=lim, cmap=cmap, alpha=0.97
+        )
+        ax.scatter(
+            srcs[:, 0],
+            srcs[:, 1],
+            srcs[:, 2],
+            s=70,
+            c=NATURE_PALETTE["glow"],
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidths=0.6,
+            marker="*",
+        )
         ax.set_xlim(*pp["xlim"])
         ax.set_ylim(*pp["ylim"])
         ax.set_zlim(*pp["zlim"])
@@ -245,15 +270,21 @@ def _make_figure(
     th, zz = _cylindrical_unroll(band_v, axis_xy=axis_xy)
     sc = ax_u.scatter(th, zz, c=combined, cmap=cmap, vmin=-lim, vmax=lim, s=8)
     sth, sz = _cylindrical_unroll(srcs, axis_xy=axis_xy)
-    ax_u.scatter(sth, sz, s=140, c=NATURE_PALETTE["glow"],
-                 edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*")
+    ax_u.scatter(
+        sth,
+        sz,
+        s=140,
+        c=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.8,
+        marker="*",
+    )
     ax_u.set_xlabel("azimuth θ around body axis (°)", fontsize=10)
     ax_u.set_ylabel("z (mm)", fontsize=10)
     ax_u.set_xlim(-180, 180)
     ax_u.set_xticks(np.arange(-180, 181, 60))
     ax_u.tick_params(labelsize=9)
-    ax_u.set_title(f"combined {component_label} · unrolled skin cylinder",
-                   fontsize=10, pad=8)
+    ax_u.set_title(f"combined {component_label} · unrolled skin cylinder", fontsize=10, pad=8)
     cb2 = fig.colorbar(sc, ax=ax_u, shrink=0.90, pad=0.02, fraction=0.03, aspect=25)
     cb2.set_label("fT / nA·m", fontsize=9)
     cb2.ax.tick_params(labelsize=9)
@@ -312,7 +343,9 @@ def _make_vector_figure(
         "OPM measurement-vector directions on the skin surface\n"
         "rows: radial n̂  |  superior–inferior t₁  |  azimuthal t₂"
         "        (arrows sub-sampled uniformly over source band, star = dipole centre)",
-        fontsize=13, fontweight="bold", y=1.00,
+        fontsize=13,
+        fontweight="bold",
+        y=1.00,
     )
 
     tris = band_v[band_f]
@@ -328,17 +361,30 @@ def _make_vector_figure(
             ax.add_collection3d(poly)
 
             ax.quiver(
-                qv[:, 0], qv[:, 1], qv[:, 2],
-                qu[:, 0], qu[:, 1], qu[:, 2],
-                length=arrow_len, normalize=True,
-                color=color, alpha=0.75, linewidth=0.7,
+                qv[:, 0],
+                qv[:, 1],
+                qv[:, 2],
+                qu[:, 0],
+                qu[:, 1],
+                qu[:, 2],
+                length=arrow_len,
+                normalize=True,
+                color=color,
+                alpha=0.75,
+                linewidth=0.7,
                 arrow_length_ratio=0.25,
             )
 
             ax.scatter(
-                srcs[:, 0], srcs[:, 1], srcs[:, 2], s=60,
-                c=NATURE_PALETTE["glow"], edgecolor=NATURE_PALETTE["axis"],
-                linewidths=0.6, marker="*", zorder=5,
+                srcs[:, 0],
+                srcs[:, 1],
+                srcs[:, 2],
+                s=60,
+                c=NATURE_PALETTE["glow"],
+                edgecolor=NATURE_PALETTE["axis"],
+                linewidths=0.6,
+                marker="*",
+                zorder=5,
             )
 
             ax.set_xlim(*pp["xlim"])
@@ -355,10 +401,16 @@ def _make_vector_figure(
                 ax.set_title(vname, fontsize=11, pad=10)
             if col == 0:
                 ax.text2D(
-                    -0.18, 0.5, label,
+                    -0.18,
+                    0.5,
+                    label,
                     transform=ax.transAxes,
-                    fontsize=10, color=color, fontweight="bold",
-                    va="center", ha="left", rotation=90,
+                    fontsize=10,
+                    color=color,
+                    fontweight="bold",
+                    va="center",
+                    ha="left",
+                    rotation=90,
                 )
 
     fig.tight_layout(rect=[0, 0, 1, 0.99])
@@ -388,28 +440,39 @@ def _make_distance_figure(
     minimum distance across all muscles.
     """
     components = [
-        ("radial B·n̂",      band_n),
+        ("radial B·n̂", band_n),
         ("tangential B·t₁", t1),
         ("tangential B·t₂", t2),
     ]
     # Curated list of perceptually distinct colours (up to 16 muscles).
     _DISTINCT = [
-        "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
-        "#42d4f4", "#f032e6", "#bfef45", "#469990", "#9A6324",
-        "#800000", "#aaffc3", "#000075", "#a9a9a9", "#ffe119", "#000000",
+        "#e6194b",
+        "#3cb44b",
+        "#4363d8",
+        "#f58231",
+        "#911eb4",
+        "#42d4f4",
+        "#f032e6",
+        "#bfef45",
+        "#469990",
+        "#9A6324",
+        "#800000",
+        "#aaffc3",
+        "#000075",
+        "#a9a9a9",
+        "#ffe119",
+        "#000000",
     ]
     muscle_colors = [_DISTINCT[i % len(_DISTINCT)] for i in range(len(names))]
     units = "fT / nA·m" if Q_phys_nAm == 1.0 else "fT"
     scale = Q_phys_nAm
 
-    phys_note = (
-        "" if Q_phys_nAm == 1.0
-        else f"  (Q = {Q_phys_nAm} nA·m; y-axis in fT)"
-    )
+    phys_note = "" if Q_phys_nAm == 1.0 else f"  (Q = {Q_phys_nAm} nA·m; y-axis in fT)"
     fig, axes = plt.subplots(2, 2, figsize=(16, 11))
     fig.suptitle(
         f"Per-muscle field contribution vs distance to that muscle{phys_note}",
-        fontsize=13, fontweight="bold",
+        fontsize=13,
+        fontweight="bold",
     )
     scatter_axes = [axes[0, 0], axes[0, 1], axes[1, 0]]
     ax_summ = axes[1, 1]
@@ -422,29 +485,34 @@ def _make_distance_figure(
         for mi, (nm, col) in enumerate(zip(names, muscle_colors, strict=True)):
             dists = np.linalg.norm(band_v - srcs[mi], axis=1)
             vals = np.abs(np.einsum("ij,ij->i", B_per[mi], basis)) * scale
-            ax.scatter(dists, vals, s=3, alpha=0.30, color=col,
-                       label=nm.replace("scalenus", "scal."))
+            ax.scatter(
+                dists, vals, s=3, alpha=0.30, color=col, label=nm.replace("scalenus", "scal.")
+            )
             all_dists.append(dists)
             all_vals.append(vals)
             # Summary stats on the radial component only (most interpretable).
             if basis is band_n:
                 peak_idx = int(np.argmax(vals))
-                summary.append({
-                    "name": nm, "color": col,
-                    "peak_dist_mm": float(dists[peak_idx]),
-                    "peak_fT": float(vals.max()),
-                })
+                summary.append(
+                    {
+                        "name": nm,
+                        "color": col,
+                        "peak_dist_mm": float(dists[peak_idx]),
+                        "peak_fT": float(vals.max()),
+                    }
+                )
 
         all_dists_cat = np.concatenate(all_dists)
-        all_vals_cat  = np.concatenate(all_vals)
+        all_vals_cat = np.concatenate(all_vals)
         d_min = float(all_dists_cat.min())
         d_max = float(all_dists_cat.max())
         near = all_dists_cat <= d_min + 20.0
         anchor_amp = float(np.percentile(all_vals_cat[near & (all_vals_cat > 0)], 95))
         anchor_dist = d_min + 10.0
         r_grid = np.linspace(max(d_min, 1.0), d_max, 300)
-        ax.plot(r_grid, anchor_amp * anchor_dist ** 2 / r_grid ** 2,
-                "k--", lw=1.2, label="∝ 1/r²", zorder=5)
+        ax.plot(
+            r_grid, anchor_amp * anchor_dist**2 / r_grid**2, "k--", lw=1.2, label="∝ 1/r²", zorder=5
+        )
 
         ax.set_xlabel("distance to this muscle's source (mm)", fontsize=10)
         ax.set_ylabel(f"|{label}|  {units}", fontsize=10)
@@ -457,36 +525,40 @@ def _make_distance_figure(
     # Under pure 1/r² decay this is a constant (the dipole amplitude C).
     # Deviations are purely orientation effects — no log-log ambiguity.
     peak_ds = np.array([s["peak_dist_mm"] for s in summary])
-    peaks   = np.array([s["peak_fT"]      for s in summary])
-    C_vals  = peaks * peak_ds ** 2          # orientation factor per muscle
-    C_mean  = float(np.exp(np.mean(np.log(C_vals))))  # geometric mean = LS ref
+    peaks = np.array([s["peak_fT"] for s in summary])
+    C_vals = peaks * peak_ds**2  # orientation factor per muscle
+    C_mean = float(np.exp(np.mean(np.log(C_vals))))  # geometric mean = LS ref
 
     def _abbrev(nm: str) -> str:
-        return (nm.replace("sternocleidomastoid", "SCM")
-                  .replace("scalenus", "scal.")
-                  .replace("longus capitis", "l. capitis"))
+        return (
+            nm.replace("sternocleidomastoid", "SCM")
+            .replace("scalenus", "scal.")
+            .replace("longus capitis", "l. capitis")
+        )
 
     labels_abbrev = [_abbrev(s["name"]) for s in summary]
-    colors_bar    = [s["color"] for s in summary]
+    colors_bar = [s["color"] for s in summary]
 
     # Sort descending so strongest orientation factor is at the top.
     order = np.argsort(C_vals)[::-1]
 
-    bar_colors = [
-        "#3cb44b" if C_vals[i] >= C_mean else "#e6194b"
-        for i in order
-    ]
+    bar_colors = ["#3cb44b" if C_vals[i] >= C_mean else "#e6194b" for i in order]
     y_pos = np.arange(len(order))
 
-    ax_summ.barh(y_pos, C_vals[order], color=bar_colors, edgecolor="none",
-                 alpha=0.75, height=0.7)
+    ax_summ.barh(y_pos, C_vals[order], color=bar_colors, edgecolor="none", alpha=0.75, height=0.7)
     # Dot in muscle colour on top of each bar so identity is unambiguous.
-    ax_summ.scatter(C_vals[order], y_pos,
-                    color=[colors_bar[i] for i in order],
-                    s=60, zorder=5,
-                    edgecolors=NATURE_PALETTE["axis"], linewidths=0.5)
-    ax_summ.axvline(C_mean, color="k", lw=1.2, linestyle="--",
-                    label=f"geometric mean  ({C_mean:.0f})")
+    ax_summ.scatter(
+        C_vals[order],
+        y_pos,
+        color=[colors_bar[i] for i in order],
+        s=60,
+        zorder=5,
+        edgecolors=NATURE_PALETTE["axis"],
+        linewidths=0.5,
+    )
+    ax_summ.axvline(
+        C_mean, color="k", lw=1.2, linestyle="--", label=f"geometric mean  ({C_mean:.0f})"
+    )
     ax_summ.set_yticks(y_pos)
     ax_summ.set_yticklabels([labels_abbrev[i] for i in order], fontsize=8)
     ax_summ.set_xlabel(
@@ -502,12 +574,28 @@ def _make_distance_figure(
     ax_summ.legend(fontsize=8)
 
     _box = dict(boxstyle="round,pad=0.3", edgecolor="none", alpha=0.55)
-    ax_summ.text(0.97, 0.03, "green: orientation\nbonus vs mean",
-                 transform=ax_summ.transAxes, fontsize=7, va="bottom", ha="right",
-                 color="#1a5c1a", bbox=dict(**_box, facecolor="#3cb44b"))
-    ax_summ.text(0.97, 0.97, "red: orientation\npenalty vs mean",
-                 transform=ax_summ.transAxes, fontsize=7, va="top", ha="right",
-                 color="#7a1010", bbox=dict(**_box, facecolor="#e6194b"))
+    ax_summ.text(
+        0.97,
+        0.03,
+        "green: orientation\nbonus vs mean",
+        transform=ax_summ.transAxes,
+        fontsize=7,
+        va="bottom",
+        ha="right",
+        color="#1a5c1a",
+        bbox=dict(**_box, facecolor="#3cb44b"),
+    )
+    ax_summ.text(
+        0.97,
+        0.97,
+        "red: orientation\npenalty vs mean",
+        transform=ax_summ.transAxes,
+        fontsize=7,
+        va="top",
+        ha="right",
+        color="#7a1010",
+        bbox=dict(**_box, facecolor="#e6194b"),
+    )
 
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -547,87 +635,108 @@ def main() -> int:
         centre = np.array([*body_axis_xy(skin.vertices, src[2]), src[2]])
         B = sarvas_field_on_surface(src, ax, band_v, centre) * 1e15 / Q_NAM
         B_per.append(B)
-    B_per = np.array(B_per)          # (n_srcs, M, 3)
-    B_combined = B_per.sum(axis=0)   # (M, 3)
+    B_per = np.array(B_per)  # (n_srcs, M, 3)
+    B_combined = B_per.sum(axis=0)  # (M, 3)
 
     def proj(B_arr, basis):
         return np.einsum("ij,ij->i", B_arr, basis)
 
     per_radial = [proj(B, band_n) for B in B_per]
-    per_tang1  = [proj(B, t1)     for B in B_per]
-    per_tang2  = [proj(B, t2)     for B in B_per]
+    per_tang1 = [proj(B, t1) for B in B_per]
+    per_tang2 = [proj(B, t2) for B in B_per]
 
     combined_radial = proj(B_combined, band_n)
-    combined_tang1  = proj(B_combined, t1)
-    combined_tang2  = proj(B_combined, t2)
+    combined_tang1 = proj(B_combined, t1)
+    combined_tang2 = proj(B_combined, t2)
 
-    fig_kwargs = dict(names=names, srcs=srcs, band_v=band_v, band_f=band_f,
-                      z_lo=z_band_lo, z_hi=z_band_hi, axis_xy=axis_xy,
-                      Q_phys_nAm=args.Q_nAm)
-    _make_figure(OUT_PNG,       combined_radial, per_radial, "radial B·n̂",       **fig_kwargs)
-    _make_figure(OUT_PNG_TANG1, combined_tang1,  per_tang1,  "tangential B·t₁ (superior–inferior)", **fig_kwargs)
-    _make_figure(OUT_PNG_TANG2, combined_tang2,  per_tang2,  "tangential B·t₂ (azimuthal)",         **fig_kwargs)
-    _make_vector_figure(OUT_PNG_VECTORS, band_v, band_f, band_n, t1, t2,
-                        srcs, z_band_lo, z_band_hi)
-    _make_distance_figure(OUT_PNG_DIST, B_per, band_v, band_n, t1, t2,
-                          srcs, names, Q_phys_nAm=args.Q_nAm)
+    fig_kwargs = dict(
+        names=names,
+        srcs=srcs,
+        band_v=band_v,
+        band_f=band_f,
+        z_lo=z_band_lo,
+        z_hi=z_band_hi,
+        axis_xy=axis_xy,
+        Q_phys_nAm=args.Q_nAm,
+    )
+    _make_figure(OUT_PNG, combined_radial, per_radial, "radial B·n̂", **fig_kwargs)
+    _make_figure(
+        OUT_PNG_TANG1,
+        combined_tang1,
+        per_tang1,
+        "tangential B·t₁ (superior–inferior)",
+        **fig_kwargs,
+    )
+    _make_figure(
+        OUT_PNG_TANG2, combined_tang2, per_tang2, "tangential B·t₂ (azimuthal)", **fig_kwargs
+    )
+    _make_vector_figure(OUT_PNG_VECTORS, band_v, band_f, band_n, t1, t2, srcs, z_band_lo, z_band_hi)
+    _make_distance_figure(
+        OUT_PNG_DIST, B_per, band_v, band_n, t1, t2, srcs, names, Q_phys_nAm=args.Q_nAm
+    )
 
     stats = []
     for nm, src, r, g1, g2 in zip(names, srcs, per_radial, per_tang1, per_tang2, strict=True):
         entry: dict = {
-            "muscle": nm, "source_mm": src.tolist(),
+            "muscle": nm,
+            "source_mm": src.tolist(),
             "peak_abs_fT_per_nAm": {
                 "radial": float(np.max(np.abs(r))),
-                "tang1":  float(np.max(np.abs(g1))),
-                "tang2":  float(np.max(np.abs(g2))),
+                "tang1": float(np.max(np.abs(g1))),
+                "tang2": float(np.max(np.abs(g2))),
             },
         }
         if args.Q_nAm != 1.0:
             entry["peak_abs_pT_at_Q_phys"] = {
                 "radial": float(np.max(np.abs(r))) * args.Q_nAm / 1000.0,
-                "tang1":  float(np.max(np.abs(g1))) * args.Q_nAm / 1000.0,
-                "tang2":  float(np.max(np.abs(g2))) * args.Q_nAm / 1000.0,
+                "tang1": float(np.max(np.abs(g1))) * args.Q_nAm / 1000.0,
+                "tang2": float(np.max(np.abs(g2))) * args.Q_nAm / 1000.0,
             }
         stats.append(entry)
 
     json_out: dict = {
         "Q_nAm": Q_NAM,
-        "z_band_mm": {"lo": z_band_lo, "hi": z_band_hi,
-                      "skin_margin": SKIN_MARGIN_MM},
+        "z_band_mm": {"lo": z_band_lo, "hi": z_band_hi, "skin_margin": SKIN_MARGIN_MM},
         "n_skin_vertices": len(band_v),
         "per_muscle": stats,
         "combined_peak_fT_per_nAm": {
             "radial": float(np.max(np.abs(combined_radial))),
-            "tang1":  float(np.max(np.abs(combined_tang1))),
-            "tang2":  float(np.max(np.abs(combined_tang2))),
+            "tang1": float(np.max(np.abs(combined_tang1))),
+            "tang2": float(np.max(np.abs(combined_tang2))),
         },
     }
     if args.Q_nAm != 1.0:
         json_out["Q_phys_nAm"] = args.Q_nAm
         json_out["combined_peak_pT_at_Q_phys"] = {
             "radial": float(np.max(np.abs(combined_radial))) * args.Q_nAm / 1000.0,
-            "tang1":  float(np.max(np.abs(combined_tang1))) * args.Q_nAm / 1000.0,
-            "tang2":  float(np.max(np.abs(combined_tang2))) * args.Q_nAm / 1000.0,
+            "tang1": float(np.max(np.abs(combined_tang1))) * args.Q_nAm / 1000.0,
+            "tang2": float(np.max(np.abs(combined_tang2))) * args.Q_nAm / 1000.0,
         }
     OUT_JSON.write_text(json.dumps(json_out, indent=2))
 
-    print(f"figures: {OUT_PNG.name}  {OUT_PNG_TANG1.name}  "
-          f"{OUT_PNG_TANG2.name}  {OUT_PNG_VECTORS.name}  {OUT_PNG_DIST.name}")
-    print(f"  band z: {z_band_lo:.0f} → {z_band_hi:.0f} mm  "
-          f"({len(band_v)} skin vertices)")
+    print(
+        f"figures: {OUT_PNG.name}  {OUT_PNG_TANG1.name}  "
+        f"{OUT_PNG_TANG2.name}  {OUT_PNG_VECTORS.name}  {OUT_PNG_DIST.name}"
+    )
+    print(f"  band z: {z_band_lo:.0f} → {z_band_hi:.0f} mm  ({len(band_v)} skin vertices)")
     header = f"  {'muscle':<28} {'radial':>10} {'tang1':>10} {'tang2':>10}  fT/nA·m"
     print(header)
     for s in stats:
         p = s["peak_abs_fT_per_nAm"]
         print(f"  {s['muscle']:<28} {p['radial']:10.2f} {p['tang1']:10.2f} {p['tang2']:10.2f}")
-    cr, ct1, ct2 = (np.max(np.abs(combined_radial)), np.max(np.abs(combined_tang1)),
-                    np.max(np.abs(combined_tang2)))
+    cr, ct1, ct2 = (
+        np.max(np.abs(combined_radial)),
+        np.max(np.abs(combined_tang1)),
+        np.max(np.abs(combined_tang2)),
+    )
     print(f"  {'combined':<28} {cr:10.2f} {ct1:10.2f} {ct2:10.2f}")
     if args.Q_nAm != 1.0:
-        print(f"\n  at Q = {args.Q_nAm} nA·m:  "
-              f"radial {cr * args.Q_nAm / 1000:.3f} pT  "
-              f"tang1 {ct1 * args.Q_nAm / 1000:.3f} pT  "
-              f"tang2 {ct2 * args.Q_nAm / 1000:.3f} pT")
+        print(
+            f"\n  at Q = {args.Q_nAm} nA·m:  "
+            f"radial {cr * args.Q_nAm / 1000:.3f} pT  "
+            f"tang1 {ct1 * args.Q_nAm / 1000:.3f} pT  "
+            f"tang2 {ct2 * args.Q_nAm / 1000:.3f} pT"
+        )
     return 0
 
 

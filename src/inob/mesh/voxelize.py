@@ -9,6 +9,7 @@ rasterise per-tissue surfaces into a labelled image before calling
   * :func:`voxelize_mesh`      — surface splat + closing + exterior flood
                                    (skin, accommodates anatomical openings)
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,8 +29,12 @@ logger = logging.getLogger(__name__)
 
 
 def voxelize_solid(
-    equations: np.ndarray, X: np.ndarray, Y: np.ndarray, Z: np.ndarray,
-    *, eps: float = 1e-6,
+    equations: np.ndarray,
+    X: np.ndarray,
+    Y: np.ndarray,
+    Z: np.ndarray,
+    *,
+    eps: float = 1e-6,
 ) -> np.ndarray:
     """Test which grid cell centres lie inside a convex hull.
 
@@ -43,7 +48,11 @@ def voxelize_solid(
 
 
 def voxelize_watertight(
-    mesh: trimesh.Trimesh, X: np.ndarray, *, pitch: float, mn: np.ndarray,
+    mesh: trimesh.Trimesh,
+    X: np.ndarray,
+    *,
+    pitch: float,
+    mn: np.ndarray,
 ) -> np.ndarray:
     """Voxelise a *watertight* mesh exactly via trimesh ray-tracing + flood fill.
 
@@ -55,9 +64,7 @@ def voxelize_watertight(
     if not vmat.any():
         return np.zeros(X.shape, dtype=bool)
     i_l, j_l, k_l = np.nonzero(vmat)
-    local_xyz = np.stack(
-        [i_l, j_l, k_l, np.ones_like(i_l)], axis=1
-    ).astype(float)
+    local_xyz = np.stack([i_l, j_l, k_l, np.ones_like(i_l)], axis=1).astype(float)
     world_xyz = (vox.transform @ local_xyz.T).T[:, :3]
     ijk = np.clip(((world_xyz - mn) / pitch).astype(int), 0, np.array(X.shape) - 1)
     out = np.zeros(X.shape, dtype=bool)
@@ -66,8 +73,13 @@ def voxelize_watertight(
 
 
 def voxelize_mesh(
-    mesh: trimesh.Trimesh, X: np.ndarray, *, pitch: float, mn: np.ndarray,
-    closing_mm: float = 15.0, dilate_mm: float = 2.0,
+    mesh: trimesh.Trimesh,
+    X: np.ndarray,
+    *,
+    pitch: float,
+    mn: np.ndarray,
+    closing_mm: float = 15.0,
+    dilate_mm: float = 2.0,
 ) -> np.ndarray:
     """Surface-sample voxelisation for *non-watertight* meshes (e.g. skin).
 
@@ -96,16 +108,22 @@ def voxelize_mesh(
     boundary_label = lab[0, 0, 0]
     if boundary_label == 0:
         # entire grid is body — degenerate; return as-is
-        logger.warning("voxelize_mesh: exterior corner voxel is occupied; "
-                       "skipping flood-fill — check pad_mm")
+        logger.warning(
+            "voxelize_mesh: exterior corner voxel is occupied; skipping flood-fill — check pad_mm"
+        )
         return occ
     occ = lab != boundary_label
     return binary_erosion(occ, iterations=dilate_voxels)
 
 
 def voxelize_solid_for_mesh(
-    mesh: trimesh.Trimesh, X: np.ndarray, Y: np.ndarray, Z: np.ndarray,
-    *, pitch: float, mn: np.ndarray,
+    mesh: trimesh.Trimesh,
+    X: np.ndarray,
+    Y: np.ndarray,
+    Z: np.ndarray,
+    *,
+    pitch: float,
+    mn: np.ndarray,
 ) -> np.ndarray:
     """Convex-hull voxelisation restricted to the mesh's local bbox.
 

@@ -1,4 +1,5 @@
 """Sarvas-vs-FEM comparison figure (Nature Reviews-styled)."""
+
 from __future__ import annotations
 
 import logging
@@ -21,8 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 def render_sarvas_vs_fem(
-    result: SarvasVsFemResult, *, source_idx: int = -1,
-    out_path: Path, dpi: int = 300, region: str = "nerve",
+    result: SarvasVsFemResult,
+    *,
+    source_idx: int = -1,
+    out_path: Path,
+    dpi: int = 300,
+    region: str = "nerve",
 ) -> Path:
     """Four-panel benchmark figure:
 
@@ -45,22 +50,31 @@ def render_sarvas_vs_fem(
     scale_fT = 1.0e15 / result.Q_nAm
     sarvas_disp = result.sarvas_T * scale_fT
     fem_disp = result.fem_T * scale_fT
-    unit_label = f"fT  (per {result.Q_nAm:g} nA·m source)" if result.Q_nAm != 1.0 \
-                  else "fT  (per 1 nA·m source)"
+    unit_label = (
+        f"fT  (per {result.Q_nAm:g} nA·m source)"
+        if result.Q_nAm != 1.0
+        else "fT  (per 1 nA·m source)"
+    )
 
     fig = plt.figure(figsize=(13.5, 11.5))
-    gs = GridSpec(2, 2, figure=fig, left=0.07, right=0.97, top=0.93, bottom=0.07,
-                  hspace=0.32, wspace=0.28)
+    gs = GridSpec(
+        2, 2, figure=fig, left=0.07, right=0.97, top=0.93, bottom=0.07, hspace=0.32, wspace=0.28
+    )
 
     # ── panel a: per-coil scatter (single source) ──────────────────────────
     ax_a = fig.add_subplot(gs[0, 0])
     s_d = sarvas_disp[:, source_idx]
     f_d = fem_disp[:, source_idx]
-    ax_a.scatter(s_d, f_d, s=18, alpha=0.7,
-                 color=NATURE_PALETTE["blue"], edgecolor="none")
+    ax_a.scatter(s_d, f_d, s=18, alpha=0.7, color=NATURE_PALETTE["blue"], edgecolor="none")
     lim = max(float(np.abs(s_d).max()), float(np.abs(f_d).max())) * 1.05
-    ax_a.plot([-lim, lim], [-lim, lim], lw=0.7, color=NATURE_PALETTE["axis"],
-              linestyle="--", label="y = x")
+    ax_a.plot(
+        [-lim, lim],
+        [-lim, lim],
+        lw=0.7,
+        color=NATURE_PALETTE["axis"],
+        linestyle="--",
+        label="y = x",
+    )
     ax_a.set_xlabel(f"Sarvas analytic  ·  {unit_label}")
     ax_a.set_ylabel(f"FEM (DUNEuro)  ·  {unit_label}")
     ax_a.set_xlim(-lim, lim)
@@ -78,10 +92,15 @@ def render_sarvas_vs_fem(
     if dist.ndim == 2:
         dist = dist[:, source_idx]
     sc = ax_b.scatter(
-        dist, res_d,
-        c=sarvas_disp[:, source_idx], cmap=divergent_cmap(),
-        vmin=-np.abs(s_d).max(), vmax=np.abs(s_d).max(),
-        s=24, edgecolor=NATURE_PALETTE["axis"], linewidths=0.2,
+        dist,
+        res_d,
+        c=sarvas_disp[:, source_idx],
+        cmap=divergent_cmap(),
+        vmin=-np.abs(s_d).max(),
+        vmax=np.abs(s_d).max(),
+        s=24,
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.2,
     )
     ax_b.axhline(0, lw=0.6, color=NATURE_PALETTE["axis"], linestyle="--")
     # NB `distance_to_axis_mm` holds the full 3-D coil-to-sphere-centre
@@ -90,8 +109,13 @@ def render_sarvas_vs_fem(
     # coil/source z-offset. Label it as such so it is not read against the
     # literature transverse standoff (`geometry.sensor_axis_mm`).
     dist_median = float(np.median(dist))
-    ax_b.axvline(dist_median, lw=0.6, color=NATURE_PALETTE["red"], linestyle=":",
-                 label=f"{dist_median:.0f} mm (median, this source)")
+    ax_b.axvline(
+        dist_median,
+        lw=0.6,
+        color=NATURE_PALETTE["red"],
+        linestyle=":",
+        label=f"{dist_median:.0f} mm (median, this source)",
+    )
     ax_b.set_xlabel("Coil distance to source (3-D)  ·  mm")
     ax_b.set_ylabel(f"FEM − Sarvas residual  ·  {unit_label}")
     ax_b.set_title("Residual vs sensor distance")
@@ -106,14 +130,16 @@ def render_sarvas_vs_fem(
     z = result.source_pos_mm[:, 2]
     sarvas_peak = np.max(np.abs(sarvas_disp), axis=0)
     fem_peak = np.max(np.abs(fem_disp), axis=0)
-    ax_c.plot(z, sarvas_peak, color=NATURE_PALETTE["blue"], lw=1.6,
-              label="Sarvas analytic")
-    ax_c.plot(z, fem_peak, color=NATURE_PALETTE["red"], lw=1.6,
-              label="FEM (DUNEuro)")
-    ax_c.fill_between(z, np.minimum(sarvas_peak, fem_peak),
-                      np.maximum(sarvas_peak, fem_peak),
-                      color=NATURE_PALETTE["stone"], alpha=0.45,
-                      label="Difference band")
+    ax_c.plot(z, sarvas_peak, color=NATURE_PALETTE["blue"], lw=1.6, label="Sarvas analytic")
+    ax_c.plot(z, fem_peak, color=NATURE_PALETTE["red"], lw=1.6, label="FEM (DUNEuro)")
+    ax_c.fill_between(
+        z,
+        np.minimum(sarvas_peak, fem_peak),
+        np.maximum(sarvas_peak, fem_peak),
+        color=NATURE_PALETTE["stone"],
+        alpha=0.45,
+        label="Difference band",
+    )
     ax_c.set_xlabel(f"Source z position along {region}  ·  mm")
     ax_c.set_ylabel(f"Peak |B| over OPM array  ·  {unit_label}")
     ax_c.set_title(f"Peak field along the {region}")
@@ -128,10 +154,8 @@ def render_sarvas_vs_fem(
     ratio = flat_f[keep] / flat_s[keep]
     ax_d.hist(ratio, bins=80, color=NATURE_PALETTE["blue"], alpha=0.75)
     median = float(np.nanmedian(ratio))
-    ax_d.axvline(1.0, color=NATURE_PALETTE["axis"], lw=0.8, linestyle="--",
-                 label="ratio = 1")
-    ax_d.axvline(median, color=NATURE_PALETTE["red"], lw=1.2,
-                 label=f"median = {median:.2f}")
+    ax_d.axvline(1.0, color=NATURE_PALETTE["axis"], lw=0.8, linestyle="--", label="ratio = 1")
+    ax_d.axvline(median, color=NATURE_PALETTE["red"], lw=1.2, label=f"median = {median:.2f}")
     ax_d.set_xlabel("FEM / Sarvas amplitude ratio  (unitless)")
     ax_d.set_ylabel("Channel-source pair count")
     ax_d.set_title("Amplitude-ratio distribution")
@@ -145,14 +169,16 @@ def render_sarvas_vs_fem(
     # JSON and can differ from the actual anatomy by an order of magnitude
     # for a target the config hasn't been tuned for (e.g. spine).
     src_axis_dist_all = np.linalg.norm(
-        result.source_pos_mm[:, :2] - result.geometry.axis_xy_mm[None, :], axis=1,
+        result.source_pos_mm[:, :2] - result.geometry.axis_xy_mm[None, :],
+        axis=1,
     )
     src_axis_med = float(np.median(src_axis_dist_all))
     # Transverse (XY) coil-to-axis distance — the quantity comparable to the
     # literature standoff. Deliberately NOT median(distance_to_axis_mm), which
     # is a 3-D separation inflated by the array's z-extent.
     coil_axis_xy = np.linalg.norm(
-        result.coil_pos_mm[:, :2] - result.geometry.axis_xy_mm[None, :], axis=1,
+        result.coil_pos_mm[:, :2] - result.geometry.axis_xy_mm[None, :],
+        axis=1,
     )
     fig.suptitle(
         f"Analytic Sarvas (single-sphere) vs full multi-tissue FEM forward  "
@@ -160,17 +186,23 @@ def render_sarvas_vs_fem(
         f"coil–axis (transverse) {coil_axis_xy.min():.0f}–"
         f"{np.median(coil_axis_xy):.0f} mm (min–median)  "
         f"·  Q = {result.Q_nAm:g} nA·m",
-        fontsize=11, fontweight="bold", y=0.985,
+        fontsize=11,
+        fontweight="bold",
+        y=0.985,
     )
     fig.text(
-        0.5, 0.005,
+        0.5,
+        0.005,
         "FEM ≠ Sarvas reflects secondary (volume) currents in the multi-tissue "
         "conductor (Geselowitz 1970; Sarvas 1987; Hämäläinen et al. 1993). For "
         "cervical/spinal MEG, bone strongly attenuates lateral currents while "
         "longitudinal currents are nearly conductor-invariant (O'Neill et al. "
         "2025 Sci Rep). Sarvas is exact only for a homogeneous sphere.",
-        ha="center", va="bottom", fontsize=7,
-        color=NATURE_PALETTE["axis"], style="italic",
+        ha="center",
+        va="bottom",
+        fontsize=7,
+        color=NATURE_PALETTE["axis"],
+        style="italic",
     )
 
     return save_figure(fig, out_path, dpi=dpi)

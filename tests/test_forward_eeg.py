@@ -1,5 +1,6 @@
 """Tests for the EEG forward solve, with a fake DUNEuro driver
 (no real duneuropy install required)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,7 +30,7 @@ class _FakeDp:
 class _FakeEegDriver:
     def __init__(self, n_elec: int, L_per_dipole: np.ndarray):
         self.n_elec = n_elec
-        self.L_per_dipole = L_per_dipole   # (n_dipoles,) amplitude per dipole
+        self.L_per_dipole = L_per_dipole  # (n_dipoles,) amplitude per dipole
         self.electrodes_attached = None
 
     def setElectrodes(self, elec_du, opts):
@@ -44,24 +45,42 @@ class _FakeEegDriver:
 
 
 def _fem_two_source_slabs() -> FemMesh:
-    nodes = np.array([
-        [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
-        [0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0], [0.0, 0.0, 3.0],
-        [10.0, 10.0, 10.0], [11.0, 10.0, 10.0], [10.0, 11.0, 10.0], [10.0, 10.0, 11.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 2.0],
+            [1.0, 0.0, 2.0],
+            [0.0, 1.0, 2.0],
+            [0.0, 0.0, 3.0],
+            [10.0, 10.0, 10.0],
+            [11.0, 10.0, 10.0],
+            [10.0, 11.0, 10.0],
+            [10.0, 10.0, 11.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]], dtype=np.int32)
     tissue = np.array([1, 1, 2], dtype=np.int32)
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                    tissue_labels=("vagus_left", "skin"), unit="mm")
+    return FemMesh(
+        nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("vagus_left", "skin"), unit="mm"
+    )
 
 
 def _electrodes(n: int) -> SensorArray:
     pos = np.column_stack([np.arange(n, dtype=np.float64), np.zeros(n), np.zeros(n)])
     ori = np.tile([1.0, 0.0, 0.0], (n, 1))
     labels = tuple(f"elec-{i:04d}" for i in range(n))
-    return SensorArray(coilpos=pos, coilori=ori, labels=labels,
-                        chantype=tuple(["eeg"] * n), chanunit=tuple(["V"] * n),
-                        unit="mm")
+    return SensorArray(
+        coilpos=pos,
+        coilori=ori,
+        labels=labels,
+        chantype=tuple(["eeg"] * n),
+        chanunit=tuple(["V"] * n),
+        unit="mm",
+    )
 
 
 def test_attach_electrodes_calls_set_electrodes() -> None:
@@ -104,7 +123,8 @@ def test_run_eeg_forward_end_to_end_with_fake_driver(tmp_path: Path, monkeypatch
 
     monkeypatch.setattr(eeg_mod, "import_duneuro", lambda cfg: _FakeDp)
     monkeypatch.setattr(
-        eeg_mod, "build_driver",
+        eeg_mod,
+        "build_driver",
         lambda cfg, fem: (fake_driver, {"volume_conductor": {}}, np.array([3e-4, 4.3e-4])),
     )
 
@@ -117,7 +137,9 @@ def test_run_eeg_forward_end_to_end_with_fake_driver(tmp_path: Path, monkeypatch
     assert lf.channel_names == electrodes.labels
     # L_fT_per_nAm slot holds µV/(nA·m) = L * EEG_CALIBRATION_FACTOR
     np.testing.assert_allclose(
-        lf.L_fT_per_nAm, lf.L * eeg_mod.EEG_CALIBRATION_FACTOR, atol=1e-12,
+        lf.L_fT_per_nAm,
+        lf.L * eeg_mod.EEG_CALIBRATION_FACTOR,
+        atol=1e-12,
     )
 
 

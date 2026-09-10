@@ -29,11 +29,12 @@ here, in order of increasing volume-conductor realism:
 Differencing consecutive rungs isolates one physical effect each: 1→2 is the
 volume-current contribution, 2→3 is the effect of real geometry.
 """
+
 from __future__ import annotations
 
 import numpy as np
 
-MU_0 = 4.0 * np.pi * 1e-7   # vacuum permeability, T·m/A
+MU_0 = 4.0 * np.pi * 1e-7  # vacuum permeability, T·m/A
 
 
 def infinite_medium_meg_field(
@@ -77,7 +78,7 @@ def infinite_medium_meg_field(
 
     a = r - r0[None, :]
     a_norm = np.maximum(np.linalg.norm(a, axis=1), 1e-30)
-    return (MU_0 / (4.0 * np.pi)) * np.cross(Q[None, :], a) / (a_norm ** 3)[:, None]
+    return (MU_0 / (4.0 * np.pi)) * np.cross(Q[None, :], a) / (a_norm**3)[:, None]
 
 
 def sarvas_meg_field(
@@ -112,21 +113,15 @@ def sarvas_meg_field(
     F = a_norm * (r_norm * a_norm + r_norm * r_norm - (r * r0[None, :]).sum(axis=1))
     # ∇F = (a²/r + (a·r)/a + 2*a + 2*r) * r - (a + 2*r + (a·r)/a) * r0
     a_dot_r = (a * r).sum(axis=1)
-    grad_F_r_coef = (
-        a_norm ** 2 / r_norm
-        + a_dot_r / a_norm
-        + 2.0 * a_norm
-        + 2.0 * r_norm
-    )[:, None]
+    grad_F_r_coef = (a_norm**2 / r_norm + a_dot_r / a_norm + 2.0 * a_norm + 2.0 * r_norm)[:, None]
     grad_F_r0_coef = (a_norm + 2.0 * r_norm + a_dot_r / a_norm)[:, None]
     grad_F = grad_F_r_coef * r - grad_F_r0_coef * r0[None, :]
 
-    Q_cross_r0 = np.cross(Q, r0)            # (3,)
-    Q_cross_r0_dot_r = (r * Q_cross_r0[None, :]).sum(axis=1)[:, None]   # (N, 1)
+    Q_cross_r0 = np.cross(Q, r0)  # (3,)
+    Q_cross_r0_dot_r = (r * Q_cross_r0[None, :]).sum(axis=1)[:, None]  # (N, 1)
 
     B = (MU_0 / (4.0 * np.pi * F[:, None] ** 2)) * (
-        F[:, None] * np.tile(Q_cross_r0[None, :], (len(r), 1))
-        - Q_cross_r0_dot_r * grad_F
+        F[:, None] * np.tile(Q_cross_r0[None, :], (len(r), 1)) - Q_cross_r0_dot_r * grad_F
     )
     return B
 
@@ -153,7 +148,7 @@ def homogeneous_sphere_eeg_potential(
 
     R = float(sphere_radius_m)
     sigma = float(sigma_S_per_m)
-    f = float(np.linalg.norm(r0))   # source eccentricity
+    f = float(np.linalg.norm(r0))  # source eccentricity
     if f >= R:
         raise ValueError("dipole must be inside the sphere")
 
@@ -162,7 +157,7 @@ def homogeneous_sphere_eeg_potential(
         e_r0 = r0 / f
     else:
         e_r0 = np.array([0.0, 0.0, 1.0])
-    Q_rad = (Q @ e_r0)
+    Q_rad = Q @ e_r0
     Q_tan_vec = Q - Q_rad * e_r0
     Q_tan = float(np.linalg.norm(Q_tan_vec))
     if Q_tan > 0:
@@ -178,7 +173,7 @@ def homogeneous_sphere_eeg_potential(
     rs = np.linalg.norm(r, axis=1)
     cos_theta = (r @ e_r0) / np.maximum(rs, 1e-30)
     cos_theta = np.clip(cos_theta, -1.0, 1.0)
-    sin_theta = np.sqrt(1.0 - cos_theta ** 2)
+    sin_theta = np.sqrt(1.0 - cos_theta**2)
     # φ measured from e_tan in the plane orthogonal to e_r0
     proj = r - rs[:, None] * cos_theta[:, None] * e_r0[None, :]
     proj_norm = np.linalg.norm(proj, axis=1)
@@ -195,13 +190,12 @@ def homogeneous_sphere_eeg_potential(
 
     out = np.zeros(len(r), dtype=np.float64)
     # P_{n-1}, P_n via recurrence
-    P_prev = np.ones_like(cos_theta)         # P_0
-    P_cur = cos_theta.copy()                 # P_1
-    P1_prev = np.zeros_like(cos_theta)       # P_0^1 = 0
-    P1_cur = sin_theta.copy()                # P_1^1 = sinθ (using positive convention)
+    P_prev = np.ones_like(cos_theta)  # P_0
+    P_cur = cos_theta.copy()  # P_1
+    P1_prev = np.zeros_like(cos_theta)  # P_0^1 = 0
+    P1_cur = sin_theta.copy()  # P_1^1 = sinθ (using positive convention)
     for k in range(1, n_terms + 1):
-        out += Q_rad * coef_rad[k - 1] * P_cur \
-             + Q_tan * coef_tan[k - 1] * P1_cur * cos_phi
+        out += Q_rad * coef_rad[k - 1] * P_cur + Q_tan * coef_tan[k - 1] * P1_cur * cos_phi
         # advance: P_{k+1} = ((2k+1) x P_k − k P_{k-1}) / (k+1)
         P_next = ((2 * k + 1) * cos_theta * P_cur - k * P_prev) / (k + 1)
         P1_next = ((2 * k + 1) * cos_theta * P1_cur - (k + 1) * P1_prev) / k

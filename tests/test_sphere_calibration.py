@@ -5,6 +5,7 @@
 require heavy external mesh/FEM dependencies not available in the unit-test
 environment. We cover the pure geometry and analytic-potential helpers.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -31,7 +32,9 @@ def test_build_sphere_electrodes_outward_normals() -> None:
     electrodes = build_sphere_electrodes(radius, n_electrodes=32, seed=1)
     # orientation should point radially outward: unit vector == pos / radius
     np.testing.assert_allclose(
-        electrodes.coilori, electrodes.coilpos / radius, atol=1e-6,
+        electrodes.coilori,
+        electrodes.coilpos / radius,
+        atol=1e-6,
     )
     np.testing.assert_allclose(np.linalg.norm(electrodes.coilori, axis=1), 1.0, atol=1e-6)
 
@@ -43,7 +46,7 @@ def test_build_sphere_electrodes_deterministic_with_seed() -> None:
 
 
 def test_per_dipole_analytic_shape_and_units() -> None:
-    src = np.array([0.0, 0.0, 0.05])       # 50 mm depth, in metres
+    src = np.array([0.0, 0.0, 0.05])  # 50 mm depth, in metres
     elec = np.array([[0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [0.0, 0.0, 0.1]])
     out = _per_dipole_analytic(src, elec, radius_mm=100.0, sigma_S_per_m=0.43)
     assert out.shape == (3, 3)

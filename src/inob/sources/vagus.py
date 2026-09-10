@@ -3,6 +3,7 @@
 A single canonical implementation, used by both the local forward solver
 (``inob.forward.solve``) and the cluster chunk worker (``inob.forward.chunk``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def vagus_sources(
-    fem: FemMesh, tissue_label: str, *, spacing_mm: float,
+    fem: FemMesh,
+    tissue_label: str,
+    *,
+    spacing_mm: float,
 ) -> np.ndarray:
     """Sample one dipole position per ``spacing_mm`` of axial Z extent of a tissue.
 
@@ -27,9 +31,7 @@ def vagus_sources(
         ValueError: if ``tissue_label`` is unknown or has no tets in ``fem``.
     """
     if tissue_label not in fem.tissue_labels:
-        raise ValueError(
-            f"tissue {tissue_label!r} not in FEM (have {list(fem.tissue_labels)})"
-        )
+        raise ValueError(f"tissue {tissue_label!r} not in FEM (have {list(fem.tissue_labels)})")
     tissue_id = fem.label_to_id[tissue_label]
     mask = fem.tissue == tissue_id
     if not mask.any():
@@ -47,7 +49,11 @@ def vagus_sources(
     pos = np.asarray(src, dtype=np.float64)
     logger.info(
         "%d dipole positions along %s (spacing %g mm, z=%g..%g)",
-        len(pos), tissue_label, spacing_mm, z_lo, z_hi,
+        len(pos),
+        tissue_label,
+        spacing_mm,
+        z_lo,
+        z_hi,
     )
     return pos
 
@@ -56,12 +62,16 @@ def _sample_one(fem: FemMesh, label: str, *, spacing_mm: float) -> np.ndarray:
     """Sample one tissue, dispatching muscle to its volume-fill sampler."""
     if label == "muscle":
         from inob.sources.muscle import muscle_sources
+
         return muscle_sources(fem, spacing_mm=spacing_mm)
     return vagus_sources(fem, label, spacing_mm=spacing_mm)
 
 
 def sample_source_tissues(
-    fem: FemMesh, source_tissue: str, *, spacing_mm: float,
+    fem: FemMesh,
+    source_tissue: str,
+    *,
+    spacing_mm: float,
 ) -> np.ndarray:
     """Sample dipoles across one or more comma-separated tissue labels.
 
@@ -95,7 +105,7 @@ def _tets_containing(points: np.ndarray, fem: FemMesh, *, k: int = 64) -> np.nda
     """
     from scipy.spatial import cKDTree
 
-    verts = fem.nodes[fem.tets]                     # (T, 4, 3)
+    verts = fem.nodes[fem.tets]  # (T, 4, 3)
     centroids = verts.mean(axis=1)
     tree = cKDTree(centroids)
     _, idx = tree.query(points, k=min(k, len(centroids)))
@@ -106,15 +116,15 @@ def _tets_containing(points: np.ndarray, fem: FemMesh, *, k: int = 64) -> np.nda
 
     inside = np.zeros(len(points), dtype=bool)
     for i, cand in enumerate(idx):
-        v = verts[cand]                             # (k, 4, 3)
+        v = verts[cand]  # (k, 4, 3)
         d = v[:, 3, :]
         # Columns a-d, b-d, c-d; barycentric coords of p relative to that basis.
         t = np.stack([v[:, 0] - d, v[:, 1] - d, v[:, 2] - d], axis=-1)  # (k,3,3)
-        rhs = points[i] - d                                             # (k,3)
+        rhs = points[i] - d  # (k,3)
         try:
-            lam = np.linalg.solve(t, rhs[..., None])[..., 0]             # (k,3)
+            lam = np.linalg.solve(t, rhs[..., None])[..., 0]  # (k,3)
         except np.linalg.LinAlgError:
-            continue                                # degenerate tets → not inside
+            continue  # degenerate tets → not inside
         full = np.concatenate([lam, 1.0 - lam.sum(axis=1, keepdims=True)], axis=1)
         # A small negative tolerance keeps points exactly on a face/edge inside.
         inside[i] = bool((full >= -1e-9).all(axis=1).any())
@@ -150,8 +160,9 @@ def assert_sources_in_mesh(pos: np.ndarray, fem: FemMesh) -> None:
     lo, hi = fem.nodes.min(axis=0), fem.nodes.max(axis=0)
     raise ValueError(
         f"{len(bad)} of {len(pos)} source(s) lie outside the FEM model, so the "
-        "forward solve cannot evaluate them:\n" + "\n".join(lines) +
-        f"\nThe model spans ({lo[0]:.0f}, {lo[1]:.0f}, {lo[2]:.0f}) to "
+        "forward solve cannot evaluate them:\n"
+        + "\n".join(lines)
+        + f"\nThe model spans ({lo[0]:.0f}, {lo[1]:.0f}, {lo[2]:.0f}) to "
         f"({hi[0]:.0f}, {hi[1]:.0f}, {hi[2]:.0f}) mm. Move the source onto the "
         "target structure, or rebuild the mesh with that region included."
     )
@@ -174,7 +185,9 @@ def resolve_source_positions(cfg, fem: FemMesh) -> np.ndarray:
         logger.info("%d explicit point sources (overriding vagus sampling)", len(pos))
         return pos
     pos = sample_source_tissues(
-        fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
+        fem,
+        cfg.forward.source_tissue,
+        spacing_mm=cfg.forward.source_spacing_mm,
     )
     return _restrict_to_level(pos, cfg)
 
@@ -217,6 +230,10 @@ def _restrict_to_level(pos: np.ndarray, cfg) -> np.ndarray:
         )
     logger.info(
         "%d of %d dipoles kept: %s spans %.1f-%.1f mm",
-        int(keep.sum()), len(pos), str(level).upper(), z_lo, z_hi,
+        int(keep.sum()),
+        len(pos),
+        str(level).upper(),
+        z_lo,
+        z_hi,
     )
     return pos[keep]

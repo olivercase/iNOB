@@ -11,6 +11,7 @@ the *same* mesh and analytic reference. That is the honest way to decide
 whether to move a production solve off partial integration: same geometry,
 same reference, only the right-hand side differs.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -59,33 +60,55 @@ see `inob --help` for the full list.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_args(p)
-    p.add_argument("--radius-mm", type=float, default=100.0,
-                   help="Sphere radius (default 100 mm — neck-scale).")
-    p.add_argument("--pitch-mm", type=float, default=3.0,
-                   help="Voxelisation pitch for the sphere FEM.")
-    p.add_argument("--sigma", type=float, default=0.43,
-                   help="Homogeneous conductivity in S/m (default 0.43 = skin).")
-    p.add_argument("--source-radius-mm", type=float, default=50.0,
-                   help="Source eccentricity along Z (mm; must be < radius).")
+    p.add_argument(
+        "--radius-mm",
+        type=float,
+        default=100.0,
+        help="Sphere radius (default 100 mm — neck-scale).",
+    )
+    p.add_argument(
+        "--pitch-mm", type=float, default=3.0, help="Voxelisation pitch for the sphere FEM."
+    )
+    p.add_argument(
+        "--sigma",
+        type=float,
+        default=0.43,
+        help="Homogeneous conductivity in S/m (default 0.43 = skin).",
+    )
+    p.add_argument(
+        "--source-radius-mm",
+        type=float,
+        default=50.0,
+        help="Source eccentricity along Z (mm; must be < radius).",
+    )
     p.add_argument("--n-electrodes", type=int, default=200)
     p.add_argument("--out-dir", type=Path, default=Path("outputs/calibration"))
     p.add_argument(
-        "--meg", action="store_true",
+        "--meg",
+        action="store_true",
         help="Validate the MEG forward against the Sarvas analytic sphere "
-             "instead of calibrating the EEG factor. Reports RDM (topography) "
-             "and MAG (magnitude); both should be within a few percent.",
+        "instead of calibrating the EEG factor. Reports RDM (topography) "
+        "and MAG (magnitude); both should be within a few percent.",
     )
     p.add_argument(
-        "--compare-source-models", nargs="*", metavar="MODEL",
-        default=None, choices=list(SOURCE_MODEL_TYPES),
+        "--compare-source-models",
+        nargs="*",
+        metavar="MODEL",
+        default=None,
+        choices=list(SOURCE_MODEL_TYPES),
         help="Run the MEG sphere validation once per source model and print a "
-             "table. With no values, compares every model this pipeline "
-             "supports. Implies --meg.",
+        "table. With no values, compares every model this pipeline "
+        "supports. Implies --meg.",
     )
-    p.add_argument("--coil-radius-mm", type=float, default=120.0,
-                   help="MEG only: radius the magnetometers sit at.")
-    p.add_argument("--n-coils", type=int, default=60,
-                   help="MEG only: number of radial magnetometers.")
+    p.add_argument(
+        "--coil-radius-mm",
+        type=float,
+        default=120.0,
+        help="MEG only: radius the magnetometers sit at.",
+    )
+    p.add_argument(
+        "--n-coils", type=int, default=60, help="MEG only: number of radial magnetometers."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="calibrate")
 

@@ -19,6 +19,7 @@ Pipeline:
   6. Convert nodes back to mm; remap region IDs to contiguous 1..K.
   7. Validate (mesh quality, units, contiguous tissue IDs) and save.
 """
+
 from __future__ import annotations
 
 import logging
@@ -61,21 +62,23 @@ logger = logging.getLogger(__name__)
 # the true cord axis — which is where every sampled source dipole sits.
 VOXELISATION: dict[str, dict] = {
     # Individually compact bones; hulls are a good approximation and fast.
-    "bone":         {"method": "solid"},
+    "bone": {"method": "solid"},
     # Thin curved sheets (platysma, splenius) wrap the neck; a hull would
     # fill it with non-muscle tissue and misplace muscle source dipoles.
-    "muscle":       {"method": "surface"},
+    "muscle": {"method": "surface"},
     # Narrow tubes: dilate so they survive the voxel grid at all.
     "blood_vessel": {"method": "solid", "dilate_voxels": 1},
     # One long mesh following the cervical lordosis / thoracic kyphosis.
-    "spinal_cord":  {"method": "surface"},
+    "spinal_cord": {"method": "surface"},
 }
 
 
 def _build_grid(
-    all_v: np.ndarray, *, pitch: float, pad: float,
-) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int],
-           np.ndarray, np.ndarray, np.ndarray]:
+    all_v: np.ndarray,
+    *,
+    pitch: float,
+    pad: float,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int], np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(mn, mx, shape, X, Y, Z)`` for the global voxel grid."""
     mn = all_v.min(0) - pad
     mx = all_v.max(0) + pad
@@ -104,6 +107,7 @@ def _load_tissue_surfaces(cfg: Config):
         logger.info("bone: using raw STLs from %s (%d files)", cfg.data.bone_dir, len(bone_paths))
     if not bone_paths:
         from inob.io.stl import STLLoadError
+
         raise STLLoadError(f"no bone STLs in {bone_clean} or {cfg.data.bone_dir}")
 
     muscle_paths = sorted(Path(cfg.data.muscle_dir).glob("*.stl"))
@@ -125,8 +129,18 @@ def _voxelise_skin(m_skin, X, *, pitch, mn, closing_mm: float) -> np.ndarray:
 
 
 def _voxelise_group_solid(
-    paths, X, Y, Z, *, pitch, mn, skin_occ, label: str, dilate_voxels: int = 0,
-    method: str = "solid", closing_mm: float = 2.0,
+    paths,
+    X,
+    Y,
+    Z,
+    *,
+    pitch,
+    mn,
+    skin_occ,
+    label: str,
+    dilate_voxels: int = 0,
+    method: str = "solid",
+    closing_mm: float = 2.0,
 ) -> np.ndarray:
     """Per-mesh voxelisation, unioned and clipped to skin.
 
@@ -143,8 +157,9 @@ def _voxelise_group_solid(
         routine used for skin). Follows the true mesh shape, so it is the right
         choice for anatomically non-convex muscles.
     """
-    logger.info("Voxelising %s (%d meshes, per-mesh %s, clipped to skin)…",
-                label, len(paths), method)
+    logger.info(
+        "Voxelising %s (%d meshes, per-mesh %s, clipped to skin)…", label, len(paths), method
+    )
     occ = np.zeros(X.shape, dtype=bool)
     for i, p in enumerate(paths):
         bm = load_stl(p, check_units_mm=False)
@@ -156,6 +171,7 @@ def _voxelise_group_solid(
             logger.debug("  %s %d/%d", label, i + 1, len(paths))
     if dilate_voxels > 0:
         from scipy.ndimage import binary_dilation
+
         occ = binary_dilation(occ, iterations=dilate_voxels)
     occ &= skin_occ
     logger.info("  %s voxels: %d", label, int(occ.sum()))
@@ -164,6 +180,7 @@ def _voxelise_group_solid(
 
 def _voxelise_vagus(mesh, X, *, pitch, mn, dilate_voxels: int, skin_occ) -> np.ndarray:
     from scipy.ndimage import binary_dilation
+
     occ = voxelize_watertight(mesh, X, pitch=pitch, mn=mn)
     if dilate_voxels > 0:
         occ = binary_dilation(occ, iterations=dilate_voxels)
@@ -172,8 +189,14 @@ def _voxelise_vagus(mesh, X, *, pitch, mn, dilate_voxels: int, skin_occ) -> np.n
 
 
 def _assemble_label_volume(
-    cfg: Config, *,
-    skin_occ, bone_occ, vl_occ, vr_occ, muscle_occ=None, vessel_occ=None,
+    cfg: Config,
+    *,
+    skin_occ,
+    bone_occ,
+    vl_occ,
+    vr_occ,
+    muscle_occ=None,
+    vessel_occ=None,
     spinal_cord_occ=None,
 ) -> tuple[np.ndarray, list[str], list[str]]:
     """Compose a labelled image; tissue order matches ``cfg.fem.tissues``.
@@ -187,19 +210,31 @@ def _assemble_label_volume(
     label_vol = np.zeros(skin_occ.shape, dtype=np.uint8)
     zero = np.zeros_like(skin_occ)
     tissue_to_occ = {
-        "skin": skin_occ, "bone": bone_occ,
+        "skin": skin_occ,
+        "bone": bone_occ,
         "muscle": muscle_occ if muscle_occ is not None else zero,
         "blood_vessel": vessel_occ if vessel_occ is not None else zero,
         "spinal_cord": spinal_cord_occ if spinal_cord_occ is not None else zero,
-        "vagus_left": vl_occ, "vagus_right": vr_occ,
+        "vagus_left": vl_occ,
+        "vagus_right": vr_occ,
     }
     # Paint outermost → innermost so the target (vagus) and the conductive
     # vessel survive over the surrounding muscle/bone at voxel interfaces.
     # Spinal cord sits inside the vertebral canal (inside bone), so it is
     # painted after bone.
-    paint_order = [t for t in ("skin", "muscle", "bone", "spinal_cord",
-                               "blood_vessel", "vagus_right", "vagus_left")
-                   if t in cfg.fem.tissues]
+    paint_order = [
+        t
+        for t in (
+            "skin",
+            "muscle",
+            "bone",
+            "spinal_cord",
+            "blood_vessel",
+            "vagus_right",
+            "vagus_left",
+        )
+        if t in cfg.fem.tissues
+    ]
     # The CGAL region IDs we want match ``cfg.fem.tissues`` order (1..K).
     label_to_id = {lab: i + 1 for i, lab in enumerate(cfg.fem.tissues)}
     painted: list[str] = []
@@ -287,7 +322,9 @@ def _label_regions(
 
 
 def _assert_painted_tissues_survived(
-    painted: list[str], present_labels: list[str], fcfg,
+    painted: list[str],
+    present_labels: list[str],
+    fcfg,
 ) -> None:
     """Fail when a tissue that went into the mesher did not come back out.
 
@@ -322,7 +359,9 @@ def build_fem(cfg: Config) -> Path:
     pitch = fcfg.pitch_mm
     pad = max(fcfg.pad_mm, 4 * pitch)
 
-    m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths = _load_tissue_surfaces(cfg)
+    m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths = (
+        _load_tissue_surfaces(cfg)
+    )
     logger.info("  skin       : %d V / %d F", len(m_skin.vertices), len(m_skin.faces))
     logger.info("  vagus_L    : %d V / %d F", len(m_vl.vertices), len(m_vl.faces))
     logger.info("  vagus_R    : %d V / %d F", len(m_vr.vertices), len(m_vr.faces))
@@ -345,27 +384,41 @@ def build_fem(cfg: Config) -> Path:
         if label not in fcfg.tissues or not paths:
             return np.zeros_like(skin_occ)
         opts = {**VOXELISATION[label], **kw}
-        return _voxelise_group_solid(paths, X, Y, Z, pitch=pitch, mn=mn,
-                                     skin_occ=skin_occ, label=label, **opts)
+        return _voxelise_group_solid(
+            paths, X, Y, Z, pitch=pitch, mn=mn, skin_occ=skin_occ, label=label, **opts
+        )
 
     bone_occ = _voxelise("bone", bone_paths)
     muscle_occ = _voxelise("muscle", muscle_paths)
     vessel_occ = _voxelise("blood_vessel", vessel_paths)
     spinal_cord_occ = _voxelise("spinal_cord", spinal_cord_paths)
-    vl_occ = _voxelise_vagus(m_vl, X, pitch=pitch, mn=mn,
-                              dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ) \
-        if "vagus_left" in fcfg.tissues else np.zeros_like(skin_occ)
-    vr_occ = _voxelise_vagus(m_vr, X, pitch=pitch, mn=mn,
-                              dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ) \
-        if "vagus_right" in fcfg.tissues else np.zeros_like(skin_occ)
-
-    label_vol, declared, painted = _assemble_label_volume(
-        cfg, skin_occ=skin_occ, bone_occ=bone_occ, vl_occ=vl_occ, vr_occ=vr_occ,
-        muscle_occ=muscle_occ, vessel_occ=vessel_occ, spinal_cord_occ=spinal_cord_occ,
+    vl_occ = (
+        _voxelise_vagus(
+            m_vl, X, pitch=pitch, mn=mn, dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ
+        )
+        if "vagus_left" in fcfg.tissues
+        else np.zeros_like(skin_occ)
+    )
+    vr_occ = (
+        _voxelise_vagus(
+            m_vr, X, pitch=pitch, mn=mn, dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ
+        )
+        if "vagus_right" in fcfg.tissues
+        else np.zeros_like(skin_occ)
     )
 
-    logger.info("Running iso2mesh.cgalv2m (radbound=%g, maxvol=%g)",
-                fcfg.radbound, fcfg.maxvol)
+    label_vol, declared, painted = _assemble_label_volume(
+        cfg,
+        skin_occ=skin_occ,
+        bone_occ=bone_occ,
+        vl_occ=vl_occ,
+        vr_occ=vr_occ,
+        muscle_occ=muscle_occ,
+        vessel_occ=vessel_occ,
+        spinal_cord_occ=spinal_cord_occ,
+    )
+
+    logger.info("Running iso2mesh.cgalv2m (radbound=%g, maxvol=%g)", fcfg.radbound, fcfg.maxvol)
     node, elem, _face = im.cgalv2m(label_vol, fcfg.radbound, fcfg.maxvol)
     node_voxels = np.asarray(node[:, :3], dtype=np.float64)
     node_mm = node_voxels * pitch + mn
@@ -374,10 +427,15 @@ def build_fem(cfg: Config) -> Path:
     raw_regions = elem_int[:, 4]
 
     tissue_ids, present_labels = _label_regions(
-        label_vol, node_voxels, tets_0idx, raw_regions, declared,
+        label_vol,
+        node_voxels,
+        tets_0idx,
+        raw_regions,
+        declared,
     )
-    logger.info("CGAL output: %d nodes, %d tets, regions=%s",
-                len(node_mm), len(tets_0idx), present_labels)
+    logger.info(
+        "CGAL output: %d nodes, %d tets, regions=%s", len(node_mm), len(tets_0idx), present_labels
+    )
     for r in range(1, len(present_labels) + 1):
         cnt = int((tissue_ids == r).sum())
         logger.info("  region %d (%-11s): %d tets", r, present_labels[r - 1], cnt)
@@ -393,8 +451,14 @@ def build_fem(cfg: Config) -> Path:
     if fcfg.validate.require_units_mm:
         assert_units_mm(mesh.nodes)
     quality = compute_quality(mesh.nodes, mesh.tets)
-    logger.info("Mesh quality: min=%.4f p1=%.4f p5=%.4f mean=%.4f max=%.4f",
-                quality.min, quality.p1, quality.p5, quality.mean, quality.max)
+    logger.info(
+        "Mesh quality: min=%.4f p1=%.4f p5=%.4f mean=%.4f max=%.4f",
+        quality.min,
+        quality.p1,
+        quality.p5,
+        quality.mean,
+        quality.max,
+    )
     assert_mesh_ok(quality, min_quality=fcfg.validate.min_mesh_quality)
     validate_fem(
         mesh,
@@ -403,6 +467,7 @@ def build_fem(cfg: Config) -> Path:
     )
 
     save_fem(cfg.outputs.fem_mat, mesh)
-    logger.info("[saved] %s (%.1f MB)",
-                cfg.outputs.fem_mat, cfg.outputs.fem_mat.stat().st_size / 1e6)
+    logger.info(
+        "[saved] %s (%.1f MB)", cfg.outputs.fem_mat, cfg.outputs.fem_mat.stat().st_size / 1e6
+    )
     return cfg.outputs.fem_mat

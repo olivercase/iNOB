@@ -29,6 +29,7 @@ Surfaces are Lambert-shaded so the torso reads as a body rather than a
 silhouette; the shading multiplies the colour rather than replacing it, so it
 never changes which side of zero a patch is on.
 """
+
 from __future__ import annotations
 
 import logging
@@ -70,8 +71,11 @@ _MAX_FACES = 120_000
 
 # ── field on the surface ───────────────────────────────────────────────────
 
+
 def _signed_radial_field(
-    lf: Any, source_idx: int, moment: str = "z",
+    lf: Any,
+    source_idx: int,
+    moment: str = "z",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Signed radial field per sensor *position*, with those positions.
 
@@ -95,8 +99,12 @@ def _signed_radial_field(
 
 
 def _interpolate_to_surface(
-    sensor_pos: np.ndarray, sensor_val: np.ndarray, verts: np.ndarray,
-    *, sigma_mm: float, k_nearest: int = 12,
+    sensor_pos: np.ndarray,
+    sensor_val: np.ndarray,
+    verts: np.ndarray,
+    *,
+    sigma_mm: float,
+    k_nearest: int = 12,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Gaussian-weighted KNN interpolation, plus the distance to the nearest sensor.
 
@@ -118,7 +126,10 @@ def _interpolate_to_surface(
 
 
 def _crop_near(
-    verts: np.ndarray, faces: np.ndarray, centre: np.ndarray, radius_mm: float,
+    verts: np.ndarray,
+    faces: np.ndarray,
+    centre: np.ndarray,
+    radius_mm: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Keep the cap of a mesh within ``radius_mm`` of a point, re-indexing faces.
 
@@ -134,7 +145,10 @@ def _crop_near(
 
 
 def _crop_to_band(
-    verts: np.ndarray, faces: np.ndarray, z_lo: float, z_hi: float,
+    verts: np.ndarray,
+    faces: np.ndarray,
+    z_lo: float,
+    z_hi: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Keep the slab of a mesh between two Z planes, re-indexing its faces."""
     keep = (verts[:, 2] >= z_lo) & (verts[:, 2] <= z_hi)
@@ -155,7 +169,7 @@ def _shade(verts: np.ndarray, faces: np.ndarray, rgba: np.ndarray) -> np.ndarray
     norm = np.linalg.norm(n, axis=1, keepdims=True)
     n = n / np.where(norm > 0, norm, 1.0)
     light = _LIGHT_DIR / np.linalg.norm(_LIGHT_DIR)
-    lam = np.abs(n @ light)                       # abs: unknown winding
+    lam = np.abs(n @ light)  # abs: unknown winding
     shade = (0.62 + 0.38 * lam)[:, None]
     out = rgba.copy()
     out[:, :3] = np.clip(out[:, :3] * shade, 0.0, 1.0)
@@ -163,9 +177,16 @@ def _shade(verts: np.ndarray, faces: np.ndarray, rgba: np.ndarray) -> np.ndarray
 
 
 def _draw_surface(
-    ax: Any, verts: np.ndarray, faces: np.ndarray, vals: np.ndarray,
-    nearest_mm: np.ndarray, *, vlim: float, max_extrap_mm: float,
-    cmap: Any, rng: np.random.Generator,
+    ax: Any,
+    verts: np.ndarray,
+    faces: np.ndarray,
+    vals: np.ndarray,
+    nearest_mm: np.ndarray,
+    *,
+    vlim: float,
+    max_extrap_mm: float,
+    cmap: Any,
+    rng: np.random.Generator,
 ) -> None:
     """Paint the field on a mesh; leave unmeasured skin neutral."""
     face_val = vals[faces].mean(axis=1)
@@ -176,15 +197,24 @@ def _draw_surface(
     rgba[blind] = plt.matplotlib.colors.to_rgba(NATURE_PALETTE["skin"])
 
     coll = Poly3DCollection(
-        verts[faces], facecolors=_shade(verts, faces, rgba),
-        edgecolors="none", linewidths=0, shade=False, zsort="average",
+        verts[faces],
+        facecolors=_shade(verts, faces, rgba),
+        edgecolors="none",
+        linewidths=0,
+        shade=False,
+        zsort="average",
     )
     ax.add_collection3d(coll)
 
 
 def _frame_3d(
-    ax: Any, verts: np.ndarray, *, elev: float, azim: float,
-    centre: np.ndarray | None = None, half_mm: float | None = None,
+    ax: Any,
+    verts: np.ndarray,
+    *,
+    elev: float,
+    azim: float,
+    centre: np.ndarray | None = None,
+    half_mm: float | None = None,
     zoom: float = 1.45,
 ) -> None:
     """A 3-D axis with nothing on it but the body: no panes, grid, or ticks.
@@ -194,7 +224,7 @@ def _frame_3d(
     slab instead makes the neck read as a mound with its top sliced off.
     """
     lo, hi = verts.min(axis=0), verts.max(axis=0)
-    mid, span = (lo + hi) / 2, (hi - lo) * 0.54          # per-axis half-extent
+    mid, span = (lo + hi) / 2, (hi - lo) * 0.54  # per-axis half-extent
     if centre is not None and half_mm is not None:
         mid, span = np.asarray(centre, float), np.full(3, float(half_mm))
     ax.set_xlim(mid[0] - span[0], mid[0] + span[0])
@@ -231,14 +261,30 @@ def _scale_bar(ax: Any, azim: float, mm: float = 50.0) -> None:
     bx = x0 + 0.10 * (x1 - x0)
     by = y0 + 0.10 * (y1 - y0)
     bz = z0 + 0.06 * (z1 - z0)
-    ax.plot([bx, bx + dx], [by, by + dy], [bz, bz],
-            color=NATURE_PALETTE["axis"], lw=1.6, solid_capstyle="butt")
-    ax.text(bx + dx / 2, by + dy / 2, bz - 0.05 * (z1 - z0), f"{mm:.0f} mm",
-            ha="center", va="top", fontsize=6.5, color=NATURE_PALETTE["axis"])
+    ax.plot(
+        [bx, bx + dx],
+        [by, by + dy],
+        [bz, bz],
+        color=NATURE_PALETTE["axis"],
+        lw=1.6,
+        solid_capstyle="butt",
+    )
+    ax.text(
+        bx + dx / 2,
+        by + dy / 2,
+        bz - 0.05 * (z1 - z0),
+        f"{mm:.0f} mm",
+        ha="center",
+        va="top",
+        fontsize=6.5,
+        color=NATURE_PALETTE["axis"],
+    )
 
 
 def _source_is_visible(
-    pos: np.ndarray, axis_xy: np.ndarray, azim: float,
+    pos: np.ndarray,
+    axis_xy: np.ndarray,
+    azim: float,
 ) -> bool:
     """Is the source on the side of the body facing the camera?
 
@@ -256,12 +302,22 @@ def _source_is_visible(
 
 
 def _mark_source(ax: Any, pos: np.ndarray) -> None:
-    ax.scatter([pos[0]], [pos[1]], [pos[2]], s=52, marker="*",
-               color=NATURE_PALETTE["glow"], edgecolor=NATURE_PALETTE["axis"],
-               linewidth=0.5, depthshade=False, zorder=10)
+    ax.scatter(
+        [pos[0]],
+        [pos[1]],
+        [pos[2]],
+        s=52,
+        marker="*",
+        color=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidth=0.5,
+        depthshade=False,
+        zorder=10,
+    )
 
 
 # ── the flat map ───────────────────────────────────────────────────────────
+
 
 def _unroll(pos: np.ndarray, axis_xy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Cylindrical unroll about a vertical axis: (θ°, z)."""
@@ -270,8 +326,15 @@ def _unroll(pos: np.ndarray, axis_xy: np.ndarray) -> tuple[np.ndarray, np.ndarra
 
 
 def _panel_unrolled(
-    ax: Any, sensor_pos: np.ndarray, vals: np.ndarray, src_pos: np.ndarray,
-    *, axis_xy: np.ndarray, vlim: float, cmap: Any, unit: str,
+    ax: Any,
+    sensor_pos: np.ndarray,
+    vals: np.ndarray,
+    src_pos: np.ndarray,
+    *,
+    axis_xy: np.ndarray,
+    vlim: float,
+    cmap: Any,
+    unit: str,
 ) -> Any:
     """The field with the viewpoint taken out of it: θ around the body vs height.
 
@@ -290,26 +353,32 @@ def _panel_unrolled(
     # map comes out tiled along whichever axis was implicitly compressed.
     radius_mm = float(np.median(np.linalg.norm(sensor_pos[:, :2] - axis_xy, axis=1)))
     deg2mm = np.pi * radius_mm / 180.0
-    pts = np.column_stack([np.concatenate([th - 360, th, th + 360]) * deg2mm,
-                           np.tile(z, 3)])
+    pts = np.column_stack([np.concatenate([th - 360, th, th + 360]) * deg2mm, np.tile(z, 3)])
     vv = np.tile(vals, 3)
     tree = cKDTree(pts)
     q = np.column_stack([TI.ravel() * deg2mm, ZI.ravel()])
     dist, idx = tree.query(q, k=min(14, len(pts)))
     w = np.exp(-0.5 * (dist / 34.0) ** 2)
-    grid = ((w * vv[idx]).sum(axis=1) / np.maximum(w.sum(axis=1), 1e-12))
+    grid = (w * vv[idx]).sum(axis=1) / np.maximum(w.sum(axis=1), 1e-12)
     grid = grid.reshape(TI.shape)
     grid[dist.min(axis=1).reshape(TI.shape) > 55.0] = np.nan
 
-    im = ax.contourf(TI, ZI, grid, levels=np.linspace(-vlim, vlim, 25),
-                     cmap=cmap, extend="both")
-    im.set_edgecolor("face")              # kill the hairline seams in vector output
+    im = ax.contourf(TI, ZI, grid, levels=np.linspace(-vlim, vlim, 25), cmap=cmap, extend="both")
+    im.set_edgecolor("face")  # kill the hairline seams in vector output
     # No zero contour: through the near-zero majority of the map it traces
     # interpolation noise and reads as structure that is not there.
 
     s_th, s_z = _unroll(src_pos[None, :], axis_xy)
-    ax.scatter(s_th, s_z, s=70, marker="*", color=NATURE_PALETTE["glow"],
-               edgecolor=NATURE_PALETTE["axis"], linewidth=0.6, zorder=6)
+    ax.scatter(
+        s_th,
+        s_z,
+        s=70,
+        marker="*",
+        color=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidth=0.6,
+        zorder=6,
+    )
     ax.set_xlabel("Angle around the body  (°)")
     ax.set_ylabel("Height  z (mm)")
     ax.set_xlim(-180, 180)
@@ -321,9 +390,14 @@ def _panel_unrolled(
 
 # ── figure ─────────────────────────────────────────────────────────────────
 
+
 def render_torso_topoplot(
-    cfg: Config, *, source_idx: int = -1, moment: str = "z",
-    out_path: Path | None = None, dpi: int = 300,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
+    moment: str = "z",
+    out_path: Path | None = None,
+    dpi: int = 300,
 ) -> Path:
     """Render the four-panel body-surface field map for the configured target."""
     apply_nature_style()
@@ -350,7 +424,8 @@ def render_torso_topoplot(
     sv_b, sf_b = _crop_to_band(sv, sf, src[2] - half, src[2] + half)
     pitch = float(cfg.sensors.resolution_mm)
     vals_v, near_v = _interpolate_to_surface(
-        sensors, vals, sv_b, sigma_mm=1.1 * pitch, k_nearest=20)
+        sensors, vals, sv_b, sigma_mm=1.1 * pitch, k_nearest=20
+    )
     # Scale to what the panels actually show. Taking the percentile over all
     # 4,740 channels instead sets the range from sensors on the far side of the
     # torso, and the neck — the only part in frame — comes out uniformly pale.
@@ -360,8 +435,17 @@ def render_torso_topoplot(
 
     fig = plt.figure(figsize=(11.4, 8.4))
     gs = fig.add_gridspec(
-        2, 2, width_ratios=[1.0, 1.0], height_ratios=[1.0, 0.92],
-        left=0.03, right=0.97, top=0.90, bottom=0.09, wspace=0.10, hspace=0.20)
+        2,
+        2,
+        width_ratios=[1.0, 1.0],
+        height_ratios=[1.0, 0.92],
+        left=0.03,
+        right=0.97,
+        top=0.90,
+        bottom=0.09,
+        wspace=0.10,
+        hspace=0.20,
+    )
 
     # a — the whole upper body for context, viewed from the front.
     # b — a close-up from the side the source is on. The back view that used to
@@ -369,13 +453,13 @@ def render_torso_topoplot(
     #     the torso genuinely sees almost nothing, so the panel spent its space
     #     proving that rather than showing the pattern.
     axis_xy_body = sv_b[:, :2].mean(axis=0)
-    src_azim = float(np.degrees(np.arctan2(src[1] - axis_xy_body[1],
-                                           src[0] - axis_xy_body[0])))
+    src_azim = float(np.degrees(np.arctan2(src[1] - axis_xy_body[1], src[0] - axis_xy_body[0])))
     # a — MEG on the whole upper body, from the source's own side, so the
     #     strong lobe is in frame rather than round the back.
     axa = fig.add_subplot(gs[0, 0], projection="3d", computed_zorder=False)
-    _draw_surface(axa, sv_b, sf_b, vals_v, near_v, vlim=vlim,
-                  max_extrap_mm=1.6 * pitch, cmap=cmap, rng=rng)
+    _draw_surface(
+        axa, sv_b, sf_b, vals_v, near_v, vlim=vlim, max_extrap_mm=1.6 * pitch, cmap=cmap, rng=rng
+    )
     if _source_is_visible(src, axis_xy_body, src_azim):
         _mark_source(axa, src)
     _frame_3d(axa, sv_b, elev=10.0, azim=src_azim)
@@ -386,8 +470,16 @@ def render_torso_topoplot(
     # c — the same magnetic field, unrolled.
     axc = fig.add_subplot(gs[1, 0])
     band = (sensors[:, 2] >= src[2] - half) & (sensors[:, 2] <= src[2] + half)
-    im = _panel_unrolled(axc, sensors[band], vals[band], src, axis_xy=axis_xy,
-                         vlim=vlim, cmap=cmap, unit="fT per nA·m")
+    im = _panel_unrolled(
+        axc,
+        sensors[band],
+        vals[band],
+        src,
+        axis_xy=axis_xy,
+        vlim=vlim,
+        cmap=cmap,
+        unit="fT per nA·m",
+    )
     add_panel_label(axc, "c")
 
     # b — the electric potential on the skin the patch sits on.
@@ -396,7 +488,8 @@ def render_torso_topoplot(
         # Electrodes are scalar contacts, one channel each — no radial subset.
         e_pos = np.asarray(eeg_lf.coil_pos, dtype=float)
         e_val = np.asarray(eeg_lf.L_fT_per_nAm, float)[
-            :, 3 * source_idx + {"x": 0, "y": 1, "z": 2}[moment]]
+            :, 3 * source_idx + {"x": 0, "y": 1, "z": 2}[moment]
+        ]
         # 32 contacts, no outlier tail to guard against — use the true peak so
         # the colour bar and the quoted peak in the title are the same number.
         e_lim = float(np.abs(e_val).max()) or 1.0
@@ -404,13 +497,21 @@ def render_torso_topoplot(
         radius = float(np.linalg.norm(e_pos - centre, axis=1).max()) + 10.0
         sv_p, sf_p = _crop_near(sv, sf, centre, radius)
         e_vals_v, e_near_v = _interpolate_to_surface(
-            e_pos, e_val, sv_p,
-            sigma_mm=1.8 * float(cfg.electrodes.contact_pitch_mm), k_nearest=10)
-        _draw_surface(axd, sv_p, sf_p, e_vals_v, e_near_v, vlim=e_lim,
-                      max_extrap_mm=14.0, cmap=cmap, rng=rng)
-        axd.scatter(e_pos[:, 0], e_pos[:, 1], e_pos[:, 2], s=24,
-                    facecolor="none", edgecolor=NATURE_PALETTE["axis"],
-                    linewidth=0.6, depthshade=False)
+            e_pos, e_val, sv_p, sigma_mm=1.8 * float(cfg.electrodes.contact_pitch_mm), k_nearest=10
+        )
+        _draw_surface(
+            axd, sv_p, sf_p, e_vals_v, e_near_v, vlim=e_lim, max_extrap_mm=14.0, cmap=cmap, rng=rng
+        )
+        axd.scatter(
+            e_pos[:, 0],
+            e_pos[:, 1],
+            e_pos[:, 2],
+            s=24,
+            facecolor="none",
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidth=0.6,
+            depthshade=False,
+        )
         _mark_source(axd, src)
         # Look along the patch normal — straight at the contacts, from outside
         # the body — so the panel shows the patch rather than the neck it is on.
@@ -418,16 +519,22 @@ def render_torso_topoplot(
         azim = float(np.degrees(np.arctan2(out_xy[1], out_xy[0])))
         # No extra zoom here: the patch panel is already framed to the patch,
         # and zooming again pushes the contacts off the edge of the panel.
-        _frame_3d(axd, sv_p, elev=6, azim=azim, centre=centre,
-                  half_mm=radius * 0.95, zoom=1.0)
+        _frame_3d(axd, sv_p, elev=6, azim=azim, centre=centre, half_mm=radius * 0.95, zoom=1.0)
         _scale_bar(axd, azim, mm=25.0)
         axd.set_title("ESG  ·  electric potential on the skin", pad=-2)
 
     else:
         axd.set_axis_off()
-        axd.text2D(0.5, 0.5, "no electrode leadfield for this target",
-                   transform=axd.transAxes, ha="center", va="center",
-                   fontsize=8, color=NATURE_PALETTE["grey"])
+        axd.text2D(
+            0.5,
+            0.5,
+            "no electrode leadfield for this target",
+            transform=axd.transAxes,
+            ha="center",
+            va="center",
+            fontsize=8,
+            color=NATURE_PALETTE["grey"],
+        )
     add_panel_label(axd, "b", x=0.02, y=0.97)
 
     # d — the patch's own topography, in the patch's own frame. The paddle
@@ -436,29 +543,32 @@ def render_torso_topoplot(
     axdd = fig.add_subplot(gs[1, 1])
     if eeg_lf is not None:
         from inob.viz.topoplot import _draw_eeg_2d_topoplot
+
         electrodes = load_sensors(cfg.outputs.electrodes_mat)
         # colorbar=False: this figure supplies one horizontal bar per column,
         # and the helper's own vertical bar would make two for the same data.
-        _draw_eeg_2d_topoplot(axdd, electrodes, e_val, cfg,
-                              vmin=-e_lim, vmax=e_lim, colorbar=False)
+        _draw_eeg_2d_topoplot(axdd, electrodes, e_val, cfg, vmin=-e_lim, vmax=e_lim, colorbar=False)
         axdd.set_title(
-            f"ESG  ·  {len(e_val)} contacts  ·  peak "
-            f"{np.abs(e_val).max():.2f} µV per nA·m", pad=6)
+            f"ESG  ·  {len(e_val)} contacts  ·  peak {np.abs(e_val).max():.2f} µV per nA·m", pad=6
+        )
     else:
         axdd.set_axis_off()
     add_panel_label(axdd, "d", x=-0.16, y=1.10)
     if eeg_lf is not None:
         cb_e = fig.colorbar(
             plt.cm.ScalarMappable(Normalize(-e_lim, e_lim), cmap),
-            ax=[axdd], orientation="horizontal", fraction=0.045, pad=0.16,
-            shrink=0.72)
+            ax=[axdd],
+            orientation="horizontal",
+            fraction=0.045,
+            pad=0.16,
+            shrink=0.72,
+        )
         cb_e.set_label("Electric potential, µV per nA·m", fontsize=7)
         cb_e.ax.tick_params(labelsize=6.5)
 
     # One colour bar per column: the two modalities have different units and
     # differ by four orders of magnitude, so a shared bar would be meaningless.
-    cb = fig.colorbar(im, ax=[axc], orientation="horizontal",
-                      fraction=0.045, pad=0.16, shrink=0.72)
+    cb = fig.colorbar(im, ax=[axc], orientation="horizontal", fraction=0.045, pad=0.16, shrink=0.72)
     cb.set_label("Magnetic field, fT per nA·m", fontsize=7)
     cb.ax.tick_params(labelsize=6.5)
 
@@ -466,7 +576,9 @@ def render_torso_topoplot(
     fig.suptitle(
         f"{region} — field on the body surface   ·   source #{source_idx} "
         f"at z = {src[2]:.0f} mm, {moment}-oriented, 1 nA·m",
-        y=0.975, fontsize=11)
+        y=0.975,
+        fontsize=11,
+    )
 
     out = out_path or target_output(cfg, "torso_topoplot.png")
     return save_figure(fig, out, dpi=dpi)

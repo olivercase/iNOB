@@ -9,6 +9,7 @@ Two properties matter here and neither was covered before:
   2. Cancellation must be cooperative and honest — it lands at a stage
      boundary and reports the stages that did not run as "cancelled".
 """
+
 from __future__ import annotations
 
 import importlib
@@ -31,6 +32,7 @@ app_mod = importlib.import_module("gui.backend.app")
 
 # ── cooperative cancellation in the orchestrator ────────────────────────────
 
+
 def test_run_pipeline_stops_at_the_next_stage_boundary(monkeypatch) -> None:
     ran: list[str] = []
     cancel = threading.Event()
@@ -44,16 +46,15 @@ def test_run_pipeline_stops_at_the_next_stage_boundary(monkeypatch) -> None:
         def run(self, cfg) -> None:
             ran.append(self.name)
             if self.name == "fem":
-                cancel.set()          # ask to stop *during* the second stage
+                cancel.set()  # ask to stop *during* the second stage
 
-    monkeypatch.setattr("inob.cli.pipeline.STAGES",
-                        {n: _FakeStage(n) for n in ALL_STAGES})
+    monkeypatch.setattr("inob.cli.pipeline.STAGES", {n: _FakeStage(n) for n in ALL_STAGES})
     monkeypatch.setattr("inob.cli.pipeline._all_outputs_exist", lambda cfg, s: False)
-    monkeypatch.setattr("inob.cli.pipeline._failed_marker",
-                        lambda cfg, s: Path("/nonexistent/.FAILED"))
+    monkeypatch.setattr(
+        "inob.cli.pipeline._failed_marker", lambda cfg, s: Path("/nonexistent/.FAILED")
+    )
 
-    statuses = run_pipeline(object(), stages=list(ALL_STAGES),
-                            should_cancel=cancel.is_set)
+    statuses = run_pipeline(object(), stages=list(ALL_STAGES), should_cancel=cancel.is_set)
 
     # The in-flight stage completes (we cannot interrupt a DUNEuro solve), the
     # next one is marked cancelled, and nothing after it runs.
@@ -76,11 +77,11 @@ def test_run_pipeline_without_cancel_hook_is_unchanged(monkeypatch) -> None:
         def run(self, cfg) -> None:
             ran.append(self.name)
 
-    monkeypatch.setattr("inob.cli.pipeline.STAGES",
-                        {n: _FakeStage(n) for n in ALL_STAGES})
+    monkeypatch.setattr("inob.cli.pipeline.STAGES", {n: _FakeStage(n) for n in ALL_STAGES})
     monkeypatch.setattr("inob.cli.pipeline._all_outputs_exist", lambda cfg, s: False)
-    monkeypatch.setattr("inob.cli.pipeline._failed_marker",
-                        lambda cfg, s: Path("/nonexistent/.FAILED"))
+    monkeypatch.setattr(
+        "inob.cli.pipeline._failed_marker", lambda cfg, s: Path("/nonexistent/.FAILED")
+    )
 
     statuses = run_pipeline(object(), stages=list(ALL_STAGES))
     assert ran == list(ALL_STAGES)
@@ -88,6 +89,7 @@ def test_run_pipeline_without_cancel_hook_is_unchanged(monkeypatch) -> None:
 
 
 # ── single-flight lock ──────────────────────────────────────────────────────
+
 
 def test_run_lock_is_not_held_at_import_time() -> None:
     assert app_mod._RUN_LOCK.acquire(blocking=False)
@@ -127,6 +129,7 @@ def test_lock_survives_client_disconnect_until_the_pipeline_finishes(
                 entered.set()
                 may_finish.wait(timeout=10)
                 yield "[ok]   geom"
+
             return lines()
 
         def wait(self, timeout=None) -> int:
@@ -137,12 +140,17 @@ def test_lock_survives_client_disconnect_until_the_pipeline_finishes(
             return self.returncode
 
     monkeypatch.setattr(app_mod.subprocess, "Popen", lambda *a, **k: _SlowChild())
-    monkeypatch.setattr(app_mod, "_solver_choice",
-                        lambda: {"python": "python3", "duneuro_path": None,
-                                 "found": True})
+    monkeypatch.setattr(
+        app_mod,
+        "_solver_choice",
+        lambda: {"python": "python3", "duneuro_path": None, "found": True},
+    )
     monkeypatch.setattr(app_mod, "load_config", lambda *a, **k: object())
-    monkeypatch.setattr(app_mod, "compute_detectability",
-                        lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no lf")))
+    monkeypatch.setattr(
+        app_mod,
+        "compute_detectability",
+        lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no lf")),
+    )
 
     client = TestClient(app_mod.app)
     with client.websocket_connect("/api/run") as ws:
@@ -157,7 +165,7 @@ def test_lock_survives_client_disconnect_until_the_pipeline_finishes(
     )
 
     may_finish.set()
-    for _ in range(100):                      # ≤10 s for the worker to unwind
+    for _ in range(100):  # ≤10 s for the worker to unwind
         if app_mod._RUN_LOCK.acquire(blocking=False):
             app_mod._RUN_LOCK.release()
             break

@@ -1,4 +1,5 @@
 """Shared CLI plumbing: argparse fragments, config loading, logging bootstrap."""
+
 from __future__ import annotations
 
 import argparse
@@ -28,69 +29,92 @@ DEFAULT_CONFIG = "configs/default.yaml"
 def add_common_args(p: argparse.ArgumentParser) -> None:
     """Attach ``--config / --set / --project-root / --log-level`` to a parser."""
     p.add_argument(
-        "--config", type=Path, default=Path(DEFAULT_CONFIG),
+        "--config",
+        type=Path,
+        default=Path(DEFAULT_CONFIG),
         help=f"Path to YAML config (default {DEFAULT_CONFIG}).",
     )
     p.add_argument(
-        "--set", action="append", default=[], dest="overrides", metavar="KEY=VAL",
-        help="Override a config field, e.g. --set forward.source_spacing_mm=3.0. "
-             "Repeatable.",
+        "--set",
+        action="append",
+        default=[],
+        dest="overrides",
+        metavar="KEY=VAL",
+        help="Override a config field, e.g. --set forward.source_spacing_mm=3.0. Repeatable.",
     )
     p.add_argument(
-        "--source-target", default=None, metavar="TAG", choices=list(SOURCE_TARGETS),
+        "--source-target",
+        default=None,
+        metavar="TAG",
+        choices=list(SOURCE_TARGETS),
         help="Target a specific source region. Repoints outputs.forward_npz / "
-             "forward_eeg_npz to duneuro_leadfield_<TAG>.npz and sets "
-             "forward.source_tissue to that region's tissue(s), so solve and "
-             f"analysis stay consistent. One of: {', '.join(SOURCE_TARGETS)}. "
-             "Mirrors the cluster SOURCE_TARGET.",
+        "forward_eeg_npz to duneuro_leadfield_<TAG>.npz and sets "
+        "forward.source_tissue to that region's tissue(s), so solve and "
+        f"analysis stay consistent. One of: {', '.join(SOURCE_TARGETS)}. "
+        "Mirrors the cluster SOURCE_TARGET.",
     )
     p.add_argument(
-        "--workers", type=int, default=None, metavar="N",
+        "--workers",
+        type=int,
+        default=None,
+        metavar="N",
         help="CPU workers for the local forward solve (0 = every core, the "
-             "default). The sensor array is split into N chunks solved in "
-             "parallel, one process each. Same control the GUI's Compute "
-             "panel offers; equivalent to --set forward.local_workers=N.",
+        "default). The sensor array is split into N chunks solved in "
+        "parallel, one process each. Same control the GUI's Compute "
+        "panel offers; equivalent to --set forward.local_workers=N.",
     )
     p.add_argument(
-        "--source-model", default=None, metavar="MODEL",
+        "--source-model",
+        default=None,
+        metavar="MODEL",
         choices=list(SOURCE_MODEL_TYPES),
         help="How a point dipole becomes a FEM right-hand side. "
-             "'partial_integration' (default) loads only the containing "
-             "element's nodes; 'venant' / 'multipolar_venant' spread it over a "
-             "patch of neighbouring nodes fitted to the dipole moment (St. "
-             "Venant), which behaves better near a conductivity jump. "
-             "Equivalent to --set forward.source_model.type=MODEL; the fit "
-             "parameters stay on --set. "
-             f"One of: {', '.join(SOURCE_MODEL_TYPES)}.",
+        "'partial_integration' (default) loads only the containing "
+        "element's nodes; 'venant' / 'multipolar_venant' spread it over a "
+        "patch of neighbouring nodes fitted to the dipole moment (St. "
+        "Venant), which behaves better near a conductivity jump. "
+        "Equivalent to --set forward.source_model.type=MODEL; the fit "
+        "parameters stay on --set. "
+        f"One of: {', '.join(SOURCE_MODEL_TYPES)}.",
     )
     p.add_argument(
-        "--solver-type", default=None, metavar="TYPE", choices=list(SOLVER_TYPES),
+        "--solver-type",
+        default=None,
+        metavar="TYPE",
+        choices=list(SOLVER_TYPES),
         help="FEM discretisation: 'cg' (default, continuous — what every "
-             "leadfield here was solved with) or 'dg' (discontinuous Galerkin, "
-             "which represents a conductivity jump as a jump instead of "
-             "smearing it across the elements either side, at ~4x the degrees "
-             "of freedom). DG works only with the partial-integration source "
-             "model. Equivalent to --set forward.solver.type=TYPE.",
+        "leadfield here was solved with) or 'dg' (discontinuous Galerkin, "
+        "which represents a conductivity jump as a jump instead of "
+        "smearing it across the elements either side, at ~4x the degrees "
+        "of freedom). DG works only with the partial-integration source "
+        "model. Equivalent to --set forward.solver.type=TYPE.",
     )
     p.add_argument(
-        "--muscle-anisotropy", default=None, metavar="MODE",
+        "--muscle-anisotropy",
+        default=None,
+        metavar="MODE",
         choices=("auto", "on", "off"),
         help="Fibre-aligned muscle conductivity tensor. 'auto' (default) turns "
-             "it on exactly when muscle is a source tissue, keeping vagus and "
-             "spine runs comparable with ones already solved; force 'on'/'off' "
-             "for a like-for-like A/B. Equivalent to "
-             "--set forward.muscle_anisotropy.mode=MODE.",
+        "it on exactly when muscle is a source tissue, keeping vagus and "
+        "spine runs comparable with ones already solved; force 'on'/'off' "
+        "for a like-for-like A/B. Equivalent to "
+        "--set forward.muscle_anisotropy.mode=MODE.",
     )
     p.add_argument(
-        "--project-root", type=Path, default=None,
+        "--project-root",
+        type=Path,
+        default=None,
         help="Override the project root used to resolve relative paths.",
     )
     p.add_argument(
-        "--log-level", default=os.environ.get("INOB_LOG", "INFO"),
+        "--log-level",
+        default=os.environ.get("INOB_LOG", "INFO"),
         help="Logging level (DEBUG/INFO/WARNING/ERROR; default INFO).",
     )
     p.add_argument(
-        "--log-file", type=Path, default=None,
+        "--log-file",
+        type=Path,
+        default=None,
         help="Log file path (default: outputs/logs/<stage>-<UTC>.log).",
     )
 
@@ -109,8 +133,7 @@ def apply_source_target(cfg: Config, target: str) -> Config:
     # so programmatic callers get the same clear error.
     if target not in SOURCE_TARGETS:
         raise SystemExit(
-            f"--source-target {target!r} is not recognised. "
-            f"Use one of: {', '.join(SOURCE_TARGETS)}"
+            f"--source-target {target!r} is not recognised. Use one of: {', '.join(SOURCE_TARGETS)}"
         )
     spec = SOURCE_TARGETS[target]
     tissues = spec["tissues"]
@@ -147,18 +170,24 @@ def apply_source_target(cfg: Config, target: str) -> Config:
             sensitivity_dir=tag_path(cfg.outputs.sensitivity_dir, target),
         ),
         forward=replace(cfg.forward, source_tissue=tissues),
-        electrodes=replace(cfg.electrodes, target_tissue=elec_tissue,
-                           target_level=elec_level),
+        electrodes=replace(cfg.electrodes, target_tissue=elec_tissue, target_level=elec_level),
     )
-    logger.info("source-target=%s → tissues=%s → leadfield %s",
-                target, tissues, cfg.outputs.forward_npz)
-    logger.info("source-target=%s → electrode patch over %s → %s",
-                target, elec_tissue, cfg.outputs.electrodes_mat)
+    logger.info(
+        "source-target=%s → tissues=%s → leadfield %s", target, tissues, cfg.outputs.forward_npz
+    )
+    logger.info(
+        "source-target=%s → electrode patch over %s → %s",
+        target,
+        elec_tissue,
+        cfg.outputs.electrodes_mat,
+    )
     return cfg
 
 
 def setup(
-    args: argparse.Namespace, *, log_prefix: str = "run",
+    args: argparse.Namespace,
+    *,
+    log_prefix: str = "run",
 ) -> Config:
     """Load + validate the config and configure logging.
 
@@ -190,7 +219,9 @@ def setup(
     # log line rather than arriving bare, ahead of the command's own output.
     begin_capture(args.log_level)
     cfg = load_config(
-        args.config, overrides=overrides, project_root=args.project_root,
+        args.config,
+        overrides=overrides,
+        project_root=args.project_root,
     )
     target = getattr(args, "source_target", None)
     if target:
@@ -198,8 +229,13 @@ def setup(
     log_path = args.log_file or run_log_path(cfg.outputs.logs_dir, prefix=log_prefix)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     configure_logging(args.log_level, log_path)
-    logger.info("inob %s | config=%s | project_root=%s | log=%s",
-                log_prefix, args.config, cfg.project_root, log_path)
+    logger.info(
+        "inob %s | config=%s | project_root=%s | log=%s",
+        log_prefix,
+        args.config,
+        cfg.project_root,
+        log_path,
+    )
     np.random.seed(cfg.reproducibility.seed)
     random.seed(cfg.reproducibility.seed)
     return cfg

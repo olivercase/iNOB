@@ -1,4 +1,5 @@
 """Tests for inob.viz.surface_topoplot: geometry helpers + render smoke test."""
+
 from __future__ import annotations
 
 from pathlib import Path

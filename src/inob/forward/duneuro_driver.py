@@ -9,6 +9,7 @@ Used by:
   * :mod:`inob.forward.solve` — single-machine forward solve
   * :mod:`inob.forward.chunk` — cluster array-job worker
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,7 +54,8 @@ def import_duneuro(cfg: Config) -> Any:
 
 
 def build_conductivity_vector(
-    cfg: Config, fem: FemMesh,
+    cfg: Config,
+    fem: FemMesh,
 ) -> np.ndarray:
     """Build the conductivity array (S/mm, post unit-scale) aligned with tissue ids.
 
@@ -65,9 +67,7 @@ def build_conductivity_vector(
     label_to_id = fem.label_to_id
     missing = [lab for lab in fem.tissue_labels if lab not in cfg.forward.conductivities_sm]
     if missing:
-        raise KeyError(
-            f"forward.conductivities_sm missing entries for tissues: {missing}"
-        )
+        raise KeyError(f"forward.conductivities_sm missing entries for tissues: {missing}")
     cond_size = int(np.unique(fem.tissue).max())
     cond = np.zeros(cond_size, dtype=np.float64)
     for lab, tid in label_to_id.items():
@@ -76,7 +76,8 @@ def build_conductivity_vector(
 
 
 def build_conductivity_tensors(
-    cfg: Config, fem: FemMesh,
+    cfg: Config,
+    fem: FemMesh,
 ) -> tuple[np.ndarray, list[np.ndarray]] | None:
     """Per-element conductivity tensors for fibre-aligned muscle anisotropy.
 
@@ -106,7 +107,7 @@ def build_conductivity_tensors(
     from inob.sources.muscle import muscle_tet_fibre_axes
 
     scale = cfg.forward.sigma_unit_scale
-    cond = build_conductivity_vector(cfg, fem)          # (L,) S/mm, isotropic
+    cond = build_conductivity_vector(cfg, fem)  # (L,) S/mm, isotropic
     eye = np.eye(3, dtype=np.float64)
     tensors: list[np.ndarray] = [float(c) * eye for c in cond]
     base = len(tensors)
@@ -115,10 +116,11 @@ def build_conductivity_tensors(
     sl, st = aniso.sigma_long_sm * scale, aniso.sigma_trans_sm * scale
     for e in axes:
         e = e / max(float(np.linalg.norm(e)), 1e-12)
-        tensors.append(np.ascontiguousarray(
-            st * eye + (sl - st) * np.outer(e, e), dtype=np.float64))
+        tensors.append(
+            np.ascontiguousarray(st * eye + (sl - st) * np.outer(e, e), dtype=np.float64)
+        )
 
-    labels = (fem.tissue.astype(np.int64) - 1)
+    labels = fem.tissue.astype(np.int64) - 1
     labels[mask] = base + group
     return labels, tensors
 
@@ -144,23 +146,28 @@ def build_source_model_config(cfg: Config) -> dict[str, str]:
     s = cfg.forward.source_model
     out: dict[str, str] = {"type": s.type}
     if s.type in ("venant", "multipolar_venant"):
-        out.update({
-            "numberOfMoments":   str(s.number_of_moments),
-            "referenceLength":   str(s.reference_length_mm),
-            "weightingExponent": str(s.weighting_exponent),
-            "relaxationFactor":  str(s.relaxation_factor),
-            "mixedMoments":      str(s.mixed_moments).lower(),
-            "restrict":          str(s.restrict).lower(),
-            "initialization":    s.initialization,
-            "extensions":        s.extensions,
-            "intorderadd":       str(s.intorderadd),
-        })
+        out.update(
+            {
+                "numberOfMoments": str(s.number_of_moments),
+                "referenceLength": str(s.reference_length_mm),
+                "weightingExponent": str(s.weighting_exponent),
+                "relaxationFactor": str(s.relaxation_factor),
+                "mixedMoments": str(s.mixed_moments).lower(),
+                "restrict": str(s.restrict).lower(),
+                "initialization": s.initialization,
+                "extensions": s.extensions,
+                "intorderadd": str(s.intorderadd),
+            }
+        )
     return out
 
 
 def build_driver_config(
-    cfg: Config, fem: FemMesh, cond: np.ndarray,
-    *, aniso_tensors: tuple[np.ndarray, list[np.ndarray]] | None = None,
+    cfg: Config,
+    fem: FemMesh,
+    cond: np.ndarray,
+    *,
+    aniso_tensors: tuple[np.ndarray, list[np.ndarray]] | None = None,
     limit_threads: bool = False,
 ) -> dict[str, Any]:
     """Return the MEEGDriver3d configuration dictionary.
@@ -170,7 +177,7 @@ def build_driver_config(
     isotropic ``labels`` + ``conductivities`` path.
     """
     s = cfg.forward.solver
-    tissue0 = (fem.tissue.astype(np.int64) - 1)
+    tissue0 = fem.tissue.astype(np.int64) - 1
     if aniso_tensors is not None:
         labels, tensor_list = aniso_tensors
         vc_tensors: dict[str, Any] = {
@@ -180,21 +187,21 @@ def build_driver_config(
     else:
         vc_tensors = {"labels": tissue0, "conductivities": cond}
     return {
-        "type":             "fitted",
-        "solver_type":      s.type,
-        "element_type":     "tetrahedron",
-        "post_process":     "false",
+        "type": "fitted",
+        "solver_type": s.type,
+        "element_type": "tetrahedron",
+        "post_process": "false",
         "post_process_meg": str(s.post_process_meg).lower(),
-        "subtract_mean":    str(s.subtract_mean).lower(),
+        "subtract_mean": str(s.subtract_mean).lower(),
         "solver": {
-            "reduction":      str(s.reduction),
+            "reduction": str(s.reduction),
             "edge_norm_type": s.edge_norm_type,
-            "penalty":        str(s.penalty),
-            "scheme":         s.scheme,
-            "weights":        s.weights,
+            "penalty": str(s.penalty),
+            "scheme": s.scheme,
+            "weights": s.weights,
         },
         "volume_conductor": {
-            "grid":    {"nodes": fem.nodes, "elements": fem.tets.astype(np.int64)},
+            "grid": {"nodes": fem.nodes, "elements": fem.tets.astype(np.int64)},
             "tensors": vc_tensors,
         },
         "meg": {"intorderadd": str(s.intorderadd), "type": "physical"},
@@ -202,13 +209,19 @@ def build_driver_config(
         # ``numberOfThreads`` for its TBB arenas and otherwise takes the whole
         # machine, which is right for a serial solve and ruinous for a chunked
         # one. See SolverCfg.threads_per_process.
-        **({"numberOfThreads": str(s.threads_per_process)}
-           if limit_threads and s.threads_per_process > 0 else {}),
+        **(
+            {"numberOfThreads": str(s.threads_per_process)}
+            if limit_threads and s.threads_per_process > 0
+            else {}
+        ),
     }
 
 
 def build_driver(
-    cfg: Config, fem: FemMesh, *, limit_threads: bool = False,
+    cfg: Config,
+    fem: FemMesh,
+    *,
+    limit_threads: bool = False,
 ) -> tuple[Any, dict[str, Any], np.ndarray]:
     """Construct a fully-configured ``MEEGDriver3d``.
 
@@ -227,18 +240,24 @@ def build_driver(
         logger.info(
             "Muscle anisotropy ENABLED: sigma_long=%.3f sigma_trans=%.3f S/m "
             "(%.1f:1) over %d muscle STLs (%d muscle tets)",
-            a.sigma_long_sm, a.sigma_trans_sm,
+            a.sigma_long_sm,
+            a.sigma_trans_sm,
             a.sigma_long_sm / max(a.sigma_trans_sm, 1e-12),
-            n_muscle_stl, int((fem.tissue == fem.label_to_id["muscle"]).sum()),
+            n_muscle_stl,
+            int((fem.tissue == fem.label_to_id["muscle"]).sum()),
         )
-    driver_cfg = build_driver_config(cfg, fem, cond, aniso_tensors=aniso_tensors,
-                                     limit_threads=limit_threads)
+    driver_cfg = build_driver_config(
+        cfg, fem, cond, aniso_tensors=aniso_tensors, limit_threads=limit_threads
+    )
     driver = dp.MEEGDriver3d(driver_cfg)
     return driver, driver_cfg, cond
 
 
 def attach_coils(
-    driver: Any, dp: Any, coilpos: np.ndarray, coilori: np.ndarray,
+    driver: Any,
+    dp: Any,
+    coilpos: np.ndarray,
+    coilori: np.ndarray,
 ) -> None:
     """Attach coils + projections (one orientation per channel) to ``driver``."""
     coils_du = [dp.FieldVector3D(p) for p in coilpos]
@@ -247,7 +266,8 @@ def attach_coils(
 
 
 def build_orthogonal_dipoles(
-    dp: Any, src_pos_mm: np.ndarray,
+    dp: Any,
+    src_pos_mm: np.ndarray,
 ) -> list[Any]:
     """Three orthogonal dipoles (X, Y, Z moments) per source position."""
     eye3 = np.eye(3)

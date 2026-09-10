@@ -1,4 +1,5 @@
 """HD-electrode placement tests."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -18,9 +19,14 @@ def _vagus_tube_in_skin() -> tuple[trimesh.Trimesh, FemMesh]:
     base = 0
     for k in range(n):
         z = (k / (n - 1)) * 70.0
-        nodes_list.append([
-            [0, 0, z], [1, 0, z], [0, 1, z], [0, 0, z + 1],
-        ])
+        nodes_list.append(
+            [
+                [0, 0, z],
+                [1, 0, z],
+                [0, 1, z],
+                [0, 0, z + 1],
+            ]
+        )
         tets_list.append([base, base + 1, base + 2, base + 3])
         base += 4
     nodes = np.vstack(nodes_list).astype(np.float64)
@@ -33,9 +39,11 @@ def _vagus_tube_in_skin() -> tuple[trimesh.Trimesh, FemMesh]:
 def test_electrode_grid_size_and_validation() -> None:
     skin, fem = _vagus_tube_in_skin()
     arr = build_electrode_array(
-        skin, fem,
-        ElectrodeArrayParams(rows=2, cols=4, contact_pitch_mm=5.0,
-                             target_z_low_factor=0.0, target_z_high_factor=1.0),
+        skin,
+        fem,
+        ElectrodeArrayParams(
+            rows=2, cols=4, contact_pitch_mm=5.0, target_z_low_factor=0.0, target_z_high_factor=1.0
+        ),
     )
     validate_sensors(arr)
     assert len(arr.coilpos) == 8
@@ -48,9 +56,11 @@ def test_electrode_grid_size_and_validation() -> None:
 def test_electrodes_lie_on_skin_surface() -> None:
     skin, fem = _vagus_tube_in_skin()
     arr = build_electrode_array(
-        skin, fem,
-        ElectrodeArrayParams(rows=2, cols=2, contact_pitch_mm=10.0,
-                             target_z_low_factor=0.0, target_z_high_factor=1.0),
+        skin,
+        fem,
+        ElectrodeArrayParams(
+            rows=2, cols=2, contact_pitch_mm=10.0, target_z_low_factor=0.0, target_z_high_factor=1.0
+        ),
     )
     # Each contact should be within ~1e-6 of the skin surface (closest-point projection)
     _closest, dists, _ = trimesh.proximity.closest_point(skin, arr.coilpos)
@@ -61,9 +71,9 @@ def test_unknown_target_tissue_raises() -> None:
     skin, fem = _vagus_tube_in_skin()
     with pytest.raises(Exception, match="not in FEM"):
         build_electrode_array(
-            skin, fem,
-            ElectrodeArrayParams(rows=1, cols=2, contact_pitch_mm=5.0,
-                                 target_tissue="bone"),
+            skin,
+            fem,
+            ElectrodeArrayParams(rows=1, cols=2, contact_pitch_mm=5.0, target_tissue="bone"),
         )
 
 
@@ -73,6 +83,7 @@ def test_unknown_target_tissue_raises() -> None:
 # patch is neither: it is small and directional, so siting it over the vagus
 # for a spine solve would make the MEG-vs-EEG comparison measure patch
 # placement rather than modality.
+
 
 def _two_tissue_fem() -> FemMesh:
     """Anterior 'vagus_left' and posterior 'spinal_cord' columns inside a sphere."""
@@ -101,10 +112,17 @@ def test_patch_follows_the_target_tissue() -> None:
 
     def centre_for(tissue: str) -> np.ndarray:
         arr = build_electrode_array(
-            skin, fem,
-            ElectrodeArrayParams(rows=3, cols=3, contact_pitch_mm=5.0,
-                                 shape="rectangular", target_tissue=tissue,
-                                 target_z_low_factor=0.0, target_z_high_factor=1.0),
+            skin,
+            fem,
+            ElectrodeArrayParams(
+                rows=3,
+                cols=3,
+                contact_pitch_mm=5.0,
+                shape="rectangular",
+                target_tissue=tissue,
+                target_z_low_factor=0.0,
+                target_z_high_factor=1.0,
+            ),
         )
         return arr.coilpos.mean(axis=0)
 
@@ -119,9 +137,9 @@ def test_unknown_target_tissue_is_rejected() -> None:
     skin = trimesh.creation.icosphere(radius=80.0, subdivisions=4)
     with pytest.raises(SchemaError, match="not in FEM"):
         build_electrode_array(
-            skin, _two_tissue_fem(),
-            ElectrodeArrayParams(rows=2, cols=2, contact_pitch_mm=5.0,
-                                 target_tissue="pancreas"),
+            skin,
+            _two_tissue_fem(),
+            ElectrodeArrayParams(rows=2, cols=2, contact_pitch_mm=5.0, target_tissue="pancreas"),
         )
 
 
@@ -129,6 +147,7 @@ def test_every_source_target_declares_an_electrode_tissue() -> None:
     """--source-target must set the patch as well as the source, or a spine
     solve silently keeps whatever patch the last run wrote."""
     from inob.config import SOURCE_TARGETS
+
     for tag, spec in SOURCE_TARGETS.items():
         assert "electrodes" in spec, tag
         assert spec["electrodes"], tag
@@ -144,8 +163,7 @@ def test_source_target_couples_patch_tissue_and_output_path() -> None:
     add_common_args(p)
     seen = {}
     for tag in ("vagus", "spine"):
-        args = p.parse_args(["--source-target", tag,
-                             "--config", "configs/default.yaml"])
+        args = p.parse_args(["--source-target", tag, "--config", "configs/default.yaml"])
         cfg = setup(args, log_prefix="test")
         seen[tag] = (cfg.electrodes.target_tissue, cfg.outputs.electrodes_mat)
 

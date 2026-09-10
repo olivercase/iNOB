@@ -1,4 +1,5 @@
 """Tests for the conductivity sensitivity sweep helpers."""
+
 from __future__ import annotations
 
 import json
@@ -53,7 +54,7 @@ def test_summarise_perturbation_statistics() -> None:
     assert isinstance(res, PerturbationResult)
     assert res.tissue == "bone"
     assert res.factor == 1.25
-    assert res.rms_rel_change == pytest.approx(float(np.sqrt(np.mean(rel ** 2))))
+    assert res.rms_rel_change == pytest.approx(float(np.sqrt(np.mean(rel**2))))
     assert res.p50_rel_change == pytest.approx(float(np.percentile(rel, 50)))
     assert res.p95_rel_change == pytest.approx(float(np.percentile(rel, 95)))
 
@@ -61,7 +62,8 @@ def test_summarise_perturbation_statistics() -> None:
 def _leadfield(L: np.ndarray, n_src: int) -> Leadfield:
     C = L.shape[0]
     return Leadfield(
-        L=L, L_fT_per_nAm=L * 1e6,
+        L=L,
+        L_fT_per_nAm=L * 1e6,
         source_pos=np.zeros((n_src, 3)),
         coil_pos=np.zeros((C, 3)),
         coil_orient=np.tile([1.0, 0.0, 0.0], (C, 1)),
@@ -90,8 +92,11 @@ def test_sweep_writes_summary_and_calls_forward_fn(tmp_path: Path) -> None:
 
     out_path = tmp_path / "sensitivity_meg.json"
     summary = sweep(
-        cfg, baseline_path=baseline_path, forward_fn=fake_forward_fn,
-        out_path=out_path, modality="meg",
+        cfg,
+        baseline_path=baseline_path,
+        forward_fn=fake_forward_fn,
+        out_path=out_path,
+        modality="meg",
     )
 
     n_tissues = len(cfg.sensitivity.tissues)
@@ -128,7 +133,9 @@ def test_sweep_skips_tissue_missing_from_conductivities(tmp_path: Path) -> None:
 
     out_path = tmp_path / "sensitivity_meg.json"
     summary = sweep(
-        cfg, baseline_path=baseline_path, forward_fn=fake_forward_fn,
+        cfg,
+        baseline_path=baseline_path,
+        forward_fn=fake_forward_fn,
         out_path=out_path,
     )
     assert calls == []

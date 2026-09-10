@@ -1,4 +1,5 @@
 """Smoke tests for the moving-dipole physiology simulator."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -55,8 +56,7 @@ def test_respiratory_scenario_has_phasic_and_tonic() -> None:
 
 def test_simulate_train_shape_and_amplitude() -> None:
     lf = _make_tiny_leadfield()
-    sc = baroreceptor_scenario(duration_s=2.0, hr_bpm=60.0,
-                                n_fibres_per_burst=200, jitter_ms=0.0)
+    sc = baroreceptor_scenario(duration_s=2.0, hr_bpm=60.0, n_fibres_per_burst=200, jitter_ms=0.0)
     sim = simulate_train(lf, sc, fs_hz=5000.0)
     assert isinstance(sim, SimulatedSignal)
     assert sim.signal.shape[0] == lf.L.shape[0]
@@ -70,8 +70,8 @@ def test_simulate_train_shape_and_amplitude() -> None:
 def test_simulate_train_zero_for_empty_scenario() -> None:
     lf = _make_tiny_leadfield()
     from inob.physiology.scenarios import Scenario
-    empty = Scenario(name="empty", description="", duration_s=1.0,
-                     events=[], rate_hz=0.0)
+
+    empty = Scenario(name="empty", description="", duration_s=1.0, events=[], rate_hz=0.0)
     with pytest.raises(ValueError, match="no events"):
         simulate_train(lf, empty, fs_hz=1000.0)
 

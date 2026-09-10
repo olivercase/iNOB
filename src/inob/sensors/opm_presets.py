@@ -28,6 +28,7 @@ in one place. ``verified=False`` marks a preset whose numbers have not been
 checked against a current spec sheet by anyone on this project — usable for
 comparison, not for a published claim without re-checking.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -98,9 +99,7 @@ def opm_sensor(name: str) -> OpmSensor:
         return OPM_SENSORS[name]
     except KeyError:
         known = ", ".join(sorted(OPM_SENSORS))
-        raise KeyError(
-            f"unknown OPM sensor preset {name!r}; known presets: {known}"
-        ) from None
+        raise KeyError(f"unknown OPM sensor preset {name!r}; known presets: {known}") from None
 
 
 def cap_dominant_hz(ap_width_ms: float) -> float:

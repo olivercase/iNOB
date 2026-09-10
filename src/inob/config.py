@@ -8,6 +8,7 @@ dataclasses give us autocompletion and immutability; CLI overrides go through
 Conductivities, mesh sizes, sensor params, and solver settings live here once.
 Any code that needs them imports the loaded ``Config`` rather than redefining.
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ class ConfigError(ValueError):
 
 
 # ── leaf configs ───────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class DataPaths:
@@ -132,6 +134,7 @@ class SolverCfg:
     DG interior-penalty formulation; CG ignores them (they are sent either way,
     which is harmless).
     """
+
     type: str = "cg"
     reduction: float = 1.0e-10
     edge_norm_type: str = "houston"
@@ -154,13 +157,11 @@ class SolverCfg:
     def __post_init__(self) -> None:
         if self.threads_per_process < 0:
             raise ConfigError(
-                "[forward.solver] threads_per_process must be >= 0 "
-                "(0 = let DUNEuro decide)"
+                "[forward.solver] threads_per_process must be >= 0 (0 = let DUNEuro decide)"
             )
         if self.type not in SOLVER_TYPES:
             raise ConfigError(
-                f"[forward.solver] type must be one of {list(SOLVER_TYPES)}; "
-                f"got {self.type!r}"
+                f"[forward.solver] type must be one of {list(SOLVER_TYPES)}; got {self.type!r}"
             )
 
 
@@ -170,7 +171,9 @@ class SolverCfg:
 #: ``truncated_spatial_venant``; those need parameters this config does not
 #: carry, so they are rejected here rather than failing deep inside C++.
 SOURCE_MODEL_TYPES: tuple[str, ...] = (
-    "partial_integration", "venant", "multipolar_venant",
+    "partial_integration",
+    "venant",
+    "multipolar_venant",
 )
 
 #: Of those, the ones DUNEuro's *DG* source-model factory also accepts. Its
@@ -215,6 +218,7 @@ class SourceModelCfg:
     moments well; if a Venant run looks noisy on nerve sources, that is the
     first knob to check.
     """
+
     type: str = "partial_integration"
     number_of_moments: int = 3
     reference_length_mm: float = 20.0
@@ -222,8 +226,8 @@ class SourceModelCfg:
     relaxation_factor: float = 1.0e-6
     mixed_moments: bool = True
     restrict: bool = True
-    initialization: str = "closest_vertex"   # or "single_element"
-    extensions: str = "vertex"               # "vertex", "intersection", or ""
+    initialization: str = "closest_vertex"  # or "single_element"
+    extensions: str = "vertex"  # "vertex", "intersection", or ""
     intorderadd: int = 2
 
     def __post_init__(self) -> None:
@@ -304,6 +308,7 @@ class MuscleAnisotropyCfg:
     Defaults: σ_∥ = 0.40, σ_⊥ = 0.10 S/m (≈4:1), bracketing the isotropic
     mean 0.35 S/m used before (Gabriel et al. 1996; Rush et al. 1963).
     """
+
     mode: str = "auto"
     sigma_long_sm: float = 0.40
     sigma_trans_sm: float = 0.10
@@ -319,13 +324,11 @@ class MuscleAnisotropyCfg:
         if isinstance(mode, bool):
             mode = "on" if mode else "off"
         elif isinstance(mode, str):
-            mode = {"true": "on", "false": "off"}.get(mode.strip().lower(),
-                                                       mode.strip().lower())
+            mode = {"true": "on", "false": "off"}.get(mode.strip().lower(), mode.strip().lower())
         object.__setattr__(self, "mode", mode)
         if mode not in ("auto", "on", "off"):
             raise ConfigError(
-                "[forward.muscle_anisotropy] mode must be 'auto', 'on' or 'off'; "
-                f"got {self.mode!r}"
+                f"[forward.muscle_anisotropy] mode must be 'auto', 'on' or 'off'; got {self.mode!r}"
             )
 
     def active_for(self, source_tissue: str) -> bool:
@@ -353,8 +356,7 @@ class ForwardCfg:
         # Caught here because otherwise it is a C++ throw — after the mesh is
         # loaded and the transfer matrix has started, which on the cluster means
         # an hour of an array job to find out.
-        if (self.solver.type == "dg"
-                and self.source_model.type not in DG_SOURCE_MODELS):
+        if self.solver.type == "dg" and self.source_model.type not in DG_SOURCE_MODELS:
             raise ConfigError(
                 f"[forward] solver.type='dg' cannot use "
                 f"source_model.type={self.source_model.type!r}. DUNEuro's DG "
@@ -363,6 +365,7 @@ class ForwardCfg:
                 "are CG-only). Use solver.type='cg', or "
                 "source_model.type='partial_integration'."
             )
+
     # Optional explicit dipole positions (mm). When non-empty, the forward
     # solve uses these instead of geometry-derived ``vagus_sources`` sampling
     # — this is how the GUI's clicked source points reach the solver.
@@ -392,7 +395,7 @@ class ElectrodeCfg:
     rows: int = 6
     cols: int = 5
     contact_pitch_mm: float = 5.0
-    shape: str = "paddle32"          # "rectangular" / "paddle32" / "whole_body"
+    shape: str = "paddle32"  # "rectangular" / "paddle32" / "whole_body"
     head_offset_mm: float = 15.0
     foot_offset_mm: float = 15.0
     target_tissue: str = "vagus_left"
@@ -402,8 +405,8 @@ class ElectrodeCfg:
     # fractional slab above. Set per source-target in SOURCE_TARGETS (spine → c7).
     target_level: str | None = None
     label_prefix: str = "elec"
-    n_contacts: int = 1000           # whole_body: total contact count
-    sample_seed: int = 0             # whole_body: RNG seed for skin sampling
+    n_contacts: int = 1000  # whole_body: total contact count
+    sample_seed: int = 0  # whole_body: RNG seed for skin sampling
 
 
 @dataclass(frozen=True)
@@ -434,16 +437,14 @@ class NoiseCfg:
     bandwidth_hz: float | None = None
 
     def __post_init__(self) -> None:
-        opm_sensor(self.opm_sensor)          # raises on an unknown preset
+        opm_sensor(self.opm_sensor)  # raises on an unknown preset
         if self.opm_bandwidth_hz <= 0:
             raise ConfigError(
-                f"[noise] opm_bandwidth_hz must be positive, got "
-                f"{self.opm_bandwidth_hz}"
+                f"[noise] opm_bandwidth_hz must be positive, got {self.opm_bandwidth_hz}"
             )
         if self.bandwidth_hz is None and self.band_hi_hz <= self.band_lo_hz:
             raise ConfigError(
-                f"[noise] band_hi_hz ({self.band_hi_hz}) must exceed "
-                f"band_lo_hz ({self.band_lo_hz})"
+                f"[noise] band_hi_hz ({self.band_hi_hz}) must exceed band_lo_hz ({self.band_lo_hz})"
             )
 
     @property
@@ -479,6 +480,7 @@ class NoiseCfg:
         accumulate noise out to 500 Hz just because the filter is set there.
         """
         import math
+
         f3 = float(self.opm_bandwidth_hz)
         if self.bandwidth_hz is not None:
             lo, hi = 0.0, float(self.bandwidth_hz)
@@ -571,23 +573,35 @@ class Config:
 # rather than modality. For combined targets the patch follows the deeper/larger
 # structure, which is the one the array must be sited for.
 SOURCE_TARGETS: dict[str, dict[str, str]] = {
-    "vagus":       {"tissues": "vagus_left",             "label": "vagus",
-                    "electrodes": "vagus_left"},
-    "spine":       {"tissues": "spinal_cord",            "label": "spine",
-                    "electrodes": "spinal_cord",         "level": "c7"},
-    "spine_vagus": {"tissues": "spinal_cord,vagus_left", "label": "spine + vagus",
-                    "electrodes": "spinal_cord",         "level": "c7"},
-    "muscle":      {"tissues": "muscle",                 "label": "muscle",
-                    "electrodes": "muscle"},
-    "spine_muscle": {"tissues": "spinal_cord,muscle",    "label": "spine + muscle",
-                    "electrodes": "spinal_cord",         "level": "c7"},
+    "vagus": {"tissues": "vagus_left", "label": "vagus", "electrodes": "vagus_left"},
+    "spine": {
+        "tissues": "spinal_cord",
+        "label": "spine",
+        "electrodes": "spinal_cord",
+        "level": "c7",
+    },
+    "spine_vagus": {
+        "tissues": "spinal_cord,vagus_left",
+        "label": "spine + vagus",
+        "electrodes": "spinal_cord",
+        "level": "c7",
+    },
+    "muscle": {"tissues": "muscle", "label": "muscle", "electrodes": "muscle"},
+    "spine_muscle": {
+        "tissues": "spinal_cord,muscle",
+        "label": "spine + muscle",
+        "electrodes": "spinal_cord",
+        "level": "c7",
+    },
 }
 
 # Leadfield filename prefixes stripped to recover the ``--source-target`` slug.
 # Longest first so ``duneuro_eeg_leadfield_`` wins over ``duneuro_leadfield_``.
 _LEADFIELD_PREFIXES = (
-    "duneuro_eeg_leadfield_", "duneuro_leadfield_",
-    "duneuro_eeg_leadfield", "duneuro_leadfield",
+    "duneuro_eeg_leadfield_",
+    "duneuro_leadfield_",
+    "duneuro_eeg_leadfield",
+    "duneuro_leadfield",
 )
 
 
@@ -597,10 +611,10 @@ def source_target_tag(cfg: Config) -> str:
     ``outputs/forward/duneuro_leadfield_spine_vagus.npz`` → ``"spine_vagus"``.
     Returns ``""`` for an untagged/plain ``duneuro_leadfield.npz``.
     """
-    stem = cfg.outputs.forward_npz.stem            # e.g. duneuro_leadfield_spine
+    stem = cfg.outputs.forward_npz.stem  # e.g. duneuro_leadfield_spine
     for prefix in _LEADFIELD_PREFIXES:
         if stem.startswith(prefix):
-            return stem[len(prefix):].lstrip("_")
+            return stem[len(prefix) :].lstrip("_")
     return ""
 
 
@@ -664,6 +678,7 @@ def source_region_label(cfg: Config) -> str:
 
 # ── overrides ──────────────────────────────────────────────────────────────
 
+
 def parse_override(spec: str) -> tuple[list[str], Any]:
     """Parse ``forward.source_spacing_mm=3.0`` → (['forward','source_spacing_mm'], 3.0)."""
     if "=" not in spec:
@@ -696,9 +711,13 @@ def apply_overrides(data: dict[str, Any], overrides: list[str] | None) -> dict[s
 
 # ── construction ───────────────────────────────────────────────────────────
 
+
 def _check_keys(
-    name: str, expected: set[str], got: set[str],
-    *, optional: set[str] | None = None,
+    name: str,
+    expected: set[str],
+    got: set[str],
+    *,
+    optional: set[str] | None = None,
 ) -> None:
     """Validate a config level's keys.
 
@@ -737,8 +756,7 @@ def _coerce_scalar(name: str, key: str, ann: Any, value: Any) -> Any:
 
     def bad(expected: str) -> ConfigError:
         return ConfigError(
-            f"[{name}] {key}: expected {expected}, got {value!r} "
-            f"({type(value).__name__})"
+            f"[{name}] {key}: expected {expected}, got {value!r} ({type(value).__name__})"
         )
 
     if ann_s == "bool":
@@ -799,7 +817,8 @@ def _build_dataclass(
         raise ConfigError(f"[{name}] unknown keys: {sorted(extra)}")
     if allow_defaults:
         required = {
-            n for n, f in all_fields.items()
+            n
+            for n, f in all_fields.items()
             if f.default is MISSING and f.default_factory is MISSING
         }
     else:
@@ -807,9 +826,7 @@ def _build_dataclass(
     missing = required - got
     if missing:
         raise ConfigError(f"[{name}] missing keys: {sorted(missing)}")
-    coerced = {
-        k: _coerce_scalar(name, k, all_fields[k].type, v) for k, v in data.items()
-    }
+    coerced = {k: _coerce_scalar(name, k, all_fields[k].type, v) for k, v in data.items()}
     return cls(**coerced)
 
 
@@ -818,8 +835,9 @@ def _build_shrinkwrap(d: dict[str, Any]) -> dict[str, ShrinkwrapParams]:
     for k, v in d.items():
         if not isinstance(v, dict):
             raise ConfigError(f"geometry.shrinkwrap.{k} must be a mapping")
-        out[k] = _build_dataclass(ShrinkwrapParams, v, f"geometry.shrinkwrap.{k}",
-                                  allow_defaults=False)
+        out[k] = _build_dataclass(
+            ShrinkwrapParams, v, f"geometry.shrinkwrap.{k}", allow_defaults=False
+        )
     return out
 
 
@@ -840,7 +858,9 @@ def _build_noise(d: dict[str, Any]) -> NoiseCfg:
         logger.warning(
             "OPM preset %r carries unverified manufacturer figures (%s) — "
             "re-check the spec sheet before publishing a number that rests "
-            "on it", preset.name, preset.source,
+            "on it",
+            preset.name,
+            preset.source,
         )
     if cfg.bandwidth_hz is None and cfg.band_hi_hz > cfg.opm_bandwidth_hz:
         logger.warning(
@@ -849,7 +869,9 @@ def _build_noise(d: dict[str, Any]) -> NoiseCfg:
             "little noise and less signal. Both effects are modelled, so "
             "the answer is honest rather than wrong — but if you meant to "
             "record that band, choose a wider sensor preset.",
-            cfg.band_hi_hz, cfg.opm_sensor, cfg.opm_bandwidth_hz,
+            cfg.band_hi_hz,
+            cfg.opm_sensor,
+            cfg.opm_bandwidth_hz,
         )
     return cfg
 
@@ -864,9 +886,7 @@ def _build_fem(d: dict[str, Any]) -> FemCfg:
     val = _build_dataclass(FemValidate, d.get("validate", {}), "fem.validate")
     body = {k: v for k, v in d.items() if k != "validate"}
     body["tissues"] = tuple(body.get("tissues", ()))
-    return _build_dataclass(
-        FemCfg, {**body, "validate": val}, "fem", allow_defaults=False
-    )
+    return _build_dataclass(FemCfg, {**body, "validate": val}, "fem", allow_defaults=False)
 
 
 def _build_forward(d: dict[str, Any]) -> ForwardCfg:
@@ -875,24 +895,29 @@ def _build_forward(d: dict[str, Any]) -> ForwardCfg:
     aniso = _build_dataclass(
         MuscleAnisotropyCfg, d.get("muscle_anisotropy", {}), "forward.muscle_anisotropy"
     )
-    src_model = _build_dataclass(
-        SourceModelCfg, d.get("source_model", {}), "forward.source_model"
-    )
-    body = {k: v for k, v in d.items()
-            if k not in ("solver", "validate", "muscle_anisotropy", "source_model")}
+    src_model = _build_dataclass(SourceModelCfg, d.get("source_model", {}), "forward.source_model")
+    body = {
+        k: v
+        for k, v in d.items()
+        if k not in ("solver", "validate", "muscle_anisotropy", "source_model")
+    }
     duneuro_path = body.get("duneuro_path")
     body["duneuro_path"] = Path(duneuro_path).expanduser() if duneuro_path else None
     if body.get("point_sources"):
-        body["point_sources"] = tuple(
-            tuple(float(c) for c in p) for p in body["point_sources"]
-        )
+        body["point_sources"] = tuple(tuple(float(c) for c in p) for p in body["point_sources"])
     # allow_defaults=True so the optional point_sources field may be omitted;
     # the other forward fields have no defaults and so remain required.
     return _build_dataclass(
         ForwardCfg,
-        {**body, "solver": solver, "validate": val, "muscle_anisotropy": aniso,
-         "source_model": src_model},
-        "forward", allow_defaults=True,
+        {
+            **body,
+            "solver": solver,
+            "validate": val,
+            "muscle_anisotropy": aniso,
+            "source_model": src_model,
+        },
+        "forward",
+        allow_defaults=True,
     )
 
 
@@ -950,14 +975,23 @@ def load_config(
         root = find_project_root(path.parent)
 
     expected_top = {
-        "project_root", "data", "outputs", "geometry", "fem",
-        "sensors", "electrodes", "noise", "forward", "cluster",
-        "sensitivity", "analytic", "reproducibility",
+        "project_root",
+        "data",
+        "outputs",
+        "geometry",
+        "fem",
+        "sensors",
+        "electrodes",
+        "noise",
+        "forward",
+        "cluster",
+        "sensitivity",
+        "analytic",
+        "reproducibility",
     }
     # Sections whose dataclass carries a complete set of defaults may be
     # omitted entirely, so that adding one does not invalidate existing YAMLs.
-    _check_keys("(top level)", expected_top, set(raw.keys()),
-                optional={"analytic"})
+    _check_keys("(top level)", expected_top, set(raw.keys()), optional={"analytic"})
 
     sens_raw = dict(raw.get("sensitivity", {}))
     if "perturbations" in sens_raw:
@@ -971,20 +1005,21 @@ def load_config(
         outputs=_build_outputs(raw["outputs"], root),
         geometry=_build_geometry(raw["geometry"]),
         fem=_build_fem(raw["fem"]),
-        sensors=_build_dataclass(SensorCfg, raw["sensors"], "sensors",
-                                  allow_defaults=False),
+        sensors=_build_dataclass(SensorCfg, raw["sensors"], "sensors", allow_defaults=False),
         electrodes=_build_dataclass(
-            ElectrodeCfg, raw.get("electrodes", {}), "electrodes",
+            ElectrodeCfg,
+            raw.get("electrodes", {}),
+            "electrodes",
         ),
         noise=_build_noise(raw.get("noise", {})),
         forward=_build_forward(raw["forward"]),
         cluster=_build_dataclass(ClusterCfg, raw.get("cluster", {}), "cluster"),
         sensitivity=_build_dataclass(
-            SensitivityCfg, sens_raw, "sensitivity",
+            SensitivityCfg,
+            sens_raw,
+            "sensitivity",
         ),
-        analytic=_build_dataclass(
-            AnalyticCfg, raw.get("analytic", {}), "analytic"
-        ),
+        analytic=_build_dataclass(AnalyticCfg, raw.get("analytic", {}), "analytic"),
         reproducibility=_build_dataclass(
             ReproCfg, raw.get("reproducibility", {}), "reproducibility"
         ),
@@ -998,8 +1033,13 @@ def ensure_output_dirs(cfg: Config) -> None:
     """Create every parent dir for the configured output files."""
     o = cfg.outputs
     for p in (
-        o.base, o.logs_dir, o.intermediate_bone_clean,
-        o.geometry_mat.parent, o.fem_mat.parent,
-        o.sensors_mat.parent, o.forward_npz.parent, o.forward_chunks_dir,
+        o.base,
+        o.logs_dir,
+        o.intermediate_bone_clean,
+        o.geometry_mat.parent,
+        o.fem_mat.parent,
+        o.sensors_mat.parent,
+        o.forward_npz.parent,
+        o.forward_chunks_dir,
     ):
         Path(p).mkdir(parents=True, exist_ok=True)

@@ -22,6 +22,7 @@ The output uses the same ``grad`` HDF5 group as the OPM array but with
 skin normals at each contact (informational only — DUNEuro EEG ignores
 orientation).
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,9 +52,9 @@ class ElectrodeArrayParams:
     rows: int
     cols: int
     contact_pitch_mm: float
-    shape: str = "rectangular"           # rectangular / paddle32 / whole_body
-    head_offset_mm: float = 15.0         # paddle: distance from grid top to head contact
-    foot_offset_mm: float = 15.0         # paddle: distance from grid bottom to foot contact
+    shape: str = "rectangular"  # rectangular / paddle32 / whole_body
+    head_offset_mm: float = 15.0  # paddle: distance from grid top to head contact
+    foot_offset_mm: float = 15.0  # paddle: distance from grid bottom to foot contact
     target_tissue: str = "vagus_left"
     target_z_low_factor: float = 0.6
     target_z_high_factor: float = 0.9
@@ -64,13 +65,17 @@ class ElectrodeArrayParams:
     target_level: str | None = None
     target_z_band_mm: tuple[float, float] | None = None
     label_prefix: str = "elec"
-    n_contacts: int = 1000               # whole_body: total contact count
-    sample_seed: int = 0                 # whole_body: RNG seed for surface sampling
+    n_contacts: int = 1000  # whole_body: total contact count
+    sample_seed: int = 0  # whole_body: RNG seed for surface sampling
 
 
-def _target_centre(fem: FemMesh, target_tissue: str,
-                   z_low_factor: float, z_high_factor: float,
-                   z_band_mm: tuple[float, float] | None = None) -> np.ndarray:
+def _target_centre(
+    fem: FemMesh,
+    target_tissue: str,
+    z_low_factor: float,
+    z_high_factor: float,
+    z_band_mm: tuple[float, float] | None = None,
+) -> np.ndarray:
     """3-D centre = mean of ``target_tissue`` tet centroids within a Z band.
 
     The band is either an absolute ``z_band_mm`` (mm — e.g. a vertebra's STL
@@ -79,8 +84,7 @@ def _target_centre(fem: FemMesh, target_tissue: str,
     """
     if target_tissue not in fem.tissue_labels:
         raise SchemaError(
-            f"electrode target tissue {target_tissue!r} not in FEM "
-            f"(have {list(fem.tissue_labels)})"
+            f"electrode target tissue {target_tissue!r} not in FEM (have {list(fem.tissue_labels)})"
         )
     tid = fem.label_to_id[target_tissue]
     mask = fem.tissue == tid
@@ -98,14 +102,15 @@ def _target_centre(fem: FemMesh, target_tissue: str,
     if not sel.any():
         logger.warning(
             "no %s centroids in Z [%g, %g]; using full-tissue mean",
-            target_tissue, z_lo, z_hi,
+            target_tissue,
+            z_lo,
+            z_hi,
         )
         sel = np.ones(len(centroids), dtype=bool)
     return centroids[sel].mean(axis=0)
 
 
-def _project_to_skin(skin: trimesh.Trimesh, p: np.ndarray
-                     ) -> tuple[np.ndarray, np.ndarray]:
+def _project_to_skin(skin: trimesh.Trimesh, p: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Closest-point projection of ``p`` onto the skin mesh.
 
     Returns ``(projected_point_mm, outward_normal_unit)``.
@@ -138,8 +143,12 @@ def _local_uv_rectangular(rows: int, cols: int, pitch: float) -> tuple[np.ndarra
 
 
 def _local_uv_paddle32(
-    pitch: float, head_offset_mm: float, foot_offset_mm: float,
-    *, rows: int = 6, cols: int = 5,
+    pitch: float,
+    head_offset_mm: float,
+    foot_offset_mm: float,
+    *,
+    rows: int = 6,
+    cols: int = 5,
 ) -> tuple[np.ndarray, list[str]]:
     """Paddle/figurine layout: 1 head + ``rows × cols`` body + 1 foot = 32 contacts.
 
@@ -165,14 +174,19 @@ def _local_uv_paddle32(
     head = np.array([[0.0, v.max() + head_offset_mm]])
     foot = np.array([[0.0, v.min() - foot_offset_mm]])
     uv = np.vstack([head, body, foot])
-    labels = ["elec-head-00"] \
-        + [f"elec-{r:02d}-{c:02d}" for r in range(rows) for c in range(cols)] \
+    labels = (
+        ["elec-head-00"]
+        + [f"elec-{r:02d}-{c:02d}" for r in range(rows) for c in range(cols)]
         + ["elec-foot-00"]
+    )
     return uv, labels
 
 
 def _whole_body_electrodes(
-    skin: trimesh.Trimesh, n_contacts: int, *, seed: int = 0,
+    skin: trimesh.Trimesh,
+    n_contacts: int,
+    *,
+    seed: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, list[str]]:
     """Sample ~``n_contacts`` electrodes uniformly across the entire skin.
 
@@ -184,15 +198,16 @@ def _whole_body_electrodes(
     rng = np.random.default_rng(seed)
     try:
         pts, face_idx = trimesh.sample.sample_surface_even(
-            skin, count=n_contacts, seed=int(seed),
+            skin,
+            count=n_contacts,
+            seed=int(seed),
         )
     except TypeError:
         pts, face_idx = trimesh.sample.sample_surface_even(skin, count=n_contacts)
     if len(pts) < int(0.8 * n_contacts):
         # Poisson-disk under-delivered (mesh too noisy or count too high).
         try:
-            pts, face_idx = trimesh.sample.sample_surface(skin, count=n_contacts,
-                                                           seed=int(seed))
+            pts, face_idx = trimesh.sample.sample_surface(skin, count=n_contacts, seed=int(seed))
         except TypeError:
             pts, face_idx = trimesh.sample.sample_surface(skin, count=n_contacts)
     n = len(pts)
@@ -205,7 +220,7 @@ def _whole_body_electrodes(
     normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
     width = max(4, int(np.ceil(np.log10(max(n, 10)))))
     labels = [f"wb-{i:0{width}d}" for i in range(n)]
-    _ = rng                         # reserved for future jitter / decimation
+    _ = rng  # reserved for future jitter / decimation
     return np.asarray(pts, dtype=np.float64), normals, labels
 
 
@@ -221,11 +236,14 @@ def build_electrode_array(
     """
     if params.shape == "whole_body":
         pts, normals, labels = _whole_body_electrodes(
-            skin, params.n_contacts, seed=params.sample_seed,
+            skin,
+            params.n_contacts,
+            seed=params.sample_seed,
         )
         n = len(pts)
         return SensorArray(
-            coilpos=pts, coilori=normals,
+            coilpos=pts,
+            coilori=normals,
             labels=tuple(labels),
             chantype=tuple(["eeg"] * n),
             chanunit=tuple(["V"] * n),
@@ -233,13 +251,18 @@ def build_electrode_array(
         )
 
     centre_3d = _target_centre(
-        fem, params.target_tissue,
-        params.target_z_low_factor, params.target_z_high_factor,
+        fem,
+        params.target_tissue,
+        params.target_z_low_factor,
+        params.target_z_high_factor,
         z_band_mm=params.target_z_band_mm,
     )
     if params.target_z_band_mm is not None:
-        logger.info("electrode patch centred on level %s (Z %.1f..%.1f mm)",
-                    params.target_level, *params.target_z_band_mm)
+        logger.info(
+            "electrode patch centred on level %s (Z %.1f..%.1f mm)",
+            params.target_level,
+            *params.target_z_band_mm,
+        )
     centre, normal = _project_to_skin(skin, centre_3d)
     t1, t2 = _tangent_basis(normal)
 
@@ -252,13 +275,14 @@ def build_electrode_array(
     t1 /= max(float(np.linalg.norm(t1)), 1e-12)
 
     if params.shape == "rectangular":
-        uv, labels = _local_uv_rectangular(params.rows, params.cols,
-                                           params.contact_pitch_mm)
+        uv, labels = _local_uv_rectangular(params.rows, params.cols, params.contact_pitch_mm)
     elif params.shape == "paddle32":
         uv, labels = _local_uv_paddle32(
             params.contact_pitch_mm,
-            params.head_offset_mm, params.foot_offset_mm,
-            rows=params.rows, cols=params.cols,
+            params.head_offset_mm,
+            params.foot_offset_mm,
+            rows=params.rows,
+            cols=params.cols,
         )
     else:
         raise ValueError(f"unknown electrode shape {params.shape!r}")
@@ -309,8 +333,9 @@ def generate_electrode_array(
     params = ElectrodeArrayParams(
         rows=rows if rows is not None else elec.rows,
         cols=cols if cols is not None else elec.cols,
-        contact_pitch_mm=contact_pitch_mm if contact_pitch_mm is not None
-                         else elec.contact_pitch_mm,
+        contact_pitch_mm=contact_pitch_mm
+        if contact_pitch_mm is not None
+        else elec.contact_pitch_mm,
         shape=elec.shape,
         head_offset_mm=elec.head_offset_mm,
         foot_offset_mm=elec.foot_offset_mm,
@@ -331,6 +356,10 @@ def generate_electrode_array(
     save_sensors(out, array)
     logger.info(
         "[saved] %s (%d HD contacts %dx%d @ %.1fmm)",
-        out, len(array.coilpos), params.rows, params.cols, params.contact_pitch_mm,
+        out,
+        len(array.coilpos),
+        params.rows,
+        params.cols,
+        params.contact_pitch_mm,
     )
     return out

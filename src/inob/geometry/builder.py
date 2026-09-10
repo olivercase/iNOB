@@ -13,6 +13,7 @@ Pipeline (per compartment):
 Each compartment is validated (watertight ∧ winding-consistent ∧ Euler==2)
 before being saved — the build raises rather than persists a broken mesh.
 """
+
 from __future__ import annotations
 
 import logging
@@ -99,7 +100,7 @@ def compartment_seed(label: str, base_seed: int) -> int:
     config — otherwise adding one shifts the shared RNG stream and silently
     changes every compartment built after it.
     """
-    return (base_seed + zlib.crc32(label.encode())) % (2 ** 32)
+    return (base_seed + zlib.crc32(label.encode())) % (2**32)
 
 
 def _bbox_diagonal(m: trimesh.Trimesh) -> float:
@@ -108,7 +109,10 @@ def _bbox_diagonal(m: trimesh.Trimesh) -> float:
 
 
 def _preserves_extent(
-    before: trimesh.Trimesh, after: trimesh.Trimesh, *, min_ratio: float = 0.8,
+    before: trimesh.Trimesh,
+    after: trimesh.Trimesh,
+    *,
+    min_ratio: float = 0.8,
 ) -> bool:
     """True iff ``after`` still spans most of ``before``'s bounding box.
 
@@ -121,8 +125,12 @@ def _preserves_extent(
 
 
 def watertighten(
-    raw: trimesh.Trimesh, label: str, params: ShrinkwrapParams,
-    *, force_shrinkwrap: bool = False, seed: int | None = None,
+    raw: trimesh.Trimesh,
+    label: str,
+    params: ShrinkwrapParams,
+    *,
+    force_shrinkwrap: bool = False,
+    seed: int | None = None,
 ) -> trimesh.Trimesh:
     """Run the layered watertightening pipeline on a single compartment."""
     logger.info("[build] %s: input %d V / %d F", label, len(raw.vertices), len(raw.faces))
@@ -132,7 +140,9 @@ def watertighten(
     m = drop_degenerate_components(cheap_repair(raw))
     logger.info(
         "  cheap repair: wt=%s euler=%s wcons=%s",
-        m.is_watertight, m.euler_number, m.is_winding_consistent,
+        m.is_watertight,
+        m.euler_number,
+        m.is_winding_consistent,
     )
     if not force_shrinkwrap and is_perfect(m):
         logger.info("  [done] cheap repair sufficed")
@@ -163,13 +173,19 @@ def watertighten(
     # 3. Shrinkwrap
     logger.info(
         "  shrinkwrap pitch=%g n=%d close=%d decim=%d smooth=%d",
-        params.pitch, params.n_samples, params.close_iter,
-        params.decimate_target, params.smooth_iter,
+        params.pitch,
+        params.n_samples,
+        params.close_iter,
+        params.decimate_target,
+        params.smooth_iter,
     )
     out = shrinkwrap_mesh(m, params, seed=seed)
     logger.info(
         "  shrinkwrap: V=%d F=%d wt=%s euler=%s",
-        len(out.vertices), len(out.faces), out.is_watertight, out.euler_number,
+        len(out.vertices),
+        len(out.faces),
+        out.is_watertight,
+        out.euler_number,
     )
 
     # Bone-specific escalation: try heavier closing, then coarsen.
@@ -179,8 +195,10 @@ def watertighten(
             out = shrinkwrap_mesh(
                 m,
                 ShrinkwrapParams(
-                    pitch=params.pitch, n_samples=params.n_samples,
-                    close_iter=ci, decimate_target=params.decimate_target,
+                    pitch=params.pitch,
+                    n_samples=params.n_samples,
+                    close_iter=ci,
+                    decimate_target=params.decimate_target,
                     smooth_iter=params.smooth_iter,
                 ),
                 seed=seed,
@@ -193,8 +211,11 @@ def watertighten(
             out = shrinkwrap_mesh(
                 m,
                 ShrinkwrapParams(
-                    pitch=5.0, n_samples=400_000, close_iter=6,
-                    decimate_target=15_000, smooth_iter=12,
+                    pitch=5.0,
+                    n_samples=400_000,
+                    close_iter=6,
+                    decimate_target=15_000,
+                    smooth_iter=12,
                 ),
                 seed=seed,
             )
@@ -208,8 +229,10 @@ def watertighten(
             # Keep pymeshfix result if it is at least an improvement — i.e. it
             # gained watertightness or reduced the number of topological handles
             # — even if it does not reach the ideal euler=2.
-            improved = is_perfect(out2) or (out2.is_watertight and not out.is_watertight) or (
-                out2.is_watertight and abs(out2.euler_number - 2) < abs(out.euler_number - 2)
+            improved = (
+                is_perfect(out2)
+                or (out2.is_watertight and not out.is_watertight)
+                or (out2.is_watertight and abs(out2.euler_number - 2) < abs(out.euler_number - 2))
             )
             # ...but only if it still describes the same object. Given a badly
             # self-intersecting input, pymeshfix will happily return one small
@@ -220,7 +243,8 @@ def watertighten(
                 logger.warning(
                     "  pymeshfix result discarded: bbox diagonal shrank %.0f -> %.0f mm "
                     "(kept the unrepaired mesh)",
-                    _bbox_diagonal(out), _bbox_diagonal(out2),
+                    _bbox_diagonal(out),
+                    _bbox_diagonal(out2),
                 )
                 improved = False
             if improved:
@@ -245,12 +269,17 @@ def _validate_compartment(m: trimesh.Trimesh, label: str, cfg: Config) -> None:
     vol = float(m.volume) if wt else float("nan")
     logger.info(
         "[validate] %s: watertight=%s winding=%s Euler=%d volume=%.0f mm^3",
-        label, wt, wc, eu, vol,
+        label,
+        wt,
+        wc,
+        eu,
+        vol,
     )
     if label in _MULTIBODY_VIZ_COMPARTMENTS:
         logger.info(
             "[validate] %s: multi-body viz compartment (%d components) — "
-            "watertight/Euler checks relaxed", label,
+            "watertight/Euler checks relaxed",
+            label,
             len(m.split(only_watertight=False)),
         )
         return
@@ -269,7 +298,8 @@ def _validate_compartment(m: trimesh.Trimesh, label: str, cfg: Config) -> None:
             logger.warning(
                 "[validate] %s: Euler=%d != 2 (genus != 0) — source mesh has "
                 "a topological defect; mesh is otherwise watertight and will be saved",
-                label, eu,
+                label,
+                eu,
             )
         else:
             raise SchemaError(f"{label} Euler number {eu} != 2 (genus 0)")
@@ -284,8 +314,13 @@ def _multibody_compartment(paths: list[Path]) -> trimesh.Trimesh:
     """
     bodies = [cheap_repair(load_stl(p, check_units_mm=True)) for p in paths]
     merged = trimesh.util.concatenate(bodies)
-    logger.info("[build] multi-body compartment: %d STLs → %d bodies, %d V / %d F",
-                len(paths), len(bodies), len(merged.vertices), len(merged.faces))
+    logger.info(
+        "[build] multi-body compartment: %d STLs → %d bodies, %d V / %d F",
+        len(paths),
+        len(bodies),
+        len(merged.vertices),
+        len(merged.faces),
+    )
     return merged
 
 
@@ -298,7 +333,9 @@ def _trimesh_to_compartment(name: str, m: trimesh.Trimesh) -> CompartmentMesh:
 
 
 def build_geometry(
-    cfg: Config, *, force_shrinkwrap: bool = False,
+    cfg: Config,
+    *,
+    force_shrinkwrap: bool = False,
     only_compartments: tuple[str, ...] | None = None,
 ) -> Path:
     """Build the multi-compartment geometry HDF5 from ``cfg``.
@@ -330,12 +367,10 @@ def build_geometry(
             clean = _multibody_compartment(paths)
         elif len(paths) == 1:
             raw = load_stl(paths[0], check_units_mm=True)
-            clean = watertighten(raw, label, params,
-                                 force_shrinkwrap=force_shrinkwrap, seed=seed)
+            clean = watertighten(raw, label, params, force_shrinkwrap=force_shrinkwrap, seed=seed)
         else:
             raw = concat_stls(paths, check_units_mm=True)
-            clean = watertighten(raw, label, params,
-                                 force_shrinkwrap=force_shrinkwrap, seed=seed)
+            clean = watertighten(raw, label, params, force_shrinkwrap=force_shrinkwrap, seed=seed)
         _validate_compartment(clean, label, cfg)
         compartments[label] = _trimesh_to_compartment(label, clean)
 
@@ -361,6 +396,7 @@ def check_existing(cfg: Config) -> bool:
     if not p.exists():
         raise FileNotFoundError(f"{p} does not exist; nothing to check")
     from inob.io.hdf5 import load_geometry
+
     geom = load_geometry(p)
     validate_geometry(geom)
     all_ok = True

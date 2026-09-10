@@ -6,6 +6,7 @@ discover on the cluster: the layout DUNEuro returns
 (``output(row, dim*i + j)`` — position-major) and the reciprocity arithmetic
 that turns transfer-matrix rows into a stimulation montage.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,11 +24,18 @@ DEFAULT_CFG = REPO_ROOT / "configs" / "default.yaml"
 
 def _fem() -> FemMesh:
     """Two tets, one per tissue, with easily-checked centroids."""
-    nodes = np.array([
-        [0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0],
-        [30.0, 30.0, 30.0], [33.0, 30.0, 30.0], [30.0, 33.0, 30.0],
-        [30.0, 30.0, 33.0],
-    ])
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [0.0, 3.0, 0.0],
+            [0.0, 0.0, 3.0],
+            [30.0, 30.0, 30.0],
+            [33.0, 30.0, 30.0],
+            [30.0, 33.0, 30.0],
+            [30.0, 30.0, 33.0],
+        ]
+    )
     tets = np.array([[0, 1, 2, 3], [4, 5, 6, 7]], dtype=np.int32)
     tissue = np.array([1, 2], dtype=np.int32)
     return FemMesh(nodes, tets, tissue, ("vagus_left", "muscle"), "mm")
@@ -38,25 +46,23 @@ class _FakeDriver:
 
     def __init__(self, n_dofs: int = 5, n_electrodes: int = 3) -> None:
         self.n_dofs = n_dofs
-        self.transfer = np.arange(n_electrodes * n_dofs, dtype=float).reshape(
-            n_electrodes, n_dofs)
+        self.transfer = np.arange(n_electrodes * n_dofs, dtype=float).reshape(n_electrodes, n_dofs)
         self.calls: list[dict] = []
 
     def computeEEGTransferMatrix(self, cfg):  # DUNEuro's spelling
         return self.transfer, {}
 
     def evaluateMultipleFunctionsAtPositions(self, rows, positions, cfg):
-        self.calls.append({"rows": np.asarray(rows), "positions": positions,
-                           "cfg": cfg})
+        self.calls.append({"rows": np.asarray(rows), "positions": positions, "cfg": cfg})
         n_rows = len(rows)
         n_pos = len(positions)
         stride = 1 if cfg["evaluation_return_type"] == "direct" else 3
-        out = np.arange(n_rows * n_pos * stride, dtype=float).reshape(
-            n_rows, n_pos * stride)
+        out = np.arange(n_rows * n_pos * stride, dtype=float).reshape(n_rows, n_pos * stride)
         return out, {}
 
 
 # ── sampling ──────────────────────────────────────────────────────────────────
+
 
 def test_sample_points_uses_centroids_so_every_point_is_inside() -> None:
     pos, tid = vf.sample_points(_fem())
@@ -84,11 +90,11 @@ def test_sample_points_thins_by_spacing() -> None:
 
 # ── evaluation ────────────────────────────────────────────────────────────────
 
+
 def test_evaluate_unpacks_duneuros_position_major_layout() -> None:
     driver = _FakeDriver()
     positions = np.zeros((4, 3))
-    out = vf.evaluate_dof_rows(driver, np.ones((2, 5)), positions,
-                               evaluation_type="current")
+    out = vf.evaluate_dof_rows(driver, np.ones((2, 5)), positions, evaluation_type="current")
     # (n_functions, n_positions, 3), with each position's three components
     # consecutive — output(row, dim*i + j).
     assert out.shape == (2, 4, 3)
@@ -98,24 +104,24 @@ def test_evaluate_unpacks_duneuros_position_major_layout() -> None:
 
 def test_evaluate_direct_returns_one_value_per_point() -> None:
     driver = _FakeDriver()
-    out = vf.evaluate_dof_rows(driver, np.ones((1, 5)), np.zeros((4, 3)),
-                               evaluation_type="direct")
+    out = vf.evaluate_dof_rows(driver, np.ones((1, 5)), np.zeros((4, 3)), evaluation_type="direct")
     assert out.shape == (1, 4)
 
 
 def test_evaluate_rejects_an_unknown_return_type() -> None:
     with pytest.raises(ValueError, match="evaluation_type"):
-        vf.evaluate_dof_rows(_FakeDriver(), np.ones((1, 5)), np.zeros((2, 3)),
-                             evaluation_type="everything")
+        vf.evaluate_dof_rows(
+            _FakeDriver(), np.ones((1, 5)), np.zeros((2, 3)), evaluation_type="everything"
+        )
 
 
 # ── stimulation (reciprocity used forwards) ───────────────────────────────────
 
+
 def _patch_driver(monkeypatch, driver: _FakeDriver) -> None:
     monkeypatch.setattr(vf, "import_duneuro", lambda cfg: object())
     monkeypatch.setattr(vf, "build_driver", lambda cfg, fem: (driver, {}, None))
-    monkeypatch.setattr("inob.forward.eeg.attach_electrodes",
-                        lambda *a, **k: None)
+    monkeypatch.setattr("inob.forward.eeg.attach_electrodes", lambda *a, **k: None)
 
 
 def test_stimulation_field_is_the_difference_of_two_transfer_rows(
@@ -126,7 +132,12 @@ def test_stimulation_field_is_the_difference_of_two_transfer_rows(
     cfg = load_config(DEFAULT_CFG)
 
     field = vf.stimulation_field(
-        cfg, _fem(), np.zeros((3, 3)), anode=2, cathode=0, current_mA=2.0,
+        cfg,
+        _fem(),
+        np.zeros((3, 3)),
+        anode=2,
+        cathode=0,
+        current_mA=2.0,
         spacing_mm=0.0,
     )
     # I * (T[anode] - T[cathode]) — the DOF vector of the montage.
@@ -153,6 +164,7 @@ def test_stimulation_field_rejects_an_out_of_range_electrode(monkeypatch) -> Non
 
 
 # ── artefact ──────────────────────────────────────────────────────────────────
+
 
 def test_volume_field_npz_round_trip(tmp_path: Path) -> None:
     field = vf.VolumeField(

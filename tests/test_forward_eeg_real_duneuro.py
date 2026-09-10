@@ -4,6 +4,7 @@ Companion to tests/test_forward_eeg.py's fake-driver tests: this one runs
 the actual compiled duneuropy extension (skips automatically when it isn't
 importable, same convention as tests/test_forward_smoke.py).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,25 +38,31 @@ def _fem_bipyramid() -> FemMesh:
     nodes = np.array([a, b, c, top, bot], dtype=np.float64)
     tets = np.array([[0, 1, 2, 3], [0, 1, 2, 4]], dtype=np.int32)
     tissue = np.array([1, 1], dtype=np.int32)
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                    tissue_labels=("vagus_left",), unit="mm")
+    return FemMesh(nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("vagus_left",), unit="mm")
 
 
 def _electrodes(n: int) -> SensorArray:
     # Near-boundary points on the bipyramid's 6 triangular faces; setElectrodes
     # snaps each to the closest face-centre via "closest_subentity_center".
-    pos = np.array([
-        [20.0, 5.0, 3.0],     # near face a-b-top
-        [5.0, 20.0, 3.0],     # near face a-c-top
-        [20.0, 5.0, -3.0],    # near face a-b-bot
-        [5.0, 20.0, -3.0],    # near face a-c-bot
-        [16.0, 16.0, 0.0],    # near the shared base triangle a-b-c
-    ])[:n]
+    pos = np.array(
+        [
+            [20.0, 5.0, 3.0],  # near face a-b-top
+            [5.0, 20.0, 3.0],  # near face a-c-top
+            [20.0, 5.0, -3.0],  # near face a-b-bot
+            [5.0, 20.0, -3.0],  # near face a-c-bot
+            [16.0, 16.0, 0.0],  # near the shared base triangle a-b-c
+        ]
+    )[:n]
     ori = np.tile([0.0, 0.0, 1.0], (n, 1))
     labels = tuple(f"elec-{i:04d}" for i in range(n))
-    return SensorArray(coilpos=pos, coilori=ori, labels=labels,
-                        chantype=tuple(["eeg"] * n), chanunit=tuple(["V"] * n),
-                        unit="mm")
+    return SensorArray(
+        coilpos=pos,
+        coilori=ori,
+        labels=labels,
+        chantype=tuple(["eeg"] * n),
+        chanunit=tuple(["V"] * n),
+        unit="mm",
+    )
 
 
 @pytest.mark.duneuro
@@ -78,5 +85,7 @@ def test_run_eeg_forward_end_to_end_with_real_duneuro(tmp_path: Path) -> None:
     # common-average reference => each column sums to ~0 across electrodes
     np.testing.assert_allclose(lf.L.mean(axis=0), 0.0, atol=1e-10)
     np.testing.assert_allclose(
-        lf.L_fT_per_nAm, lf.L * eeg_mod.EEG_CALIBRATION_FACTOR, atol=1e-12,
+        lf.L_fT_per_nAm,
+        lf.L * eeg_mod.EEG_CALIBRATION_FACTOR,
+        atol=1e-12,
     )

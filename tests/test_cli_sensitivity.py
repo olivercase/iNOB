@@ -1,4 +1,5 @@
 """CLI: sensitivity sweep argparse + wiring (_run_modality, main)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,9 +30,14 @@ def test_run_modality_skips_unit_perturbation(tmp_path, monkeypatch) -> None:
     baseline.touch()
 
     from dataclasses import replace
-    cfg = replace(cfg, sensitivity=replace(
-        cfg.sensitivity, perturbations=(0.5, 1.0, 1.5),
-    ))
+
+    cfg = replace(
+        cfg,
+        sensitivity=replace(
+            cfg.sensitivity,
+            perturbations=(0.5, 1.0, 1.5),
+        ),
+    )
 
     seen = {}
 
@@ -67,7 +73,8 @@ def test_run_modality_keeps_unit_when_not_skipped(tmp_path, monkeypatch) -> None
 def test_main_runs_both_modalities_by_default(tmp_path, monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
-        cli_mod, "_run_modality",
+        cli_mod,
+        "_run_modality",
         lambda cfg, m, *, skip_unit: (calls.append(m), Path("x"))[1],
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
@@ -78,12 +85,20 @@ def test_main_runs_both_modalities_by_default(tmp_path, monkeypatch) -> None:
 def test_main_single_modality(tmp_path, monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
-        cli_mod, "_run_modality",
+        cli_mod,
+        "_run_modality",
         lambda cfg, m, *, skip_unit: (calls.append(m), Path("x"))[1],
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--modality", "eeg",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--modality",
+            "eeg",
+        ]
+    )
     assert rc == 0
     assert calls == ["eeg"]
 
@@ -91,15 +106,23 @@ def test_main_single_modality(tmp_path, monkeypatch) -> None:
 def test_main_plot_only_skips_solves(tmp_path, monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
-        cli_mod, "_run_modality",
+        cli_mod,
+        "_run_modality",
         lambda cfg, m, *, skip_unit: calls.append(m),
     )
     render_calls = {}
     import inob.viz.sensitivity_plot as sp_mod
+
     monkeypatch.setattr(sp_mod, "render_sensitivity", lambda cfg, **kw: render_calls.update(kw))
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--plot-only",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--plot-only",
+        ]
+    )
     assert rc == 0
     assert calls == []
     assert render_calls
@@ -107,16 +130,28 @@ def test_main_plot_only_skips_solves(tmp_path, monkeypatch) -> None:
 
 def test_main_plot_renders_figure(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        cli_mod, "_run_modality", lambda cfg, m, *, skip_unit: Path("x"),
+        cli_mod,
+        "_run_modality",
+        lambda cfg, m, *, skip_unit: Path("x"),
     )
     render_calls = {}
     import inob.viz.sensitivity_plot as sp_mod
+
     monkeypatch.setattr(sp_mod, "render_sensitivity", lambda cfg, **kw: render_calls.update(kw))
     out = tmp_path / "cmp.png"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--plot", "--out", str(out), "--dpi", "72",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--plot",
+            "--out",
+            str(out),
+            "--dpi",
+            "72",
+        ]
+    )
     assert rc == 0
     assert render_calls["out_path"] == out
     assert render_calls["dpi"] == 72

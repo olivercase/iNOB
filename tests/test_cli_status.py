@@ -1,4 +1,5 @@
 """CLI: `inob status` — on-disk state reporting and the next-step hint."""
+
 from __future__ import annotations
 
 import json
@@ -42,9 +43,15 @@ def test_main_returns_zero(tmp_path, capsys) -> None:
 
 
 def test_json_output_shape(tmp_path, capsys) -> None:
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--json",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--json",
+        ]
+    )
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert set(data) >= {"project_root", "config", "stages", "optional", "next"}

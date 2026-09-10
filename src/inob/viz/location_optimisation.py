@@ -11,6 +11,7 @@ matches the paddle peak |L|, the paddle is already optimal — moving the
 electrodes won't fix the SNR. If the whole-body peak is much higher, then
 the paddle is poorly sited.
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,7 +55,11 @@ def _column_for_source_norm(L: np.ndarray, source_idx: int) -> np.ndarray:
 
 
 def _bootstrap_median_ratio_ci(
-    ratio_all: np.ndarray, *, n_boot: int = 2000, seed: int = 0, ci: float = 0.95,
+    ratio_all: np.ndarray,
+    *,
+    n_boot: int = 2000,
+    seed: int = 0,
+    ci: float = 0.95,
 ) -> tuple[float, float, float]:
     """Bootstrap CI on the median whole-body/paddle ratio across sources.
 
@@ -88,13 +93,13 @@ def render_location_optimisation(
 ) -> Path:
     """Six-panel "is location the problem?" figure.
 
-      a  Whole-body |L| heatmap interpolated on the full skin surface.
-      b  Same map, unrolled cylinder (θ vs Z) — full-body view.
-      c  Per-source best-channel SNR: paddle vs whole-body, along the vagus.
-      d  Per-source peak |L|: paddle vs whole-body, along the vagus.
-      e  Whole-body amplitude vs distance to source — does it follow 1/r²?
-      f  Headline numbers panel (text): paddle peak, whole-body peak,
-         "trials needed" comparison.
+    a  Whole-body |L| heatmap interpolated on the full skin surface.
+    b  Same map, unrolled cylinder (θ vs Z) — full-body view.
+    c  Per-source best-channel SNR: paddle vs whole-body, along the vagus.
+    d  Per-source peak |L|: paddle vs whole-body, along the vagus.
+    e  Whole-body amplitude vs distance to source — does it follow 1/r²?
+    f  Headline numbers panel (text): paddle peak, whole-body peak,
+       "trials needed" comparison.
     """
     apply_nature_style()
     paddle_lf = load_leadfield(paddle_npz)
@@ -113,16 +118,17 @@ def render_location_optimisation(
         # *amplifies* the signal (an artefact of the mismatched reference; see
         # inob.viz.detectability.default_source_idx, which this mirrors).
         from inob.viz.detectability import default_source_idx
+
         source_idx = default_source_idx(paddle_lf, paddle_lf)
     src = paddle_lf.source_pos[source_idx]
 
     # ── per-source data ───────────────────────────────────────────────────
-    paddle_peak = _per_source_peak(paddle_lf.L_fT_per_nAm)      # (S,) µV/nAm
-    wb_peak = _per_source_peak(wb_lf.L_fT_per_nAm)              # (S,) µV/nAm
+    paddle_peak = _per_source_peak(paddle_lf.L_fT_per_nAm)  # (S,) µV/nAm
+    wb_peak = _per_source_peak(wb_lf.L_fT_per_nAm)  # (S,) µV/nAm
     z = paddle_lf.source_pos[:, 2]
 
     # Whole-body single-source: orientation-agnostic L2 norm across moments
-    wb_val = _column_for_source_norm(wb_lf.L_fT_per_nAm, source_idx)   # (1000,)
+    wb_val = _column_for_source_norm(wb_lf.L_fT_per_nAm, source_idx)  # (1000,)
     paddle_val = _column_for_source_norm(paddle_lf.L_fT_per_nAm, source_idx)
 
     # Argmax channel on whole-body
@@ -135,8 +141,11 @@ def render_location_optimisation(
 
     # ── interpolate whole-body |L| onto skin for the heatmap ──────────────
     skin_vals = gaussian_interpolate_surface(
-        wb_sensors.coilpos, wb_val, skin.vertices,
-        sigma_mm=60.0, k_nearest=24,
+        wb_sensors.coilpos,
+        wb_val,
+        skin.vertices,
+        sigma_mm=60.0,
+        k_nearest=24,
     )
 
     # ── figure ────────────────────────────────────────────────────────────
@@ -144,9 +153,9 @@ def render_location_optimisation(
     vmax = float(wb_val.max() * 1.05)
 
     fig = plt.figure(figsize=(15, 11.5))
-    gs = GridSpec(2, 3, figure=fig,
-                  left=0.04, right=0.97, top=0.92, bottom=0.07,
-                  hspace=0.34, wspace=0.24)
+    gs = GridSpec(
+        2, 3, figure=fig, left=0.04, right=0.97, top=0.92, bottom=0.07, hspace=0.34, wspace=0.24
+    )
 
     # ── panel a: whole-body heatmap on skin ────────────────────────────────
     ax_a = fig.add_subplot(gs[0, 0], projection="3d")
@@ -159,19 +168,44 @@ def render_location_optimisation(
     face_vals = skin_vals[faces].mean(axis=1)
     norm = np.clip(face_vals / max(vmax, 1e-30), 0.0, 1.0)
     coll = Poly3DCollection(
-        skin.vertices[faces], facecolor=cmap(norm), edgecolor="none", alpha=0.95,
+        skin.vertices[faces],
+        facecolor=cmap(norm),
+        edgecolor="none",
+        alpha=0.95,
     )
     ax_a.add_collection3d(coll)
-    ax_a.scatter([src[0]], [src[1]], [src[2]], s=200, c=NATURE_PALETTE["glow"],
-                 edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*")
-    ax_a.scatter([wb_best_pos[0]], [wb_best_pos[1]], [wb_best_pos[2]],
-                 s=120, c=NATURE_PALETTE["red"],
-                 edgecolor=NATURE_PALETTE["axis"], linewidths=0.6, marker="o",
-                 label="whole-body argmax")
-    ax_a.scatter([paddle_best_pos[0]], [paddle_best_pos[1]], [paddle_best_pos[2]],
-                 s=80, c=NATURE_PALETTE["blue"],
-                 edgecolor=NATURE_PALETTE["axis"], linewidths=0.6, marker="^",
-                 label="paddle argmax")
+    ax_a.scatter(
+        [src[0]],
+        [src[1]],
+        [src[2]],
+        s=200,
+        c=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.8,
+        marker="*",
+    )
+    ax_a.scatter(
+        [wb_best_pos[0]],
+        [wb_best_pos[1]],
+        [wb_best_pos[2]],
+        s=120,
+        c=NATURE_PALETTE["red"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.6,
+        marker="o",
+        label="whole-body argmax",
+    )
+    ax_a.scatter(
+        [paddle_best_pos[0]],
+        [paddle_best_pos[1]],
+        [paddle_best_pos[2]],
+        s=80,
+        c=NATURE_PALETTE["blue"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.6,
+        marker="^",
+        label="paddle argmax",
+    )
     bb = skin.vertices
     ax_a.set_xlim(bb[:, 0].min(), bb[:, 0].max())
     ax_a.set_ylim(bb[:, 1].min(), bb[:, 1].max())
@@ -199,14 +233,22 @@ def render_location_optimisation(
     dy = wb_sensors.coilpos[:, 1] - skin_centroid[1]
     theta = np.degrees(np.arctan2(dy, dx))
     z_wb = wb_sensors.coilpos[:, 2]
-    sc_b = ax_b.scatter(theta, z_wb, c=wb_val, cmap=cmap, s=14, vmin=0, vmax=vmax,
-                         edgecolor="none", alpha=0.9)
+    sc_b = ax_b.scatter(
+        theta, z_wb, c=wb_val, cmap=cmap, s=14, vmin=0, vmax=vmax, edgecolor="none", alpha=0.9
+    )
     src_dx = src[0] - skin_centroid[0]
     src_dy = src[1] - skin_centroid[1]
     src_theta = float(np.degrees(np.arctan2(src_dy, src_dx)))
-    ax_b.scatter([src_theta], [src[2]], s=200, c=NATURE_PALETTE["glow"],
-                 edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*",
-                 zorder=5)
+    ax_b.scatter(
+        [src_theta],
+        [src[2]],
+        s=200,
+        c=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.8,
+        marker="*",
+        zorder=5,
+    )
     ax_b.set_xlabel("Azimuth θ around body axis (°)")
     ax_b.set_ylabel("Z position (mm)")
     ax_b.set_xlim(-180, 180)
@@ -223,6 +265,7 @@ def render_location_optimisation(
     sigma = floors.eeg_per_channel_uV
     from inob.config import source_target_tag
     from inob.physiology.profiles import profile_for_tag
+
     profile = profile_for_tag(source_target_tag(cfg))
     Q_ref = profile.default_strength_nAm
 
@@ -239,6 +282,7 @@ def render_location_optimisation(
         peak_over_channels,
         propagation_ratio,
     )
+
     paddle_prop_factor = 1.0
     wb_prop_factor = 1.0
     if not profile.stationary_ok and is_ordered_polyline(paddle_lf.source_pos):
@@ -252,23 +296,36 @@ def render_location_optimisation(
         )
         logger.info(
             "location-optimisation propagation correction (%s): paddle x%.3f, whole-body x%.3f",
-            profile.name, paddle_prop_factor, wb_prop_factor,
+            profile.name,
+            paddle_prop_factor,
+            wb_prop_factor,
         )
 
     snr_paddle = paddle_peak * Q_ref * paddle_prop_factor / sigma
     snr_wb = wb_peak * Q_ref * wb_prop_factor / sigma
-    ax_c.plot(z, snr_paddle, color=NATURE_PALETTE["blue"], lw=1.6,
-              label=f"32-ch cervical paddle  (peak {paddle_peak.max():.2e} µV/nAm)")
-    ax_c.plot(z, snr_wb, color=NATURE_PALETTE["red"], lw=1.6,
-              label=f"{len(wb_sensors.coilpos)}-ch whole-body  (peak {wb_peak.max():.2e} µV/nAm)")
-    ax_c.axhline(3.0, color=NATURE_PALETTE["axis"], lw=0.8, linestyle="--",
-                 label="SNR = 3")
+    ax_c.plot(
+        z,
+        snr_paddle,
+        color=NATURE_PALETTE["blue"],
+        lw=1.6,
+        label=f"32-ch cervical paddle  (peak {paddle_peak.max():.2e} µV/nAm)",
+    )
+    ax_c.plot(
+        z,
+        snr_wb,
+        color=NATURE_PALETTE["red"],
+        lw=1.6,
+        label=f"{len(wb_sensors.coilpos)}-ch whole-body  (peak {wb_peak.max():.2e} µV/nAm)",
+    )
+    ax_c.axhline(3.0, color=NATURE_PALETTE["axis"], lw=0.8, linestyle="--", label="SNR = 3")
     ax_c.set_xlabel(f"Source z along {region} (mm)")
     ax_c.set_ylabel(f"Single-trial SNR  ·  Q = {Q_ref:g} nA·m, σ = {sigma:.1f} µV")
     ax_c.set_yscale("log")
     prop_note = (
         f"  ·  propagating volley applied (paddle ×{paddle_prop_factor:.2f}, "
-        f"whole-body ×{wb_prop_factor:.2f})" if paddle_prop_factor != 1.0 else ""
+        f"whole-body ×{wb_prop_factor:.2f})"
+        if paddle_prop_factor != 1.0
+        else ""
     )
     ax_c.set_title("Single-trial SNR  ·  paddle vs whole-body" + prop_note, fontsize=9)
     ax_c.legend(loc="lower center", fontsize=7, handlelength=1.4)
@@ -276,13 +333,23 @@ def render_location_optimisation(
 
     # ── panel d: per-source peak |L| comparison ────────────────────────────
     ax_d = fig.add_subplot(gs[1, 0])
-    ax_d.plot(z, paddle_peak, color=NATURE_PALETTE["blue"], lw=1.6,
-              label="32-ch cervical paddle")
-    ax_d.plot(z, wb_peak, color=NATURE_PALETTE["red"], lw=1.6,
-              label=f"{len(wb_sensors.coilpos)}-ch whole-body")
-    ax_d.fill_between(z, paddle_peak, wb_peak, where=(wb_peak > paddle_peak),
-                       color=NATURE_PALETTE["stone"], alpha=0.45,
-                       label="Whole-body advantage")
+    ax_d.plot(z, paddle_peak, color=NATURE_PALETTE["blue"], lw=1.6, label="32-ch cervical paddle")
+    ax_d.plot(
+        z,
+        wb_peak,
+        color=NATURE_PALETTE["red"],
+        lw=1.6,
+        label=f"{len(wb_sensors.coilpos)}-ch whole-body",
+    )
+    ax_d.fill_between(
+        z,
+        paddle_peak,
+        wb_peak,
+        where=(wb_peak > paddle_peak),
+        color=NATURE_PALETTE["stone"],
+        alpha=0.45,
+        label="Whole-body advantage",
+    )
     ax_d.set_xlabel(f"Source z along {region} (mm)")
     ax_d.set_ylabel("Best-channel |L|  ·  µV  (1 nA·m source)")
     ax_d.set_yscale("log")
@@ -293,12 +360,19 @@ def render_location_optimisation(
     # ── panel e: amplitude vs distance ─────────────────────────────────────
     ax_e = fig.add_subplot(gs[1, 1])
     dist = np.linalg.norm(wb_sensors.coilpos - src[None, :], axis=1)
-    ax_e.scatter(dist, wb_val, c=wb_val, cmap=cmap, s=18, alpha=0.7,
-                 edgecolor="none", vmin=0, vmax=vmax)
+    ax_e.scatter(
+        dist, wb_val, c=wb_val, cmap=cmap, s=18, alpha=0.7, edgecolor="none", vmin=0, vmax=vmax
+    )
     r_grid = np.linspace(dist.min(), dist.max(), 200)
     norm_factor = float(np.percentile(wb_val, 95)) * float(np.median(dist)) ** 2
-    ax_e.plot(r_grid, norm_factor / r_grid ** 2, color=NATURE_PALETTE["axis"],
-              lw=0.8, linestyle="--", label="∝ 1/r²")
+    ax_e.plot(
+        r_grid,
+        norm_factor / r_grid**2,
+        color=NATURE_PALETTE["axis"],
+        lw=0.8,
+        linestyle="--",
+        label="∝ 1/r²",
+    )
     ax_e.set_xlabel("Electrode–source distance (mm)")
     ax_e.set_ylabel("|L_EEG|  ·  µV  (1 nA·m source)")
     ax_e.set_yscale("log")
@@ -329,7 +403,8 @@ def render_location_optimisation(
     ratio_max = float(ratio_all.max())
     frac_paddle_ok = float(np.mean(ratio_all < 1.5))
     ratio_ci_lo, _ratio_ci_med, ratio_ci_hi = _bootstrap_median_ratio_ci(
-        ratio_all, seed=int(cfg.reproducibility.seed),
+        ratio_all,
+        seed=int(cfg.reproducibility.seed),
     )
 
     headline = (
@@ -340,9 +415,10 @@ def render_location_optimisation(
         + (
             f"Propagating-volley correction: paddle ×{paddle_prop_factor:.2f}, "
             f"whole-body ×{wb_prop_factor:.2f}\n\n"
-            if paddle_prop_factor != 1.0 else "\n"
-        ) +
-        f"Cervical paddle (32 ch):\n"
+            if paddle_prop_factor != 1.0
+            else "\n"
+        )
+        + f"Cervical paddle (32 ch):\n"
         f"   peak |L|  = {paddle_best_val:.3e} µV / nA·m\n"
         f"   argmax–source dist = {paddle_argmax_dist:.0f} mm\n"
         f"   single-trial SNR  = {snr_paddle_now:.2e}\n"
@@ -380,24 +456,48 @@ def render_location_optimisation(
             f"{ratio_median:.0f}× more signal at a typical source.\n"
             "A fixed cervical paddle under-covers this region."
         )
-    ax_f.text(0.02, 0.98, headline, transform=ax_f.transAxes,
-              va="top", ha="left", fontsize=8.3,
-              fontfamily="monospace", color=NATURE_PALETTE["axis"])
-    ax_f.text(0.02, 0.14, verdict, transform=ax_f.transAxes,
-              va="top", ha="left", fontsize=10, fontweight="bold",
-              color=NATURE_PALETTE["red"] if ratio_median >= 1.5 else NATURE_PALETTE["axis"])
+    ax_f.text(
+        0.02,
+        0.98,
+        headline,
+        transform=ax_f.transAxes,
+        va="top",
+        ha="left",
+        fontsize=8.3,
+        fontfamily="monospace",
+        color=NATURE_PALETTE["axis"],
+    )
+    ax_f.text(
+        0.02,
+        0.14,
+        verdict,
+        transform=ax_f.transAxes,
+        va="top",
+        ha="left",
+        fontsize=10,
+        fontweight="bold",
+        color=NATURE_PALETTE["red"] if ratio_median >= 1.5 else NATURE_PALETTE["axis"],
+    )
     add_panel_label(ax_f, "f")
 
     fig.suptitle(
         f"Is location the problem?  Whole-body EEG vs cervical paddle  "
         f"·  highlighted source z = {src[2]:.0f} mm",
-        fontsize=12, fontweight="bold", y=0.985,
+        fontsize=12,
+        fontweight="bold",
+        y=0.985,
     )
 
     logger.info(
         "location-optimisation @source: paddle peak %.3e  whole-body peak %.3e  ratio %.2f×  "
         "| full-region ratio median=%.2f (95%% CI %.2f-%.2f) min=%.2f max=%.2f",
-        paddle_best_val, wb_best_val, ratio, ratio_median, ratio_ci_lo, ratio_ci_hi,
-        ratio_min, ratio_max,
+        paddle_best_val,
+        wb_best_val,
+        ratio,
+        ratio_median,
+        ratio_ci_lo,
+        ratio_ci_hi,
+        ratio_min,
+        ratio_max,
     )
     return save_figure(fig, out_path or target_output(cfg, "location_optimisation.png"), dpi=dpi)

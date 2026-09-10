@@ -1,4 +1,5 @@
 """Project-root resolution and output-path helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 from inob.paths import find_project_root, resolve_path, resolve_project_root
 
 # ── find_project_root ───────────────────────────────────────────────────
+
 
 def test_find_project_root_finds_pyproject_toml(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text("[project]\n")
@@ -49,6 +51,7 @@ def test_find_project_root_defaults_to_cwd(tmp_path: Path, monkeypatch: pytest.M
 
 
 # ── resolve_project_root ────────────────────────────────────────────────
+
 
 def test_resolve_project_root_explicit_argument_wins(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -97,6 +100,7 @@ def test_resolve_project_root_none_explicit_falsy_values(
 
 
 # ── resolve_path ─────────────────────────────────────────────────────────
+
 
 def test_resolve_path_relative_joins_root(tmp_path: Path) -> None:
     out = resolve_path("data/foo.stl", tmp_path)

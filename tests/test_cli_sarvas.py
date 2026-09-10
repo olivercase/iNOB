@@ -1,4 +1,5 @@
 """CLI: sarvas argparse defaults + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -45,10 +46,15 @@ def test_main_defaults(tmp_path, monkeypatch, capsys) -> None:
 def test_main_show_hamalainen_prints(tmp_path, monkeypatch, capsys) -> None:
     calls = {}
     _patch(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--show-hamalainen",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--show-hamalainen",
+        ]
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "A-fibre" in out and "C-fibre" in out
@@ -58,10 +64,18 @@ def test_main_custom_out_path(tmp_path, monkeypatch) -> None:
     calls = {}
     _patch(monkeypatch, calls)
     out = tmp_path / "custom.png"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--Q-nAm", "70", "--out", str(out),
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--Q-nAm",
+            "70",
+            "--out",
+            str(out),
+        ]
+    )
     assert rc == 0
     assert calls["compare"]["Q_nAm"] == 70.0
     assert calls["save_path"] == out.with_suffix(".json")

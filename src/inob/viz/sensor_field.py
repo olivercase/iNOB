@@ -11,6 +11,7 @@ the first third of channels are the radial (outward) component, which is what a
 scalar OPM topography plots. We characterise the radial field of a source's
 dominant moment orientation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -76,14 +77,15 @@ def peak_amplitude_along_axis(lf: Leadfield) -> tuple[np.ndarray, np.ndarray]:
     ri = _radial_idx(lf)
     L = lf.L_fT_per_nAm[ri]
     S = lf.source_pos.shape[0]
-    peaks = np.array([
-        max(np.max(np.abs(L[:, 3 * s + m])) for m in range(3)) for s in range(S)
-    ])
+    peaks = np.array([max(np.max(np.abs(L[:, 3 * s + m])) for m in range(3)) for s in range(S)])
     return lf.source_pos[:, 2], peaks
 
 
 def aggregate_field(
-    lf: Leadfield, moment: int, *, mode: str = "coherent",
+    lf: Leadfield,
+    moment: int,
+    *,
+    mode: str = "coherent",
     sources: np.ndarray | None = None,
 ) -> np.ndarray:
     """Field on the radial array from combined sources (unit moment each).
@@ -98,11 +100,11 @@ def aggregate_field(
     ri = _radial_idx(lf)
     if sources is None:
         sources = np.arange(lf.source_pos.shape[0])
-    cols = lf.L_fT_per_nAm[ri][:, [3 * s + moment for s in sources]]   # (n_sens, |sources|)
+    cols = lf.L_fT_per_nAm[ri][:, [3 * s + moment for s in sources]]  # (n_sens, |sources|)
     if mode == "coherent":
         return cols.sum(axis=1)
     if mode == "rms":
-        return np.sqrt(np.mean(cols ** 2, axis=1))
+        return np.sqrt(np.mean(cols**2, axis=1))
     raise ValueError(f"unknown aggregate mode {mode!r} (use 'coherent' or 'rms')")
 
 
@@ -132,8 +134,12 @@ def sources_in_z_band(lf: Leadfield, z_lo: float, z_hi: float) -> np.ndarray:
 
 # ── characteristics ─────────────────────────────────────────────────────────
 
+
 def sensor_field_characteristics(
-    lf: Leadfield, source_idx: int, *, moment: int | None = None,
+    lf: Leadfield,
+    source_idx: int,
+    *,
+    moment: int | None = None,
 ) -> dict:
     """Quantify the sensor field pattern of one source (dominant moment by default)."""
     if moment is None:
@@ -168,7 +174,8 @@ def region_summary(lf: Leadfield) -> dict:
         "n_sources": int(lf.source_pos.shape[0]),
         "z_range_mm": [float(z.min()), float(z.max())],
         "peak_fT_per_nAm": {
-            "min": float(peaks.min()), "median": float(np.median(peaks)),
+            "min": float(peaks.min()),
+            "median": float(np.median(peaks)),
             "max": float(peaks.max()),
         },
         "strongest_source_idx": order,
@@ -178,6 +185,7 @@ def region_summary(lf: Leadfield) -> dict:
 
 # ── figure ──────────────────────────────────────────────────────────────────
 
+
 def _cylinder_theta_z(pos: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Unroll sensor positions to (azimuth°, z) about the array's vertical axis."""
     cx, cy = pos[:, 0].mean(), pos[:, 1].mean()
@@ -186,9 +194,14 @@ def _cylinder_theta_z(pos: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def render_aggregate_field(
-    cfg: Config, *, moment: int = 2, mode: str = "coherent",
-    z_range: tuple[float, float] | None = None, region_label: str | None = None,
-    out_path: Path | None = None, dpi: int = 300,
+    cfg: Config,
+    *,
+    moment: int = 2,
+    mode: str = "coherent",
+    z_range: tuple[float, float] | None = None,
+    region_label: str | None = None,
+    out_path: Path | None = None,
+    dpi: int = 300,
 ) -> Path:
     """Global field pattern from region sources combined (see ``aggregate_field``).
 
@@ -202,7 +215,7 @@ def render_aggregate_field(
     lf = load_leadfield(cfg.outputs.forward_npz)
     sources = None if z_range is None else sources_in_z_band(lf, *z_range)
     v = aggregate_field(lf, moment, mode=mode, sources=sources)
-    _, pos = radial_field(lf, 0, moment)          # positions only
+    _, pos = radial_field(lf, 0, moment)  # positions only
     src = lf.source_pos if sources is None else lf.source_pos[sources]
     pct_clip = _color_pct_clip(cfg)
 
@@ -217,12 +230,12 @@ def render_aggregate_field(
         cbar_label = "RMS field (fT/nA·m)"
 
     fig = plt.figure(figsize=(14, 6))
-    gs = GridSpec(1, 2, figure=fig, left=0.05, right=0.95, top=0.88,
-                  bottom=0.10, wspace=0.22)
+    gs = GridSpec(1, 2, figure=fig, left=0.05, right=0.95, top=0.88, bottom=0.10, wspace=0.22)
 
     ax_a = fig.add_subplot(gs[0, 0], projection="3d")
-    p = ax_a.scatter(pos[:, 0], pos[:, 1], pos[:, 2], c=v, cmap=cmap,
-                     vmin=vmin, vmax=vmax, s=8, depthshade=False)
+    p = ax_a.scatter(
+        pos[:, 0], pos[:, 1], pos[:, 2], c=v, cmap=cmap, vmin=vmin, vmax=vmax, s=8, depthshade=False
+    )
     ax_a.plot(src[:, 0], src[:, 1], src[:, 2], color="k", lw=2.0, label="source line")
     ax_a.set_title("a  aggregate field on OPM array", fontsize=10)
     ax_a.set_xlabel("x")
@@ -234,8 +247,9 @@ def render_aggregate_field(
     ax_b = fig.add_subplot(gs[0, 1])
     theta, zc = _cylinder_theta_z(pos)
     pb = ax_b.scatter(theta, zc, c=v, cmap=cmap, vmin=vmin, vmax=vmax, s=14)
-    ax_b.axhspan(float(src[:, 2].min()), float(src[:, 2].max()),
-                 color=NATURE_PALETTE["axis"], alpha=0.10)
+    ax_b.axhspan(
+        float(src[:, 2].min()), float(src[:, 2].max()), color=NATURE_PALETTE["axis"], alpha=0.10
+    )
     ax_b.set_xlabel("azimuth (°)")
     ax_b.set_ylabel("sensor z (mm)")
     ax_b.set_title("b  unrolled cylinder topography", fontsize=10)
@@ -246,7 +260,9 @@ def render_aggregate_field(
     fig.suptitle(
         f"Global field pattern — {scope} {src.shape[0]} sources ({mode}, moment "
         f"{'xyz'[moment]}), peak {peak:.0f} fT/nA·m",
-        fontsize=12, fontweight="bold", y=0.97,
+        fontsize=12,
+        fontweight="bold",
+        y=0.97,
     )
     lvl = f"_{region_label}" if region_label else ""
     # target_output stamps the source-target slug on the default name, so a run
@@ -256,9 +272,14 @@ def render_aggregate_field(
 
 
 def render_sensor_field(
-    cfg: Config, *, source_idx: int = -1, moment: int | None = None,
-    z_range: tuple[float, float] | None = None, region_label: str | None = None,
-    out_path: Path | None = None, dpi: int = 300,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
+    moment: int | None = None,
+    z_range: tuple[float, float] | None = None,
+    region_label: str | None = None,
+    out_path: Path | None = None,
+    dpi: int = 300,
 ) -> Path:
     """Four-panel sensor-field characterisation figure for one source.
 
@@ -291,13 +312,15 @@ def render_sensor_field(
     vmin, vmax = divergent_norm(v, pct_clip=_color_pct_clip(cfg))
 
     fig = plt.figure(figsize=(13, 10))
-    gs = GridSpec(2, 2, figure=fig, left=0.06, right=0.95, top=0.92,
-                  bottom=0.07, hspace=0.28, wspace=0.24)
+    gs = GridSpec(
+        2, 2, figure=fig, left=0.06, right=0.95, top=0.92, bottom=0.07, hspace=0.28, wspace=0.24
+    )
 
     # a) 3-D sensor cloud coloured by radial field
     ax_a = fig.add_subplot(gs[0, 0], projection="3d")
-    p = ax_a.scatter(pos[:, 0], pos[:, 1], pos[:, 2], c=v, cmap=cmap,
-                     vmin=vmin, vmax=vmax, s=8, depthshade=False)
+    p = ax_a.scatter(
+        pos[:, 0], pos[:, 1], pos[:, 2], c=v, cmap=cmap, vmin=vmin, vmax=vmax, s=8, depthshade=False
+    )
     ax_a.scatter(*src, color="k", marker="*", s=120, label="source")
     ax_a.set_title("a  radial field on OPM array (fT/nA·m)", fontsize=10)
     ax_a.set_xlabel("x")
@@ -323,8 +346,13 @@ def render_sensor_field(
     order = np.argsort(z_src)
     ax_c.plot(z_src[order], peaks[order], color=NATURE_PALETTE["blue"], lw=1.6)
     if z_range is not None:
-        ax_c.axvspan(z_range[0], z_range[1], color=NATURE_PALETTE["axis"],
-                     alpha=0.12, label=region_label or "Z band")
+        ax_c.axvspan(
+            z_range[0],
+            z_range[1],
+            color=NATURE_PALETTE["axis"],
+            alpha=0.12,
+            label=region_label or "Z band",
+        )
     ax_c.axvline(src[2], color="k", ls="--", lw=0.8, label="shown source")
     ax_c.set_xlabel("source z (mm)")
     ax_c.set_ylabel("best-channel peak (fT/nA·m)")
@@ -346,7 +374,9 @@ def render_sensor_field(
         f"Sensor field pattern — {scope}source {source_idx}/{n_src} at z={src[2]:.0f} mm "
         f"(dominant moment {ch['dominant_moment']}, peak {ch['peak_fT_per_nAm']:.0f} fT/nA·m, "
         f"lobe sep {ch['dipole_lobe_separation_mm']:.0f} mm)",
-        fontsize=12, fontweight="bold", y=0.985,
+        fontsize=12,
+        fontweight="bold",
+        y=0.985,
     )
     lvl = f"_{region_label}" if region_label else ""
     return save_figure(fig, out_path or target_output(cfg, f"sensor_field{lvl}.png"), dpi=dpi)

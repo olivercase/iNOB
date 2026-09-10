@@ -11,6 +11,7 @@ Each helper takes a :class:`trimesh.Trimesh` and returns a new (or in-place)
 :class:`trimesh.Trimesh`. None of these functions raise on degenerate input;
 they log a warning and return the best they can.
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,7 +45,9 @@ def cheap_repair(m: trimesh.Trimesh) -> trimesh.Trimesh:
 
 
 def drop_degenerate_components(
-    m: trimesh.Trimesh, *, min_faces: int = 4,
+    m: trimesh.Trimesh,
+    *,
+    min_faces: int = 4,
 ) -> trimesh.Trimesh:
     """Drop connected components too small to bound a volume.
 
@@ -66,7 +69,9 @@ def drop_degenerate_components(
     dropped = len(parts) - len(keep)
     logger.info(
         "  dropped %d degenerate component(s) (< %d faces); %d remain",
-        dropped, min_faces, len(keep),
+        dropped,
+        min_faces,
+        len(keep),
     )
     if not keep:
         logger.warning("all components were degenerate; returning input unchanged")
@@ -77,11 +82,7 @@ def drop_degenerate_components(
 def is_perfect(m: trimesh.Trimesh) -> bool:
     """True iff watertight, winding-consistent, and Euler==2 (genus 0)."""
     try:
-        return (
-            bool(m.is_watertight)
-            and bool(m.is_winding_consistent)
-            and int(m.euler_number) == 2
-        )
+        return bool(m.is_watertight) and bool(m.is_winding_consistent) and int(m.euler_number) == 2
     except Exception:
         return False
 
@@ -128,8 +129,7 @@ def boolean_union_overlapping(m: trimesh.Trimesh) -> trimesh.Trimesh:
         try:
             merged = trimesh.boolean.union([parts[k] for k in sorted(grp)])
         except Exception as e:
-            logger.warning("boolean union failed on group of %d: %s; keeping unmerged",
-                           len(grp), e)
+            logger.warning("boolean union failed on group of %d: %s; keeping unmerged", len(grp), e)
             pieces.extend(parts[k] for k in grp)
             continue
         if merged is None or len(merged.faces) == 0:

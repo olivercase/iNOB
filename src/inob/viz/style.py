@@ -18,6 +18,7 @@ Design principles (from the Nature Reviews "Guide to designing figures"):
                  black text where possible.
   Consistency      same colours mean the same thing across figures.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,26 +34,34 @@ from matplotlib.colors import LinearSegmentedColormap
 logger = logging.getLogger(__name__)
 
 # Backends that can render without a window server, so are safe on any thread.
-_NON_INTERACTIVE_BACKENDS = frozenset({
-    "agg", "cairo", "pdf", "pgf", "ps", "svg", "template",
-})
+_NON_INTERACTIVE_BACKENDS = frozenset(
+    {
+        "agg",
+        "cairo",
+        "pdf",
+        "pgf",
+        "ps",
+        "svg",
+        "template",
+    }
+)
 
 NATURE_PALETTE: dict[str, str] = {
     # neutral context
-    "skin":       "#E8DCC4",   # body silhouette / muscle / fat
-    "stone":      "#C9C2B5",
-    "grey":       "#8A8A8A",
-    "panel_bg":   "#FFFFFF",
-    "axis":       "#1A1A1A",
+    "skin": "#E8DCC4",  # body silhouette / muscle / fat
+    "stone": "#C9C2B5",
+    "grey": "#8A8A8A",
+    "panel_bg": "#FFFFFF",
+    "axis": "#1A1A1A",
     # main accents
-    "red":        "#C0392B",   # positive lobe
-    "blue":       "#2C4A78",   # negative lobe
-    "glow":       "#F2B33C",   # source / focal element
+    "red": "#C0392B",  # positive lobe
+    "blue": "#2C4A78",  # negative lobe
+    "glow": "#F2B33C",  # source / focal element
     # extended palette for categorical (use sparingly)
-    "olive":      "#7A8C3A",
-    "teal":       "#3A7A78",
-    "purple":     "#6A4A8A",
-    "orange":     "#D46B2A",
+    "olive": "#7A8C3A",
+    "teal": "#3A7A78",
+    "purple": "#6A4A8A",
+    "orange": "#D46B2A",
 }
 
 
@@ -91,43 +100,44 @@ def ensure_headless_backend() -> None:
     backend = mpl.get_backend().lower()
     if backend in _NON_INTERACTIVE_BACKENDS:
         return
-    logger.debug("switching matplotlib backend %s → Agg (off-main-thread render)",
-                 backend)
+    logger.debug("switching matplotlib backend %s → Agg (off-main-thread render)", backend)
     mpl.use("Agg", force=True)
 
 
 def apply_nature_style() -> None:
     """Install Nature-leaning matplotlib rcParams. Idempotent."""
     ensure_headless_backend()
-    mpl.rcParams.update({
-        "font.family":     "sans-serif",
-        "font.sans-serif": ["Helvetica", "Arial", "DejaVu Sans"],
-        "font.size":       8.0,
-        "axes.titlesize":  9.0,
-        "axes.titleweight": "bold",
-        "axes.labelsize":  8.0,
-        "axes.labelcolor": NATURE_PALETTE["axis"],
-        "axes.edgecolor":  NATURE_PALETTE["axis"],
-        "axes.linewidth":  0.6,
-        "axes.spines.top":   False,
-        "axes.spines.right": False,
-        "axes.grid":       False,
-        "axes.titlepad":   6.0,
-        "xtick.color":     NATURE_PALETTE["axis"],
-        "ytick.color":     NATURE_PALETTE["axis"],
-        "xtick.labelsize": 7.5,
-        "ytick.labelsize": 7.5,
-        "xtick.major.width": 0.6,
-        "ytick.major.width": 0.6,
-        "xtick.major.size":  2.5,
-        "ytick.major.size":  2.5,
-        "legend.frameon":  False,
-        "legend.fontsize": 7.5,
-        "figure.facecolor": NATURE_PALETTE["panel_bg"],
-        "axes.facecolor":   NATURE_PALETTE["panel_bg"],
-        "savefig.facecolor": NATURE_PALETTE["panel_bg"],
-        "savefig.dpi":     300,
-    })
+    mpl.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Helvetica", "Arial", "DejaVu Sans"],
+            "font.size": 8.0,
+            "axes.titlesize": 9.0,
+            "axes.titleweight": "bold",
+            "axes.labelsize": 8.0,
+            "axes.labelcolor": NATURE_PALETTE["axis"],
+            "axes.edgecolor": NATURE_PALETTE["axis"],
+            "axes.linewidth": 0.6,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.grid": False,
+            "axes.titlepad": 6.0,
+            "xtick.color": NATURE_PALETTE["axis"],
+            "ytick.color": NATURE_PALETTE["axis"],
+            "xtick.labelsize": 7.5,
+            "ytick.labelsize": 7.5,
+            "xtick.major.width": 0.6,
+            "ytick.major.width": 0.6,
+            "xtick.major.size": 2.5,
+            "ytick.major.size": 2.5,
+            "legend.frameon": False,
+            "legend.fontsize": 7.5,
+            "figure.facecolor": NATURE_PALETTE["panel_bg"],
+            "axes.facecolor": NATURE_PALETTE["panel_bg"],
+            "savefig.facecolor": NATURE_PALETTE["panel_bg"],
+            "savefig.dpi": 300,
+        }
+    )
 
 
 def add_panel_label(ax: Any, label: str, *, x: float = -0.04, y: float = 1.04) -> None:
@@ -137,10 +147,14 @@ def add_panel_label(ax: Any, label: str, *, x: float = -0.04, y: float = 1.04) -
     """
     text_fn = getattr(ax, "text2D", ax.text)
     text_fn(
-        x, y, label,
+        x,
+        y,
+        label,
         transform=ax.transAxes,
-        fontsize=11, fontweight="bold",
-        va="bottom", ha="left",
+        fontsize=11,
+        fontweight="bold",
+        va="bottom",
+        ha="left",
         color=NATURE_PALETTE["axis"],
     )
 
@@ -172,7 +186,10 @@ def divergent_norm(values: np.ndarray, *, pct_clip: float | None = None) -> tupl
     """
     if values.size == 0:
         return -1.0, 1.0
-    v = float(np.max(np.abs(values))) if pct_clip is None else float(
-        np.percentile(np.abs(values), pct_clip))
+    v = (
+        float(np.max(np.abs(values)))
+        if pct_clip is None
+        else float(np.percentile(np.abs(values), pct_clip))
+    )
     v = v if v > 0 else 1.0
     return -v, v

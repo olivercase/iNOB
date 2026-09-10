@@ -24,6 +24,7 @@ Usage
     inob-pipeline --force                            # ignore existing outputs
     inob-pipeline --force --stages forward           # rebuild forward only
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,22 +57,25 @@ FIGURE_STAGES: frozenset[str] = frozenset({"viz"})
 class Stage:
     name: str
     description: str
-    output_paths: tuple[str, ...]    # config field names whose paths must exist
+    output_paths: tuple[str, ...]  # config field names whose paths must exist
     run: Callable[[Config], object]
 
 
 def _stage_geom(cfg: Config) -> object:
     from inob.geometry.builder import build_geometry
+
     return build_geometry(cfg)
 
 
 def _stage_fem(cfg: Config) -> object:
     from inob.fem.cgal_builder import build_fem
+
     return build_fem(cfg)
 
 
 def _stage_sensors(cfg: Config) -> object:
     from inob.sensors.triaxial import generate_sensor_array
+
     return generate_sensor_array(cfg)
 
 
@@ -79,28 +83,27 @@ def _stage_forward(cfg: Config) -> object:
     # Default forward path: local, split across all cores (forward.local_workers,
     # 0 = all). Falls back to the serial solve for a single worker.
     from inob.forward.local import run_forward_local
+
     return run_forward_local(cfg)
 
 
 def _stage_viz(cfg: Config) -> object:
     from inob.viz.fem import render_fem
     from inob.viz.geometry import render_geometry
+
     render_geometry(cfg)
     render_fem(cfg)
     return cfg.outputs.geometry_png
 
 
 STAGES: dict[str, Stage] = {
-    "geom":    Stage("geom",    "build watertight geometry from STLs",
-                     ("geometry_mat",), _stage_geom),
-    "fem":     Stage("fem",     "build CGAL multi-tissue FEM mesh",
-                     ("fem_mat",), _stage_fem),
-    "sensors": Stage("sensors", "place triaxial OPM sensor array",
-                     ("sensors_mat",), _stage_sensors),
-    "forward": Stage("forward", "DUNEuro forward solve (local)",
-                     ("forward_npz",), _stage_forward),
-    "viz":     Stage("viz",     "render geometry + FEM PNGs",
-                     ("geometry_png", "fem_png"), _stage_viz),
+    "geom": Stage("geom", "build watertight geometry from STLs", ("geometry_mat",), _stage_geom),
+    "fem": Stage("fem", "build CGAL multi-tissue FEM mesh", ("fem_mat",), _stage_fem),
+    "sensors": Stage(
+        "sensors", "place triaxial OPM sensor array", ("sensors_mat",), _stage_sensors
+    ),
+    "forward": Stage("forward", "DUNEuro forward solve (local)", ("forward_npz",), _stage_forward),
+    "viz": Stage("viz", "render geometry + FEM PNGs", ("geometry_png", "fem_png"), _stage_viz),
 }
 
 
@@ -118,7 +121,10 @@ def _failed_marker(cfg: Config, stage: Stage) -> Path:
 
 
 def run_pipeline(
-    cfg: Config, *, stages: list[str], force: bool = False,
+    cfg: Config,
+    *,
+    stages: list[str],
+    force: bool = False,
     should_cancel: Callable[[], bool] | None = None,
 ) -> dict[str, str]:
     """Run the requested stages in dependency order.
@@ -145,8 +151,11 @@ def run_pipeline(
         marker = _failed_marker(cfg, stage)
 
         if _all_outputs_exist(cfg, stage) and not force and not marker.exists():
-            logger.info("[skip] %s: %s exist (use --force to rebuild)",
-                        name, ", ".join(p.name for p in _output_paths(cfg, stage)))
+            logger.info(
+                "[skip] %s: %s exist (use --force to rebuild)",
+                name,
+                ", ".join(p.name for p in _output_paths(cfg, stage)),
+            )
             statuses[name] = "skipped"
             continue
 
@@ -181,7 +190,8 @@ STAGE_REQUIRES: dict[str, tuple[str, ...]] = {
 
 
 def missing_prerequisites(
-    cfg: Config, stages: list[str],
+    cfg: Config,
+    stages: list[str],
 ) -> list[tuple[str, str]]:
     """Return ``(stage, unmet_prerequisite)`` pairs for this stage selection.
 
@@ -250,26 +260,30 @@ def main(argv: list[str] | None = None) -> int:
     )
     add_common_args(p)
     p.add_argument(
-        "--stages", default=None,
+        "--stages",
+        default=None,
         help="Comma-separated stage list (geom,fem,sensors,forward,viz), or "
-             "'all' for every stage including figures. Omitted, a run builds "
-             f"and solves without drawing: {','.join(DEFAULT_STAGES)}.",
+        "'all' for every stage including figures. Omitted, a run builds "
+        f"and solves without drawing: {','.join(DEFAULT_STAGES)}.",
     )
     p.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="Rebuild stages even if their outputs already exist.",
     )
     p.add_argument(
-        "--with-viz", action="store_true",
+        "--with-viz",
+        action="store_true",
         help="Also draw the geometry and FEM figures (adds the 'viz' stage). "
-             "Off by default: a figure is an output you ask for, not a cost "
-             "every solve pays.",
+        "Off by default: a figure is an output you ask for, not a cost "
+        "every solve pays.",
     )
     p.add_argument(
-        "--skip-viz", action="store_true",
+        "--skip-viz",
+        action="store_true",
         help="Drop 'viz' from --stages. Redundant now that figures are opt-in, "
-             "and kept so existing scripts keep working; it still wins over "
-             "--with-viz.",
+        "and kept so existing scripts keep working; it still wins over "
+        "--with-viz.",
     )
     args = p.parse_args(argv)
 
@@ -290,8 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     unmet = missing_prerequisites(cfg, stages)
     if unmet:
         for stage, prereq in unmet:
-            logger.error("stage %r needs %r, which has not been built",
-                         stage, prereq)
+            logger.error("stage %r needs %r, which has not been built", stage, prereq)
         # Expand transitively: 'fem' is no use as a suggestion if 'geom' is
         # missing too. Report them in pipeline order.
         needed: set[str] = set()
@@ -302,19 +315,18 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             needed.add(name)
             pending.extend(
-                req for req in STAGE_REQUIRES.get(name, ())
+                req
+                for req in STAGE_REQUIRES.get(name, ())
                 if not _all_outputs_exist(cfg, STAGES[req])
             )
         ordered = [s for s in ALL_STAGES if s in needed]
-        logger.error("build it first: inob run --stages %s",
-                     ",".join(ordered))
+        logger.error("build it first: inob run --stages %s", ",".join(ordered))
         logger.error("or let the pipeline sort it out: inob run")
         return 2
 
     logger.info("running stages: %s", stages)
     statuses = run_pipeline(cfg, stages=stages, force=args.force)
-    logger.info("[summary] %s",
-                " ".join(f"{k}={v}" for k, v in statuses.items()))
+    logger.info("[summary] %s", " ".join(f"{k}={v}" for k, v in statuses.items()))
     return 0
 
 

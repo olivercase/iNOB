@@ -9,6 +9,7 @@ spellings stay in step.
 Modules are imported lazily, on dispatch, because several pull in matplotlib or
 pyvista — ``inob --help`` should not pay for that.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -42,71 +43,116 @@ class Command:
 # Ordered: the groups render in this sequence, and so do commands within them.
 COMMANDS: tuple[Command, ...] = (
     # --- Start here -------------------------------------------------------
-    Command("doctor", "inob.cli.doctor", "Start here",
-            "Check this machine can run the pipeline"),
-    Command("status", "inob.cli.status", "Start here",
-            "Show what's built and what to run next"),
-    Command("run", "inob.cli.pipeline", "Start here",
-            "Run the whole pipeline (geometry to leadfield)",
-            aliases=("pipeline",), needs_duneuro=True),
-
+    Command("doctor", "inob.cli.doctor", "Start here", "Check this machine can run the pipeline"),
+    Command("status", "inob.cli.status", "Start here", "Show what's built and what to run next"),
+    Command(
+        "run",
+        "inob.cli.pipeline",
+        "Start here",
+        "Run the whole pipeline (geometry to leadfield)",
+        aliases=("pipeline",),
+        needs_duneuro=True,
+    ),
     # --- Build the model --------------------------------------------------
-    Command("build-geom", "inob.cli.build_geom", "Build the model",
-            "STLs to watertight anatomical geometry"),
-    Command("build-fem", "inob.cli.build_fem", "Build the model",
-            "Geometry to multi-tissue tetrahedral FEM mesh"),
-    Command("sensors", "inob.cli.generate_sensors", "Build the model",
-            "Place the triaxial OPM sensor array"),
-    Command("electrodes", "inob.cli.generate_electrodes", "Build the model",
-            "Place the HD surface-electrode array"),
-
+    Command(
+        "build-geom",
+        "inob.cli.build_geom",
+        "Build the model",
+        "STLs to watertight anatomical geometry",
+    ),
+    Command(
+        "build-fem",
+        "inob.cli.build_fem",
+        "Build the model",
+        "Geometry to multi-tissue tetrahedral FEM mesh",
+    ),
+    Command(
+        "sensors",
+        "inob.cli.generate_sensors",
+        "Build the model",
+        "Place the triaxial OPM sensor array",
+    ),
+    Command(
+        "electrodes",
+        "inob.cli.generate_electrodes",
+        "Build the model",
+        "Place the HD surface-electrode array",
+    ),
     # --- Solve ------------------------------------------------------------
-    Command("forward", "inob.cli.run_forward", "Solve",
-            "MEG leadfield via DUNEuro", needs_duneuro=True),
-    Command("eeg", "inob.cli.run_eeg", "Solve",
-            "EEG leadfield via DUNEuro", needs_duneuro=True),
-    Command("volume-field", "inob.cli.volume_field", "Solve",
-            "The solved field inside the body, not just at the sensors",
-            needs_duneuro=True),
-
+    Command(
+        "forward", "inob.cli.run_forward", "Solve", "MEG leadfield via DUNEuro", needs_duneuro=True
+    ),
+    Command("eeg", "inob.cli.run_eeg", "Solve", "EEG leadfield via DUNEuro", needs_duneuro=True),
+    Command(
+        "volume-field",
+        "inob.cli.volume_field",
+        "Solve",
+        "The solved field inside the body, not just at the sensors",
+        needs_duneuro=True,
+    ),
     # --- Analyse ----------------------------------------------------------
-    Command("detect", "inob.cli.detectability", "Analyse",
-            "Trials needed to detect each source"),
-    Command("snr", "inob.cli.snr", "Analyse",
-            "Predicted signal-to-noise per source"),
-    Command("sensitivity", "inob.cli.sensitivity", "Analyse",
-            "How much conductivity uncertainty matters"),
-    Command("location", "inob.cli.location", "Analyse",
-            "Whole-body EEG vs cervical paddle placement"),
-    Command("cross", "inob.cli.cross_modality", "Analyse",
-            "MEG and EEG coupling for the same source"),
-    Command("physiology", "inob.cli.physiology", "Analyse",
-            "Simulate moving-dipole physiological activity"),
-    Command("cap-compare", "inob.cli.cap_compare", "Analyse",
-            "Propagating action potential vs stationary dipole"),
-    Command("source-models", "inob.cli.source_models", "Analyse",
-            "OPM vs electrodes on stationary and ascending cord activity"),
-
+    Command("detect", "inob.cli.detectability", "Analyse", "Trials needed to detect each source"),
+    Command("snr", "inob.cli.snr", "Analyse", "Predicted signal-to-noise per source"),
+    Command(
+        "sensitivity",
+        "inob.cli.sensitivity",
+        "Analyse",
+        "How much conductivity uncertainty matters",
+    ),
+    Command(
+        "location", "inob.cli.location", "Analyse", "Whole-body EEG vs cervical paddle placement"
+    ),
+    Command(
+        "cross", "inob.cli.cross_modality", "Analyse", "MEG and EEG coupling for the same source"
+    ),
+    Command(
+        "physiology",
+        "inob.cli.physiology",
+        "Analyse",
+        "Simulate moving-dipole physiological activity",
+    ),
+    Command(
+        "cap-compare",
+        "inob.cli.cap_compare",
+        "Analyse",
+        "Propagating action potential vs stationary dipole",
+    ),
+    Command(
+        "source-models",
+        "inob.cli.source_models",
+        "Analyse",
+        "OPM vs electrodes on stationary and ascending cord activity",
+    ),
     # --- Validate ---------------------------------------------------------
-    Command("ladder", "inob.cli.ladder", "Validate",
-            "Compare Biot–Savart, Sarvas and FEM rungs"),
-    Command("sarvas", "inob.cli.sarvas", "Validate",
-            "Benchmark the FEM against the analytic sphere"),
-    Command("calibrate", "inob.cli.calibrate", "Validate",
-            "Calibrate DUNEuro EEG output to absolute units",
-            needs_duneuro=True),
-
+    Command("ladder", "inob.cli.ladder", "Validate", "Compare Biot–Savart, Sarvas and FEM rungs"),
+    Command(
+        "sarvas", "inob.cli.sarvas", "Validate", "Benchmark the FEM against the analytic sphere"
+    ),
+    Command(
+        "calibrate",
+        "inob.cli.calibrate",
+        "Validate",
+        "Calibrate DUNEuro EEG output to absolute units",
+        needs_duneuro=True,
+    ),
     # --- Figures ----------------------------------------------------------
-    Command("topoplot", "inob.cli.topoplot", "Figures",
-            "MEG/EEG field maps on the body surface"),
-    Command("torso", "inob.cli.torso", "Figures",
-            "Four-panel field map painted on the body itself"),
-    Command("sensor-field", "inob.cli.sensor_field", "Figures",
-            "Dipolar pattern, falloff and along-axis strength at the array"),
-    Command("visualise", "inob.cli.visualise", "Figures",
-            "Render geometry and FEM mesh PNGs"),
-    Command("muscle-sources", "inob.cli.muscle_sources", "Figures",
-            "Muscle dipoles before the solve: pairing and fibre axis"),
+    Command("topoplot", "inob.cli.topoplot", "Figures", "MEG/EEG field maps on the body surface"),
+    Command(
+        "torso", "inob.cli.torso", "Figures", "Four-panel field map painted on the body itself"
+    ),
+    Command(
+        "sensor-field",
+        "inob.cli.sensor_field",
+        "Figures",
+        "Dipolar pattern, falloff and along-axis strength at the array",
+    ),
+    Command("visualise", "inob.cli.visualise", "Figures", "Render geometry and FEM mesh PNGs"),
+    Command(
+        "muscle-sources",
+        "inob.cli.muscle_sources",
+        "Figures",
+        "Muscle dipoles before the solve: pairing and fibre axis",
+    ),
 )
 
 BY_NAME: dict[str, Command] = {}
@@ -116,7 +162,12 @@ for _cmd in COMMANDS:
         BY_NAME[_alias] = _cmd
 
 GROUPS: tuple[str, ...] = (
-    "Start here", "Build the model", "Solve", "Analyse", "Validate", "Figures",
+    "Start here",
+    "Build the model",
+    "Solve",
+    "Analyse",
+    "Validate",
+    "Figures",
 )
 
 TAGLINE = "imaging neuroscience outside the brain"
@@ -134,8 +185,7 @@ New here? Three commands:
 
 
 def _usage(out) -> None:
-    print(f"{_ui.heading('inob')} — {TAGLINE}  "
-          f"{_ui.paint(f'v{__version__}', 'dim')}\n", file=out)
+    print(f"{_ui.heading('inob')} — {TAGLINE}  {_ui.paint(f'v{__version__}', 'dim')}\n", file=out)
     print(f"{_ui.heading('Usage')}  inob <command> [options]\n", file=out)
 
     pad = max(len(c.name) for c in COMMANDS) + 2
@@ -148,35 +198,29 @@ def _usage(out) -> None:
             print(f"  {cmd.name:<{pad}}{cmd.summary}", file=out)
         print("", file=out)
 
-    print(f"{_ui.heading('Common options')}  "
-          f"(doctor and status take --config and --debug only)", file=out)
-    print("  --config PATH        YAML config to use "
-          "(default configs/default.yaml)", file=out)
+    print(
+        f"{_ui.heading('Common options')}  (doctor and status take --config and --debug only)",
+        file=out,
+    )
+    print("  --config PATH        YAML config to use (default configs/default.yaml)", file=out)
     print("  --set KEY=VALUE      Override one config field; repeatable", file=out)
     print("  --log-level LEVEL    DEBUG / INFO / WARNING / ERROR", file=out)
-    print("  --debug              Full traceback instead of a short message\n",
-          file=out)
+    print("  --debug              Full traceback instead of a short message\n", file=out)
 
     print(f"{_ui.heading('Examples')}", file=out)
-    print("  inob run --stages geom,fem        build anatomy and mesh only",
-          file=out)
-    print("  inob run --set fem.pitch_mm=2.0   finer mesh than the default",
-          file=out)
-    print("  inob detect --snr-threshold 5     stricter detection criterion\n",
-          file=out)
+    print("  inob run --stages geom,fem        build anatomy and mesh only", file=out)
+    print("  inob run --set fem.pitch_mm=2.0   finer mesh than the default", file=out)
+    print("  inob detect --snr-threshold 5     stricter detection criterion\n", file=out)
 
-    print(f"Detailed help for any command: "
-          f"{_ui.paint('inob <command> --help', 'cyan')}", file=out)
+    print(f"Detailed help for any command: {_ui.paint('inob <command> --help', 'cyan')}", file=out)
     print(f"Version: {_ui.paint('inob --version', 'cyan')}", file=out)
 
 
 def _greeting(out) -> None:
     """`inob` with no arguments — orient rather than error out."""
-    print(f"{_ui.heading('inob')} — {TAGLINE}  "
-          f"{_ui.paint(f'v{__version__}', 'dim')}\n", file=out)
+    print(f"{_ui.heading('inob')} — {TAGLINE}  {_ui.paint(f'v{__version__}', 'dim')}\n", file=out)
     print(QUICKSTART, file=out)
-    print(f"All {len(COMMANDS)} commands: "
-          f"{_ui.paint('inob --help', 'cyan')}", file=out)
+    print(f"All {len(COMMANDS)} commands: {_ui.paint('inob --help', 'cyan')}", file=out)
 
 
 def _unknown(name: str, out) -> int:
@@ -223,7 +267,7 @@ def _maybe_reexec(cmd: Command, rest: list[str]) -> None:
         return
     from inob.duneuro_env import reexec_with_duneuro
 
-    reexec_with_duneuro()      # replaces this process when a switch is needed
+    reexec_with_duneuro()  # replaces this process when a switch is needed
 
 
 def _debug_enabled(argv: list[str]) -> bool:
@@ -264,8 +308,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return _dispatch(BY_NAME[head], rest)
     except KeyboardInterrupt:
-        print(f"\n{_ui.paint('Interrupted.', 'yellow')} Finished stages are "
-              f"kept — rerun to resume.", file=sys.stderr)
+        print(
+            f"\n{_ui.paint('Interrupted.', 'yellow')} Finished stages are kept — rerun to resume.",
+            file=sys.stderr,
+        )
         return 130
     except Exception as exc:
         if debug:
@@ -283,28 +329,35 @@ def _report(exc: Exception, command: str, out) -> None:
 
     if isinstance(exc, ConfigError):
         label = "Config error"
-        hints = ["Check the field named above in your --config file.",
-                 "Compare against configs/default.yaml."]
+        hints = [
+            "Check the field named above in your --config file.",
+            "Compare against configs/default.yaml.",
+        ]
     elif isinstance(exc, FileNotFoundError):
         label = "Missing input"
-        hints = ["`inob status` shows which stages have been built.",
-                 "`inob run` builds everything that's missing."]
+        hints = [
+            "`inob status` shows which stages have been built.",
+            "`inob run` builds everything that's missing.",
+        ]
     elif isinstance(exc, ModuleNotFoundError) and "duneuro" in str(exc).lower():
         label = "DUNEuro not available"
-        hints = ["`inob doctor` explains how to build duneuropy.",
-                 "Every stage except forward/eeg runs without it."]
+        hints = [
+            "`inob doctor` explains how to build duneuropy.",
+            "Every stage except forward/eeg runs without it.",
+        ]
     elif isinstance(exc, MemoryError):
         label = "Out of memory"
-        hints = ["Coarsen the mesh: --set fem.pitch_mm=4.0",
-                 "Or run the forward solve on the cluster (see cluster/)."]
+        hints = [
+            "Coarsen the mesh: --set fem.pitch_mm=4.0",
+            "Or run the forward solve on the cluster (see cluster/).",
+        ]
 
     print(f"{_ui.paint(label, 'red')}: {exc}\n", file=out)
     for h in hints:
         print(f"  {_ui.arrow()} {_ui.paint(h, 'cyan')}", file=out)
     if hints:
         print("", file=out)
-    print(_ui.paint(f"Full traceback: inob {command} --debug ...", "dim"),
-          file=out)
+    print(_ui.paint(f"Full traceback: inob {command} --debug ...", "dim"), file=out)
 
 
 if __name__ == "__main__":

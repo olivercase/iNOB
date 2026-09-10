@@ -1,4 +1,5 @@
 """Tests for stitching per-chunk leadfields into one NPZ (no DUNEuro required)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,24 +21,42 @@ def _fem_single_source() -> FemMesh:
     # spacing_mm (5.0) their combined Z-extent falls in a single slab, so
     # vagus_sources() yields exactly one source position. Plus a "skin"
     # tet for realism.
-    nodes = np.array([
-        [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
-        [0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0], [0.0, 0.0, 3.0],
-        [10.0, 10.0, 10.0], [11.0, 10.0, 10.0], [10.0, 11.0, 10.0], [10.0, 10.0, 11.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 2.0],
+            [1.0, 0.0, 2.0],
+            [0.0, 1.0, 2.0],
+            [0.0, 0.0, 3.0],
+            [10.0, 10.0, 10.0],
+            [11.0, 10.0, 10.0],
+            [10.0, 11.0, 10.0],
+            [10.0, 10.0, 11.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]], dtype=np.int32)
     tissue = np.array([1, 1, 2], dtype=np.int32)
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                    tissue_labels=("vagus_left", "skin"), unit="mm")
+    return FemMesh(
+        nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("vagus_left", "skin"), unit="mm"
+    )
 
 
 def _sensors(n: int) -> SensorArray:
     pos = np.column_stack([np.arange(n, dtype=np.float64), np.zeros(n), np.zeros(n)])
     ori = np.tile([1.0, 0.0, 0.0], (n, 1))
     labels = tuple(f"mag-{i:04d}-R" for i in range(n))
-    return SensorArray(coilpos=pos, coilori=ori, labels=labels,
-                        chantype=tuple(["megmag"] * n), chanunit=tuple(["T"] * n),
-                        unit="mm")
+    return SensorArray(
+        coilpos=pos,
+        coilori=ori,
+        labels=labels,
+        chantype=tuple(["megmag"] * n),
+        chanunit=tuple(["T"] * n),
+        unit="mm",
+    )
 
 
 def _setup(tmp_path: Path, n_chan: int = 6):
@@ -100,7 +119,7 @@ def test_reduce_chunks_shape_mismatch_raises(tmp_path: Path) -> None:
     cfg, _, _ = _setup(tmp_path, n_chan=3)
     chunks_dir = cfg.outputs.forward_chunks_dir
     chunks_dir.mkdir(parents=True, exist_ok=True)
-    np.save(chunks_dir / "L_chunk_000.npy", np.zeros((2, 3)))   # 2 rows...
+    np.save(chunks_dir / "L_chunk_000.npy", np.zeros((2, 3)))  # 2 rows...
     np.save(chunks_dir / "coil_idx_000.npy", np.array([0, 1, 2]))  # ...3 indices
     with pytest.raises(ValueError, match="shape"):
         reduce_chunks(cfg)

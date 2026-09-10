@@ -6,6 +6,7 @@ These tests pin the YAML → DUNEuro-config translation and the guard rails, so
 a bad Venant setup fails at config load with a readable message rather than
 inside C++ hours into a cluster array job.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,9 +38,16 @@ def test_venant_emits_every_key_duneuro_requires(model: str) -> None:
     d = build_source_model_config(cfg)
     assert d["type"] == model
     assert set(d) == {
-        "type", "numberOfMoments", "referenceLength", "weightingExponent",
-        "relaxationFactor", "mixedMoments", "restrict", "initialization",
-        "extensions", "intorderadd",
+        "type",
+        "numberOfMoments",
+        "referenceLength",
+        "weightingExponent",
+        "relaxationFactor",
+        "mixedMoments",
+        "restrict",
+        "initialization",
+        "extensions",
+        "intorderadd",
     }
     # ParameterTree parses strings; bools must be lowercase true/false.
     assert all(isinstance(v, str) for v in d.values())
@@ -49,13 +57,16 @@ def test_venant_emits_every_key_duneuro_requires(model: str) -> None:
 
 
 def test_venant_parameters_are_overridable() -> None:
-    cfg = load_config(DEFAULT_CFG, overrides=[
-        "forward.source_model.type=venant",
-        "forward.source_model.number_of_moments=4",
-        "forward.source_model.reference_length_mm=5.0",
-        "forward.source_model.restrict=false",
-        "forward.source_model.extensions=",
-    ])
+    cfg = load_config(
+        DEFAULT_CFG,
+        overrides=[
+            "forward.source_model.type=venant",
+            "forward.source_model.number_of_moments=4",
+            "forward.source_model.reference_length_mm=5.0",
+            "forward.source_model.restrict=false",
+            "forward.source_model.extensions=",
+        ],
+    )
     d = build_source_model_config(cfg)
     assert d["numberOfMoments"] == "4"
     assert d["referenceLength"] == "5.0"
@@ -65,8 +76,7 @@ def test_venant_parameters_are_overridable() -> None:
 
 def test_unknown_source_model_is_rejected() -> None:
     with pytest.raises(ConfigError, match="source_model"):
-        load_config(DEFAULT_CFG,
-                    overrides=["forward.source_model.type=subtraction"])
+        load_config(DEFAULT_CFG, overrides=["forward.source_model.type=subtraction"])
 
 
 def test_weighting_exponent_must_be_below_number_of_moments() -> None:
@@ -91,8 +101,13 @@ def test_dg_reaches_duneuro_as_the_solver_type() -> None:
     cfg = load_config(DEFAULT_CFG, overrides=["forward.solver.type=dg"])
     nodes = np.eye(4, 3) * 50.0
     nodes[0] = 0
-    fem = FemMesh(nodes, np.array([[0, 1, 2, 3]], dtype=np.int32),
-                  np.array([1], dtype=np.int32), ("vagus_left",), "mm")
+    fem = FemMesh(
+        nodes,
+        np.array([[0, 1, 2, 3]], dtype=np.int32),
+        np.array([1], dtype=np.int32),
+        ("vagus_left",),
+        "mm",
+    )
     d = build_driver_config(cfg, fem, np.array([3e-4]))
     assert d["solver_type"] == "dg"
     # The interior-penalty settings CG ignores are the ones DG actually reads.
@@ -110,15 +125,21 @@ def test_dg_with_a_venant_source_model_is_refused_at_load() -> None:
     # this guard the combination throws inside C++ after the transfer matrix
     # has already started.
     with pytest.raises(ConfigError, match="dg"):
-        load_config(DEFAULT_CFG, overrides=[
-            "forward.solver.type=dg",
-            "forward.source_model.type=venant",
-        ])
+        load_config(
+            DEFAULT_CFG,
+            overrides=[
+                "forward.solver.type=dg",
+                "forward.source_model.type=venant",
+            ],
+        )
 
 
 def test_dg_with_partial_integration_is_allowed() -> None:
-    cfg = load_config(DEFAULT_CFG, overrides=[
-        "forward.solver.type=dg",
-        "forward.source_model.type=partial_integration",
-    ])
+    cfg = load_config(
+        DEFAULT_CFG,
+        overrides=[
+            "forward.solver.type=dg",
+            "forward.source_model.type=partial_integration",
+        ],
+    )
     assert cfg.forward.solver.type == "dg"

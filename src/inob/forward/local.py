@@ -12,6 +12,7 @@ This is the default forward path used by ``inob run``; it falls back to the
 serial solve when only one worker is requested or the array is too small to
 split.
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,7 +59,9 @@ def run_forward_local(cfg: Config) -> Path:
 
     logger.info(
         "forward: local parallel solve — %d chunks across %d cores, %d channels",
-        n_chunks, workers, n_chan,
+        n_chunks,
+        workers,
+        n_chan,
     )
     chunks_dir = cfg.outputs.forward_chunks_dir
     if chunks_dir.exists():
@@ -77,12 +80,11 @@ def run_forward_local(cfg: Config) -> Path:
     ctx = get_context("spawn")
     with ProcessPoolExecutor(max_workers=n_chunks, mp_context=ctx) as pool:
         futures = {
-            pool.submit(run_chunk, cfg, chunk_id=i, n_chunks=n_chunks): i
-            for i in range(n_chunks)
+            pool.submit(run_chunk, cfg, chunk_id=i, n_chunks=n_chunks): i for i in range(n_chunks)
         }
         done = 0
         for fut in as_completed(futures):
-            fut.result()   # re-raise the first worker error, cancelling the rest
+            fut.result()  # re-raise the first worker error, cancelling the rest
             done += 1
             logger.info("forward: chunk %d/%d complete", done, n_chunks)
 

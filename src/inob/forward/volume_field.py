@@ -25,6 +25,7 @@ Two routes, because the DUNEuro Python bindings expose two different things:
 
 Both are read-outs of the same solve the leadfield already pays for.
 """
+
 from __future__ import annotations
 
 import logging
@@ -59,10 +60,10 @@ _VALUES_PER_POSITION: dict[str, int] = {"direct": 1, "gradient": 3, "current": 3
 class VolumeField:
     """A scalar or vector field sampled at points inside the volume conductor."""
 
-    positions_mm: np.ndarray      # (P, 3)
-    values: np.ndarray            # (P,) for "direct", (P, 3) otherwise
-    evaluation_type: str          # one of EVALUATION_TYPES
-    tissue_ids: np.ndarray | None = None   # (P,) FEM tissue id per point, if known
+    positions_mm: np.ndarray  # (P, 3)
+    values: np.ndarray  # (P,) for "direct", (P, 3) otherwise
+    evaluation_type: str  # one of EVALUATION_TYPES
+    tissue_ids: np.ndarray | None = None  # (P,) FEM tissue id per point, if known
     description: str = ""
 
     @property
@@ -76,8 +77,7 @@ def save_volume_field(path: Path, field: VolumeField) -> None:
     """Atomically save a :class:`VolumeField` to an NPZ."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp.npz",
-                               dir=path.parent)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp.npz", dir=path.parent)
     os.close(fd)
     tmp_path = Path(tmp)
     try:
@@ -86,13 +86,16 @@ def save_volume_field(path: Path, field: VolumeField) -> None:
             positions_mm=np.asarray(field.positions_mm, dtype=np.float64),
             values=np.asarray(field.values, dtype=np.float64),
             evaluation_type=np.array(field.evaluation_type),
-            tissue_ids=(np.asarray(field.tissue_ids, dtype=np.int64)
-                        if field.tissue_ids is not None
-                        else np.zeros(0, dtype=np.int64)),
+            tissue_ids=(
+                np.asarray(field.tissue_ids, dtype=np.int64)
+                if field.tissue_ids is not None
+                else np.zeros(0, dtype=np.int64)
+            ),
             description=np.array(field.description),
         )
-        candidate = (tmp_path if tmp_path.exists()
-                     else tmp_path.with_suffix(tmp_path.suffix + ".npz"))
+        candidate = (
+            tmp_path if tmp_path.exists() else tmp_path.with_suffix(tmp_path.suffix + ".npz")
+        )
         os.replace(candidate, path)
     except BaseException:
         for p in (tmp_path, tmp_path.with_suffix(tmp_path.suffix + ".npz")):
@@ -121,7 +124,10 @@ def load_volume_field(path: Path) -> VolumeField:
 
 
 def sample_points(
-    fem: FemMesh, *, spacing_mm: float = 0.0, tissues: tuple[str, ...] = (),
+    fem: FemMesh,
+    *,
+    spacing_mm: float = 0.0,
+    tissues: tuple[str, ...] = (),
 ) -> tuple[np.ndarray, np.ndarray]:
     """Points strictly inside the mesh, with their tissue id.
 
@@ -169,13 +175,14 @@ def evaluate_dof_rows(
     """
     if evaluation_type not in EVALUATION_TYPES:
         raise ValueError(
-            f"evaluation_type must be one of {list(EVALUATION_TYPES)}; "
-            f"got {evaluation_type!r}"
+            f"evaluation_type must be one of {list(EVALUATION_TYPES)}; got {evaluation_type!r}"
         )
     rows = np.atleast_2d(np.asarray(dof_rows, dtype=np.float64))
     positions = [list(map(float, p)) for p in np.asarray(positions_mm, dtype=float)]
     raw, _ = driver.evaluateMultipleFunctionsAtPositions(
-        rows, positions, {"evaluation_return_type": evaluation_type},
+        rows,
+        positions,
+        {"evaluation_return_type": evaluation_type},
     )
     # DUNEuro returns one row per function, with the per-position values laid
     # out consecutively (1 or 3 of them).
@@ -183,8 +190,7 @@ def evaluate_dof_rows(
     stride = _VALUES_PER_POSITION[evaluation_type]
     if out.shape[2] != stride:
         raise ValueError(
-            f"expected {stride} value(s) per position for "
-            f"{evaluation_type!r}, got {out.shape[2]}"
+            f"expected {stride} value(s) per position for {evaluation_type!r}, got {out.shape[2]}"
         )
     return out[:, :, 0] if stride == 1 else out
 
@@ -234,21 +240,22 @@ def stimulation_field(
     dof = current_mA * (T[anode] - T[cathode])
 
     if positions_mm is None:
-        positions_mm, tissue_ids = sample_points(
-            fem, spacing_mm=spacing_mm, tissues=tissues)
+        positions_mm, tissue_ids = sample_points(fem, spacing_mm=spacing_mm, tissues=tissues)
     else:
         positions_mm, tissue_ids = np.asarray(positions_mm, dtype=float), None
     logger.info("evaluating %s at %d points", evaluation_type, len(positions_mm))
 
-    values = evaluate_dof_rows(driver, dof[None, :], positions_mm,
-                               evaluation_type=evaluation_type)[0]
+    values = evaluate_dof_rows(driver, dof[None, :], positions_mm, evaluation_type=evaluation_type)[
+        0
+    ]
     return VolumeField(
         positions_mm=positions_mm,
         values=values,
         evaluation_type=evaluation_type,
         tissue_ids=tissue_ids,
-        description=(f"stimulation {current_mA} mA, anode {anode} → cathode "
-                     f"{cathode}, {evaluation_type}"),
+        description=(
+            f"stimulation {current_mA} mA, anode {anode} → cathode {cathode}, {evaluation_type}"
+        ),
     )
 
 
@@ -277,8 +284,7 @@ def export_source_field_vtk(
     dp = import_duneuro(cfg)
     driver, driver_cfg, _cond = build_driver(cfg, fem)
 
-    dipole = dp.Dipole3d(np.asarray(source_pos_mm, dtype=float),
-                         np.asarray(moment, dtype=float))
+    dipole = dp.Dipole3d(np.asarray(source_pos_mm, dtype=float), np.asarray(moment, dtype=float))
     solution = driver.makeDomainFunction()
     solve_cfg = {**driver_cfg, "source_model": build_source_model_config(cfg)}
     logger.info("solving the volume potential for one dipole (slow)…")
@@ -289,8 +295,7 @@ def export_source_field_vtk(
     writer = driver.volumeConductorVTKWriter({"anisotropy.enable": "false"})
     writer.addVertexData(solution, "potential")
     writer.addCellDataGradient(solution, "gradient")
-    writer.write({"filename": str(out_path),
-                  "subsamplingLevels": str(subsampling_levels)})
+    writer.write({"filename": str(out_path), "subsamplingLevels": str(subsampling_levels)})
     written = out_path.with_suffix(".vtu")
     logger.info("Wrote volume potential → %s", written)
     return written

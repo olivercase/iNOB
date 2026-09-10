@@ -1,4 +1,5 @@
 """CLI: terminal presentation helpers (colour gating, sizes, ages, paths)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -55,7 +56,6 @@ def test_human_age_scales() -> None:
 def test_rel_inside_and_outside_root(tmp_path) -> None:
     root = tmp_path / "project"
     root.mkdir()
-    assert ui.rel(root / "outputs" / "fem.mat", root) == str(
-        Path("outputs") / "fem.mat")
+    assert ui.rel(root / "outputs" / "fem.mat", root) == str(Path("outputs") / "fem.mat")
     outside = tmp_path / "elsewhere" / "fem.mat"
     assert ui.rel(outside, root) == str(outside)

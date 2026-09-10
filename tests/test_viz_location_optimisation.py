@@ -1,4 +1,5 @@
 """Tests for inob.viz.location_optimisation: pure helpers + render smoke test."""
+
 from __future__ import annotations
 
 from pathlib import Path

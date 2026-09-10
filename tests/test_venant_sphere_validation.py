@@ -10,6 +10,7 @@ clears the same accuracy bar against Sarvas.
 Auto-skips when duneuropy is not importable (same convention as the other
 real-DUNEuro tests).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,10 +29,8 @@ DEFAULT_CFG = REPO_ROOT / "configs" / "default.yaml"
 
 @pytest.mark.duneuro
 def test_venant_source_model_matches_sarvas_on_sphere(tmp_path) -> None:
-    cfg = load_config(DEFAULT_CFG,
-                      overrides=["forward.source_model.type=venant"])
-    v = validate_meg_sphere(out_dir=tmp_path,
-                            source_model=build_source_model_config(cfg))
+    cfg = load_config(DEFAULT_CFG, overrides=["forward.source_model.type=venant"])
+    v = validate_meg_sphere(out_dir=tmp_path, source_model=build_source_model_config(cfg))
     # Same bar as partial integration in test_meg_sphere_validation.py: if
     # Venant cannot clear it on a homogeneous sphere, it is not a candidate for
     # the production solve.

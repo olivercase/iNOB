@@ -1,4 +1,5 @@
 """Leadfield NPZ schema + atomic-write tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -53,10 +54,15 @@ def test_validate_requires_finite() -> None:
     L = lf.L.copy()
     L[0, 0] = np.nan
     bad = Leadfield(
-        L=L, L_fT_per_nAm=L * 1e6, source_pos=lf.source_pos,
-        coil_pos=lf.coil_pos, coil_orient=lf.coil_orient,
-        channel_names=lf.channel_names, conductivities=lf.conductivities,
-        tissue_labels=lf.tissue_labels, seed=lf.seed,
+        L=L,
+        L_fT_per_nAm=L * 1e6,
+        source_pos=lf.source_pos,
+        coil_pos=lf.coil_pos,
+        coil_orient=lf.coil_orient,
+        channel_names=lf.channel_names,
+        conductivities=lf.conductivities,
+        tissue_labels=lf.tissue_labels,
+        seed=lf.seed,
     )
     with pytest.raises(SchemaError, match="non-finite"):
         validate_leadfield(bad)
@@ -65,7 +71,7 @@ def test_validate_requires_finite() -> None:
 def test_validate_rejects_shape_mismatch() -> None:
     lf = _make_lf()
     bad = Leadfield(
-        L=lf.L[:, :-1],   # wrong second dim
+        L=lf.L[:, :-1],  # wrong second dim
         L_fT_per_nAm=lf.L_fT_per_nAm[:, :-1],
         source_pos=lf.source_pos,
         coil_pos=lf.coil_pos,

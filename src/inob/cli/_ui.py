@@ -4,6 +4,7 @@ Deliberately dependency-free: the package ships no CLI libraries, so this is a
 small ANSI layer that degrades to plain text when stdout is not a terminal
 (pipes, CI logs, the GUI backend). Honours the ``NO_COLOR`` convention.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -16,8 +17,13 @@ import time
 from pathlib import Path
 
 _CODES = {
-    "bold": "1", "dim": "2",
-    "red": "31", "green": "32", "yellow": "33", "blue": "34", "cyan": "36",
+    "bold": "1",
+    "dim": "2",
+    "red": "31",
+    "green": "32",
+    "yellow": "33",
+    "blue": "34",
+    "cyan": "36",
 }
 
 

@@ -1,4 +1,5 @@
 """Cross-modality coupling tests."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -63,9 +64,9 @@ def test_amplitude_correlation_size_mismatch() -> None:
 
 def test_shared_singular_modes_shape() -> None:
     rng = np.random.default_rng(3)
-    out = shared_singular_modes(rng.standard_normal((30, 12)),
-                                 rng.standard_normal((20, 12)),
-                                 n_modes=4)
+    out = shared_singular_modes(
+        rng.standard_normal((30, 12)), rng.standard_normal((20, 12)), n_modes=4
+    )
     assert out["meg_singular_values"].shape == (4,)
     assert out["eeg_singular_values"].shape == (4,)
     assert out["mode_overlap"].shape == (4, 4)

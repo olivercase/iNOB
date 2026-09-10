@@ -3,6 +3,7 @@
 Skips automatically when ``duneuropy`` is not importable, so CI without the
 DUNE toolchain still passes.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,12 +28,15 @@ DEFAULT_CFG = REPO_ROOT / "configs" / "default.yaml"
 
 def _build_synthetic_fem() -> FemMesh:
     """A tiny single-tet 'vagus_left' FEM (nodes in mm)."""
-    nodes = np.array([
-        [0.0, 0.0, 0.0],
-        [50.0, 0.0, 0.0],
-        [0.0, 50.0, 0.0],
-        [0.0, 0.0, 50.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [50.0, 0.0, 0.0],
+            [0.0, 50.0, 0.0],
+            [0.0, 0.0, 50.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3]], dtype=np.int32)
     tissue = np.array([1], dtype=np.int32)
     return FemMesh(nodes, tets, tissue, tissue_labels=("vagus_left",), unit="mm")
@@ -43,11 +47,13 @@ def test_smoke_forward_on_single_tet() -> None:
     cfg = load_config(DEFAULT_CFG)
     fem = _build_synthetic_fem()
     src_pos = np.array([[10.0, 10.0, 10.0]])
-    coilpos = np.array([
-        [100.0, 0.0, 0.0],
-        [0.0, 100.0, 0.0],
-        [0.0, 0.0, 100.0],
-    ])
+    coilpos = np.array(
+        [
+            [100.0, 0.0, 0.0],
+            [0.0, 100.0, 0.0],
+            [0.0, 0.0, 100.0],
+        ]
+    )
     coilori = coilpos / np.linalg.norm(coilpos, axis=1, keepdims=True)
 
     dp = import_duneuro(cfg)
@@ -61,5 +67,5 @@ def test_smoke_forward_on_single_tet() -> None:
     driver_cfg["source_model"] = {"type": "partial_integration"}
     fields_raw, _ = driver.applyMEGTransfer(T, dipoles, driver_cfg)
     L = np.column_stack([np.asarray(f) for f in fields_raw])
-    assert L.shape == (3, 3)            # 3 channels, 1 source, 3 moments
+    assert L.shape == (3, 3)  # 3 channels, 1 source, 3 moments
     assert np.isfinite(L).all()

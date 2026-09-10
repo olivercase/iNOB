@@ -23,6 +23,7 @@ Nothing here imports ``duneuropy`` into this process: every check runs in a
 subprocess, because a mismatched extension does not raise ImportError, it
 segfaults.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -79,7 +80,7 @@ def _write_cache(python: Path) -> None:
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(str(python), encoding="utf-8")
     except OSError:
-        pass          # a cache we cannot write is not worth failing over
+        pass  # a cache we cannot write is not worth failing over
 
 
 def _search_roots() -> list[Path]:
@@ -93,12 +94,18 @@ def _search_roots() -> list[Path]:
     if env:
         roots.append(Path(env))
 
-    here = Path(__file__).resolve().parents[2]         # the project checkout
+    here = Path(__file__).resolve().parents[2]  # the project checkout
     home = Path.home()
     named = ("duneuro_build", "duneuro", "duneuro-py", "duneuro-src")
 
-    for base in (here, here.parent, home, home / "Scratch" / "inob",
-                 Path("/opt"), Path("/usr/local")):
+    for base in (
+        here,
+        here.parent,
+        home,
+        home / "Scratch" / "inob",
+        Path("/opt"),
+        Path("/usr/local"),
+    ):
         roots.append(base)
         for name in named:
             roots.append(base / name)
@@ -203,7 +210,9 @@ def _can_import(python: Path, *, timeout: float = PROBE_TIMEOUT_S) -> bool:
     try:
         proc = subprocess.run(
             [str(python), "-c", "import duneuropy"],
-            capture_output=True, timeout=timeout, check=False,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -271,7 +280,7 @@ def reexec_with_duneuro(argv: list[str] | None = None) -> None:
 
     logger.info("DUNEuro is not importable here; re-running under %s", python)
     print(f"→ using the DUNEuro interpreter at {python}", file=sys.stderr)
-    os.execve(cmd[0], cmd, env)     # deliberate process replacement
+    os.execve(cmd[0], cmd, env)  # deliberate process replacement
 
 
 def _as_subcommand(argv: list[str]) -> list[str]:
@@ -288,7 +297,7 @@ def _as_subcommand(argv: list[str]) -> list[str]:
         return rest
     # `inob-forward …` / `inob-eeg …` — recover the subcommand from the name.
     if prog.startswith("inob-"):
-        return [prog[len("inob-"):], *rest]
+        return [prog[len("inob-") :], *rest]
     # `python -m inob.cli.run_forward …` — argv[0] is that module's file.
     stem = Path(argv[0]).stem if argv else ""
     mapped = {"run_forward": "forward", "run_eeg": "eeg"}.get(stem, stem)

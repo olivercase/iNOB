@@ -8,6 +8,7 @@ Produces, under ``--out`` (default ``outputs/fem``):
 Uses VTK offscreen. A sagittal clipping plane through the neck exposes the
 deep tissues (vagus, vessels) inside the skin/muscle/bone envelope.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,18 +21,19 @@ import numpy as np
 logger = logging.getLogger("fem_viz")
 
 TISSUE_STYLE = {
-    "vagus_left":   ((1.00, 0.85, 0.10), 1.0),   # yellow
-    "vagus_right":  ((1.00, 0.65, 0.00), 1.0),   # amber
-    "blood_vessel": ((0.85, 0.10, 0.10), 1.0),   # red
-    "muscle":       ((0.72, 0.34, 0.32), 1.0),   # brick
-    "bone":         ((0.94, 0.92, 0.84), 1.0),   # ivory
-    "skin":         ((0.90, 0.78, 0.68), 0.18),  # translucent beige
+    "vagus_left": ((1.00, 0.85, 0.10), 1.0),  # yellow
+    "vagus_right": ((1.00, 0.65, 0.00), 1.0),  # amber
+    "blood_vessel": ((0.85, 0.10, 0.10), 1.0),  # red
+    "muscle": ((0.72, 0.34, 0.32), 1.0),  # brick
+    "bone": ((0.94, 0.92, 0.84), 1.0),  # ivory
+    "skin": ((0.90, 0.78, 0.68), 0.18),  # translucent beige
 }
 
 
 def build_grid(nodes, tets, tissue):
     import vtk
     from vtk.util import numpy_support as ns
+
     grid = vtk.vtkUnstructuredGrid()
     pts = vtk.vtkPoints()
     pts.SetData(ns.numpy_to_vtk(np.ascontiguousarray(nodes, dtype=np.float64)))
@@ -51,12 +53,12 @@ def build_grid(nodes, tets, tissue):
 
 def tissue_actor(grid, tid, rgb, opac, clip_plane=None):
     import vtk
+
     thr = vtk.vtkThreshold()
     thr.SetInputData(grid)
     thr.SetUpperThreshold(tid)
     thr.SetLowerThreshold(tid)
-    thr.SetInputArrayToProcess(0, 0, 0,
-                               vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS, "tissue")
+    thr.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS, "tissue")
     thr.Update()
     geo = vtk.vtkGeometryFilter()
     geo.SetInputConnection(thr.GetOutputPort())
@@ -80,6 +82,7 @@ def tissue_actor(grid, tid, rgb, opac, clip_plane=None):
 
 def render(mesh, out: Path, size: int):
     import vtk
+
     nodes, tets, tissue = mesh.nodes, mesh.tets, mesh.tissue
     labels = mesh.tissue_labels
     grid = build_grid(nodes, tets, tissue)
@@ -99,8 +102,7 @@ def render(mesh, out: Path, size: int):
             # when clipped, render skin opaque on the cut face for context
             if clip and lab == "skin":
                 opac = 0.5
-            ren.AddActor(tissue_actor(grid, label_to_id[lab], (r, g, b), opac,
-                                      clip_plane=plane))
+            ren.AddActor(tissue_actor(grid, label_to_id[lab], (r, g, b), opac, clip_plane=plane))
         return ren
 
     pngs = {}
@@ -141,8 +143,9 @@ def render(mesh, out: Path, size: int):
     ren.ResetCamera()
     # zoom to upper body (vagus/neck region): focus near top quartile in z
     # focus on the neck: vagus nodes mark the carotid-sheath level
-    vmask = np.isin(mesh.tissue, [label_to_id.get("vagus_left", -1),
-                                  label_to_id.get("vagus_right", -1)])
+    vmask = np.isin(
+        mesh.tissue, [label_to_id.get("vagus_left", -1), label_to_id.get("vagus_right", -1)]
+    )
     vtet = mesh.tets[vmask]
     if len(vtet):
         vnodes = nodes[np.unique(vtet)]
@@ -175,6 +178,7 @@ def render(mesh, out: Path, size: int):
 
 def montage(pngs, mesh, out: Path):
     from PIL import Image, ImageDraw, ImageFont
+
     order = [k for k in ("full", "clipped", "neck") if k in pngs]
     imgs = [Image.open(pngs[k]).convert("RGB") for k in order]
     w, h = imgs[0].size
@@ -186,18 +190,26 @@ def montage(pngs, mesh, out: Path):
         small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
     except Exception:
         font = small = ImageFont.load_default()
-    titles = {"full": "FULL (skin translucent)", "clipped": "SAGITTAL CLIP",
-              "neck": "NECK ZOOM (clip)"}
+    titles = {
+        "full": "FULL (skin translucent)",
+        "clipped": "SAGITTAL CLIP",
+        "neck": "NECK ZOOM (clip)",
+    }
     counts = {lab: int((mesh.tissue == i + 1).sum()) for i, lab in enumerate(mesh.tissue_labels)}
     for i, k in enumerate(order):
         canvas.paste(imgs[i], (i * w, 0))
         d.text((i * w + 12, 10), titles.get(k, k), fill=(255, 255, 255), font=font)
-    d.text((16, h + 12), f"Vagus FEM — {len(mesh.tets)} tets, {len(mesh.nodes)} nodes, "
-           f"{len(mesh.tissue_labels)} tissues", fill=(255, 255, 255), font=font)
+    d.text(
+        (16, h + 12),
+        f"Vagus FEM — {len(mesh.tets)} tets, {len(mesh.nodes)} nodes, "
+        f"{len(mesh.tissue_labels)} tissues",
+        fill=(255, 255, 255),
+        font=font,
+    )
     lx, ly = 16, h + 56
     for lab in mesh.tissue_labels:
         (r, g, b), _ = TISSUE_STYLE.get(lab, ((0.6, 0.6, 0.6), 1.0))
-        d.rectangle([lx, ly, lx + 26, ly + 26], fill=(int(r*255), int(g*255), int(b*255)))
+        d.rectangle([lx, ly, lx + 26, ly + 26], fill=(int(r * 255), int(g * 255), int(b * 255)))
         txt = f"{lab} ({counts[lab]})"
         d.text((lx + 34, ly + 1), txt, fill=(230, 230, 230), font=small)
         lx += 34 + int(d.textlength(txt, font=small)) + 36
@@ -212,10 +224,12 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=Path("outputs/fem"))
     ap.add_argument("--size", type=int, default=1200)
     args = ap.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s",
-                        datefmt="%H:%M:%S")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S"
+    )
     sys.path.insert(0, "src")
     from inob.io.hdf5 import load_fem
+
     mesh = load_fem(args.fem)
     logger.info("loaded FEM: %d tets, tissues=%s", len(mesh.tets), mesh.tissue_labels)
     args.out.mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,7 @@ the CLI (``inob doctor``, ``--workers``) and the GUI backend (``/api/system``)
 need the real core count to show what "all cores" actually means here, so the
 detection lives here once rather than in either front-end.
 """
+
 from __future__ import annotations
 
 import os
@@ -34,7 +35,10 @@ def _sysctl_int(key: str) -> int | None:
     """Read an integer ``sysctl`` value, or None if it cannot be read."""
     try:
         out = subprocess.run(
-            ["sysctl", "-n", key], capture_output=True, text=True, timeout=5,
+            ["sysctl", "-n", key],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -78,7 +82,7 @@ def cpu_info() -> CpuInfo:
 class WorkerPreset:
     """A named ``forward.local_workers`` choice, with why you'd pick it."""
 
-    value: int          # 0 == the config's "every core" sentinel
+    value: int  # 0 == the config's "every core" sentinel
     label: str
     note: str
 
@@ -93,22 +97,34 @@ def worker_presets(info: CpuInfo | None = None) -> list[WorkerPreset]:
     """
     info = info or cpu_info()
     presets = [
-        WorkerPreset(0, f"All cores ({info.logical})",
-                     "Fastest. Uses every core, so the machine will be busy."),
+        WorkerPreset(
+            0,
+            f"All cores ({info.logical})",
+            "Fastest. Uses every core, so the machine will be busy.",
+        ),
     ]
     if info.performance:
-        presets.append(WorkerPreset(
-            info.performance, f"Performance cores only ({info.performance})",
-            "Skips the efficiency cores. Often nearly as fast as all cores on "
-            "Apple silicon, and leaves the machine usable.",
-        ))
+        presets.append(
+            WorkerPreset(
+                info.performance,
+                f"Performance cores only ({info.performance})",
+                "Skips the efficiency cores. Often nearly as fast as all cores on "
+                "Apple silicon, and leaves the machine usable.",
+            )
+        )
     half = max(1, info.logical // 2)
-    presets.append(WorkerPreset(
-        half, f"Half ({half})",
-        "Leaves plenty of headroom for other work while it solves.",
-    ))
-    presets.append(WorkerPreset(
-        1, "Single core",
-        "Slowest, but the most predictable — and easiest to debug.",
-    ))
+    presets.append(
+        WorkerPreset(
+            half,
+            f"Half ({half})",
+            "Leaves plenty of headroom for other work while it solves.",
+        )
+    )
+    presets.append(
+        WorkerPreset(
+            1,
+            "Single core",
+            "Slowest, but the most predictable — and easiest to debug.",
+        )
+    )
     return presets

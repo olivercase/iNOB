@@ -1,4 +1,5 @@
 """CLI: the unified `inob` dispatcher (registry, help, routing, error report)."""
+
 from __future__ import annotations
 
 import importlib
@@ -59,8 +60,7 @@ def test_dispatch_routes_remaining_argv_to_module(monkeypatch) -> None:
     import inob.cli.status as status_mod
 
     calls = {}
-    monkeypatch.setattr(
-        status_mod, "main", lambda argv: (calls.setdefault("argv", argv), 0)[1])
+    monkeypatch.setattr(status_mod, "main", lambda argv: (calls.setdefault("argv", argv), 0)[1])
     rc = cli_mod.main(["status", "--json", "--config", "x.yaml"])
     assert rc == 0
     assert calls["argv"] == ["--json", "--config", "x.yaml"]
@@ -70,8 +70,7 @@ def test_debug_flag_is_stripped_before_dispatch(monkeypatch) -> None:
     import inob.cli.status as status_mod
 
     calls = {}
-    monkeypatch.setattr(
-        status_mod, "main", lambda argv: (calls.setdefault("argv", argv), 0)[1])
+    monkeypatch.setattr(status_mod, "main", lambda argv: (calls.setdefault("argv", argv), 0)[1])
     rc = cli_mod.main(["status", "--debug", "--json"])
     assert rc == 0
     assert calls["argv"] == ["--json"]

@@ -1,5 +1,6 @@
 """Tests for the single-machine forward solve, with a fake DUNEuro driver
 (no real duneuropy install required)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,24 +50,42 @@ class _FakeDriver:
 
 
 def _fem_two_source_slabs() -> FemMesh:
-    nodes = np.array([
-        [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
-        [0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0], [0.0, 0.0, 3.0],
-        [10.0, 10.0, 10.0], [11.0, 10.0, 10.0], [10.0, 11.0, 10.0], [10.0, 10.0, 11.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, 2.0],
+            [1.0, 0.0, 2.0],
+            [0.0, 1.0, 2.0],
+            [0.0, 0.0, 3.0],
+            [10.0, 10.0, 10.0],
+            [11.0, 10.0, 10.0],
+            [10.0, 11.0, 10.0],
+            [10.0, 10.0, 11.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]], dtype=np.int32)
     tissue = np.array([1, 1, 2], dtype=np.int32)
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                    tissue_labels=("vagus_left", "skin"), unit="mm")
+    return FemMesh(
+        nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("vagus_left", "skin"), unit="mm"
+    )
 
 
 def _sensors(n: int) -> SensorArray:
     pos = np.column_stack([np.arange(n, dtype=np.float64), np.zeros(n), np.zeros(n)])
     ori = np.tile([1.0, 0.0, 0.0], (n, 1))
     labels = tuple(f"mag-{i:04d}-R" for i in range(n))
-    return SensorArray(coilpos=pos, coilori=ori, labels=labels,
-                        chantype=tuple(["megmag"] * n), chanunit=tuple(["T"] * n),
-                        unit="mm")
+    return SensorArray(
+        coilpos=pos,
+        coilori=ori,
+        labels=labels,
+        chantype=tuple(["megmag"] * n),
+        chanunit=tuple(["T"] * n),
+        unit="mm",
+    )
 
 
 def test_run_forward_end_to_end_with_fake_driver(tmp_path: Path, monkeypatch) -> None:
@@ -81,7 +100,8 @@ def test_run_forward_end_to_end_with_fake_driver(tmp_path: Path, monkeypatch) ->
 
     monkeypatch.setattr(solve_mod, "import_duneuro", lambda cfg: _FakeDp)
     monkeypatch.setattr(
-        solve_mod, "build_driver",
+        solve_mod,
+        "build_driver",
         lambda cfg, fem: (fake_driver, {"volume_conductor": {}}, np.array([3e-4, 4.3e-4])),
     )
 

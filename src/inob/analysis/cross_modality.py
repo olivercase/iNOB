@@ -42,6 +42,7 @@ References
   magnetoencephalography." NeuroImage 199:598-608.
   https://doi.org/10.1016/j.neuroimage.2019.05.063
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 # ── per-source amplitudes ──────────────────────────────────────────────────
 
+
 def per_source_amplitude(L: np.ndarray) -> np.ndarray:
     """RMS amplitude across (channels × moments) for each source position.
 
@@ -64,13 +66,15 @@ def per_source_amplitude(L: np.ndarray) -> np.ndarray:
         raise ValueError(f"L second dim {three_S} not divisible by 3")
     S = three_S // 3
     L3 = L.reshape(C, S, 3)
-    return np.sqrt(np.mean(L3 ** 2, axis=(0, 2)))
+    return np.sqrt(np.mean(L3**2, axis=(0, 2)))
 
 
 # ── single-source forward prediction (Q1) ──────────────────────────────────
 
+
 def fit_moment_from_eeg(
-    L_eeg_src: np.ndarray, V_eeg_observed: np.ndarray,
+    L_eeg_src: np.ndarray,
+    V_eeg_observed: np.ndarray,
 ) -> np.ndarray:
     """Least-squares fit a 3-moment dipole given a per-source EEG leadfield.
 
@@ -84,7 +88,9 @@ def fit_moment_from_eeg(
 
 
 def predict_meg_from_eeg(
-    L_meg_src: np.ndarray, L_eeg_src: np.ndarray, V_eeg_observed: np.ndarray,
+    L_meg_src: np.ndarray,
+    L_eeg_src: np.ndarray,
+    V_eeg_observed: np.ndarray,
 ) -> np.ndarray:
     """Predict the MEG topo for a single source given its EEG observation.
 
@@ -117,7 +123,7 @@ def bootstrap_recovery_error_ci(
     """
     rng = np.random.default_rng(int(seed))
     B_true = L_meg_src[:, 2]
-    B_true_rms = float(np.sqrt(np.mean(B_true ** 2)))
+    B_true_rms = float(np.sqrt(np.mean(B_true**2)))
     if B_true_rms <= 0:
         return float("nan"), float("nan"), float("nan")
     errs = np.empty(n_boot, dtype=np.float64)
@@ -126,7 +132,7 @@ def bootstrap_recovery_error_ci(
         q = fit_moment_from_eeg(L_eeg_src, V_obs)
         B_pred = L_meg_src @ q
         res = B_pred - B_true
-        errs[b] = float(np.sqrt(np.mean(res ** 2))) / B_true_rms
+        errs[b] = float(np.sqrt(np.mean(res**2))) / B_true_rms
     alpha = (1.0 - ci) / 2.0
     return (
         float(np.percentile(errs, 100 * alpha)),
@@ -137,24 +143,24 @@ def bootstrap_recovery_error_ci(
 
 # ── cross-modality summary (Q2) ────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class CrossModalityStats:
     pearson_r: float
     spearman_rho: float
-    log_log_slope: float    # slope of log(MEG_amp) vs log(EEG_amp), should be ~1 for ideal coupling
+    log_log_slope: float  # slope of log(MEG_amp) vs log(EEG_amp), should be ~1 for ideal coupling
     n_sources: int
 
 
 def amplitude_correlation(
-    meg_L: np.ndarray, eeg_L: np.ndarray,
+    meg_L: np.ndarray,
+    eeg_L: np.ndarray,
 ) -> CrossModalityStats:
     """Correlate per-source MEG and EEG amplitudes across the source space."""
     a_meg = per_source_amplitude(meg_L)
     a_eeg = per_source_amplitude(eeg_L)
     if len(a_meg) != len(a_eeg):
-        raise ValueError(
-            f"source-space size mismatch: MEG {len(a_meg)} vs EEG {len(a_eeg)}"
-        )
+        raise ValueError(f"source-space size mismatch: MEG {len(a_meg)} vs EEG {len(a_eeg)}")
     a_meg = np.maximum(a_meg, 1e-30)
     a_eeg = np.maximum(a_eeg, 1e-30)
     r = float(np.corrcoef(a_meg, a_eeg)[0, 1])
@@ -165,15 +171,21 @@ def amplitude_correlation(
     log_eeg = np.log(a_eeg)
     slope, _ = np.polyfit(log_eeg, log_meg, 1)
     return CrossModalityStats(
-        pearson_r=r, spearman_rho=rho, log_log_slope=float(slope),
+        pearson_r=r,
+        spearman_rho=rho,
+        log_log_slope=float(slope),
         n_sources=len(a_meg),
     )
 
 
 # ── singular-mode coupling (advanced) ──────────────────────────────────────
 
+
 def shared_singular_modes(
-    meg_L: np.ndarray, eeg_L: np.ndarray, *, n_modes: int = 6,
+    meg_L: np.ndarray,
+    eeg_L: np.ndarray,
+    *,
+    n_modes: int = 6,
 ) -> dict[str, np.ndarray]:
     """Compute the dominant source-space singular modes for each modality.
 
@@ -185,9 +197,9 @@ def shared_singular_modes(
     _, sm, vm_T = np.linalg.svd(meg_L, full_matrices=False)
     _, se, ve_T = np.linalg.svd(eeg_L, full_matrices=False)
     n = min(n_modes, vm_T.shape[0], ve_T.shape[0])
-    overlap = np.abs(vm_T[:n] @ ve_T[:n].T)         # |<v_i^MEG, v_j^EEG>|
+    overlap = np.abs(vm_T[:n] @ ve_T[:n].T)  # |<v_i^MEG, v_j^EEG>|
     return {
         "meg_singular_values": sm[:n],
         "eeg_singular_values": se[:n],
-        "mode_overlap": overlap,                     # (n, n) — diagonal ≈ 1 ⇒ same modes
+        "mode_overlap": overlap,  # (n, n) — diagonal ≈ 1 ⇒ same modes
     }

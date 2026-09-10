@@ -1,4 +1,5 @@
 """Tests for the GUI detectability path: explicit point sources + trials math."""
+
 from __future__ import annotations
 
 import math
@@ -53,7 +54,10 @@ def test_compute_detectability_meg(tmp_path: Path) -> None:
     sigma = compute_noise_floors(cfg).meg_per_channel_fT
 
     res = compute_detectability(
-        cfg, strengths_nAm=[1.0, 1.0], threshold_snr=3.0, modality="meg",
+        cfg,
+        strengths_nAm=[1.0, 1.0],
+        threshold_snr=3.0,
+        modality="meg",
     )
     assert res["modality"] == "meg"
     assert len(res["per_source"]) == 2
@@ -75,7 +79,8 @@ def test_detect_strength_scales_snr_linearly(tmp_path: Path) -> None:
     weak = compute_detectability(cfg, strengths_nAm=[1.0], modality="meg")
     strong = compute_detectability(cfg, strengths_nAm=[2.0], modality="meg")
     assert strong["per_source"][0]["snr"] == pytest.approx(
-        2.0 * weak["per_source"][0]["snr"], rel=1e-3,
+        2.0 * weak["per_source"][0]["snr"],
+        rel=1e-3,
     )
 
 
@@ -115,11 +120,11 @@ def test_detectability_scenarios_follow_source_target() -> None:
         MUSCLE_SCENARIOS,
         scenarios_for_target,
     )
+
     base = "outputs/forward/duneuro_leadfield_{}.npz"
 
     def cfg_for(target: str):
-        return load_config(DEFAULT_CFG,
-                           overrides=[f"outputs.forward_npz={base.format(target)}"])
+        return load_config(DEFAULT_CFG, overrides=[f"outputs.forward_npz={base.format(target)}"])
 
     assert scenarios_for_target(cfg_for("vagus")) is DEFAULT_SCENARIOS
     assert scenarios_for_target(cfg_for("muscle")) is MUSCLE_SCENARIOS
@@ -147,5 +152,4 @@ def test_detectability_scenarios_follow_source_target() -> None:
     # bottom (a single MUAP is comparable to a modest CAP), but muscle is shifted
     # up throughout and tops out an order of magnitude higher.
     assert min(s.Q_nAm for s in MUSCLE_SCENARIOS) > min(s.Q_nAm for s in DEFAULT_SCENARIOS)
-    assert max(s.Q_nAm for s in MUSCLE_SCENARIOS) >= 10 * max(
-        s.Q_nAm for s in DEFAULT_SCENARIOS)
+    assert max(s.Q_nAm for s in MUSCLE_SCENARIOS) >= 10 * max(s.Q_nAm for s in DEFAULT_SCENARIOS)

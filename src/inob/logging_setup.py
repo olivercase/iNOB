@@ -9,6 +9,7 @@ goes. Call :func:`begin_capture` first: it puts the console handler in place
 immediately, so those early warnings are formatted like every other line, and
 buffers them until the file handler exists so they are in the log too.
 """
+
 from __future__ import annotations
 
 import logging
@@ -46,7 +47,7 @@ def configure_logging(
     sh = logging.StreamHandler(sys.stderr)
     sh.setFormatter(formatter)
     sh.setLevel(level)
-    sh._inob = True   # type: ignore[attr-defined]
+    sh._inob = True  # type: ignore[attr-defined]
     root.addHandler(sh)
 
     if log_path is not None:
@@ -55,7 +56,7 @@ def configure_logging(
         fh = logging.FileHandler(log_path, mode="a", encoding="utf-8")
         fh.setFormatter(formatter)
         fh.setLevel(level)
-        fh._inob = True   # type: ignore[attr-defined]
+        fh._inob = True  # type: ignore[attr-defined]
         root.addHandler(fh)
         # Replay whatever begin_capture() held onto. The console has already
         # shown these; this is what puts them in the file, so a log is a
@@ -75,8 +76,9 @@ def begin_capture(level: int | str = "INFO") -> None:
     nothing once a file handler of ours is installed.
     """
     root = logging.getLogger()
-    if any(isinstance(h, logging.FileHandler) and getattr(h, "_inob", False)
-           for h in root.handlers):
+    if any(
+        isinstance(h, logging.FileHandler) and getattr(h, "_inob", False) for h in root.handlers
+    ):
         return
     if isinstance(level, str):
         level = logging.getLevelName(level.upper())
@@ -88,14 +90,14 @@ def begin_capture(level: int | str = "INFO") -> None:
     sh = logging.StreamHandler(sys.stderr)
     sh.setFormatter(formatter)
     sh.setLevel(level)
-    sh._inob = True   # type: ignore[attr-defined]
+    sh._inob = True  # type: ignore[attr-defined]
     root.addHandler(sh)
 
     # capacity high enough that config loading never flushes it, and no target,
     # so nothing is emitted twice.
     buf = logging.handlers.MemoryHandler(capacity=10_000, flushLevel=logging.CRITICAL + 1)
     buf.setLevel(level)
-    buf._inob = True        # type: ignore[attr-defined]
+    buf._inob = True  # type: ignore[attr-defined]
     buf._inob_buffer = True  # type: ignore[attr-defined]
     root.addHandler(buf)
 
@@ -105,7 +107,7 @@ def _take_buffer(root: logging.Logger) -> list[logging.LogRecord]:
     records: list[logging.LogRecord] = []
     for h in [h for h in root.handlers if getattr(h, "_inob_buffer", False)]:
         records.extend(getattr(h, "buffer", []))
-        h.buffer = []       # type: ignore[attr-defined]
+        h.buffer = []  # type: ignore[attr-defined]
         root.removeHandler(h)
         h.close()
     return records

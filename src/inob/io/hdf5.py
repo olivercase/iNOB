@@ -26,6 +26,7 @@ On-disk schemas (kept stable for backward compat with existing artefacts):
     /grad/chanunit             (C,)    bytes
     /grad/unit                 ()      bytes      — scalar b"mm"
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,6 +50,7 @@ class SchemaError(ValueError):
 
 
 # ── atomic writes ──────────────────────────────────────────────────────────
+
 
 @contextmanager
 def atomic_write_hdf5(path: Path) -> Iterator[h5py.File]:
@@ -87,11 +89,12 @@ def _encode_strings(strs: list[str], width: int | None = None) -> np.ndarray:
 
 # ── geometry ───────────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class CompartmentMesh:
     name: str
-    vertices: np.ndarray   # (N, 3) float64, mm
-    faces: np.ndarray      # (M, 3) int64, 0-indexed
+    vertices: np.ndarray  # (N, 3) float64, mm
+    faces: np.ndarray  # (M, 3) int64, 0-indexed
 
 
 @dataclass(frozen=True)
@@ -108,11 +111,11 @@ def save_geometry(path: Path, geom: Geometry) -> None:
     with atomic_write_hdf5(path) as f:
         for name, comp in geom.compartments.items():
             v = np.asarray(comp.vertices, dtype=np.float64)
-            faces = np.asarray(comp.faces, dtype=np.int64) + 1   # 1-indexed for MATLAB
+            faces = np.asarray(comp.faces, dtype=np.int64) + 1  # 1-indexed for MATLAB
             g = f.create_group(name)
-            g.create_dataset("vertices", data=v.T)               # (3, N)
-            g.create_dataset("faces",    data=faces.astype(np.float64).T)  # (3, M)
-            g.create_dataset("unit",     data=UNIT_MM)
+            g.create_dataset("vertices", data=v.T)  # (3, N)
+            g.create_dataset("faces", data=faces.astype(np.float64).T)  # (3, M)
+            g.create_dataset("unit", data=UNIT_MM)
     logger.info("Wrote geometry → %s (%d compartments)", path, len(geom.compartments))
 
 
@@ -132,10 +135,11 @@ def load_geometry(path: Path) -> Geometry:
             f_raw = g["faces"][...]
             # (3, N) → (N, 3); detect orientation
             v = v_raw.T if v_raw.shape[0] == 3 and v_raw.shape[1] != 3 else v_raw
-            faces = (f_raw.T if f_raw.shape[0] == 3 and f_raw.shape[1] != 3 else f_raw)
-            faces = np.asarray(faces, dtype=np.int64) - 1        # back to 0-indexed
-            comps[name] = CompartmentMesh(name=name, vertices=np.asarray(v, dtype=np.float64),
-                                          faces=faces)
+            faces = f_raw.T if f_raw.shape[0] == 3 and f_raw.shape[1] != 3 else f_raw
+            faces = np.asarray(faces, dtype=np.int64) - 1  # back to 0-indexed
+            comps[name] = CompartmentMesh(
+                name=name, vertices=np.asarray(v, dtype=np.float64), faces=faces
+            )
     return Geometry(compartments=comps)
 
 
@@ -151,25 +155,23 @@ def validate_geometry(geom: Geometry, *, require_units_mm: bool = True) -> None:
         if not np.isfinite(c.vertices).all():
             raise SchemaError(f"{name}: vertices contain non-finite values")
         if c.faces.max() >= len(c.vertices) or c.faces.min() < 0:
-            raise SchemaError(
-                f"{name}: face index out of range [0, {len(c.vertices)})"
-            )
+            raise SchemaError(f"{name}: face index out of range [0, {len(c.vertices)})")
         if require_units_mm:
             extent = float(np.ptp(c.vertices, axis=0).max())
             if not (1.0 <= extent <= 10_000.0):
                 raise SchemaError(
-                    f"{name}: bbox extent {extent:.3g} is implausible for mm "
-                    f"(expected 1..10000 mm)"
+                    f"{name}: bbox extent {extent:.3g} is implausible for mm (expected 1..10000 mm)"
                 )
 
 
 # ── FEM ────────────────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class FemMesh:
-    nodes: np.ndarray            # (N, 3) float64 mm
-    tets: np.ndarray             # (M, 4) int32 0-indexed
-    tissue: np.ndarray           # (M,) int32 1..K
+    nodes: np.ndarray  # (N, 3) float64 mm
+    tets: np.ndarray  # (M, 4) int32 0-indexed
+    tissue: np.ndarray  # (M,) int32 1..K
     tissue_labels: tuple[str, ...]
     unit: str = "mm"
 
@@ -192,7 +194,10 @@ def save_fem(path: Path, mesh: FemMesh) -> None:
         f.create_dataset("unit", data=UNIT_MM)
     logger.info(
         "Wrote FEM → %s (%d nodes, %d tets, %d tissues)",
-        path, len(nodes), len(tets), len(labels),
+        path,
+        len(nodes),
+        len(tets),
+        len(labels),
     )
 
 
@@ -216,9 +221,13 @@ def load_fem(path: Path) -> FemMesh:
                 unit = bytes(f["unit"][...].flatten().tolist()).decode().strip("\x00") or "mm"
             except Exception:
                 unit = "mm"
-    return FemMesh(nodes=nodes, tets=tets.astype(np.int32),
-                   tissue=tissue.astype(np.int32),
-                   tissue_labels=labels, unit=unit)
+    return FemMesh(
+        nodes=nodes,
+        tets=tets.astype(np.int32),
+        tissue=tissue.astype(np.int32),
+        tissue_labels=labels,
+        unit=unit,
+    )
 
 
 def validate_fem(
@@ -233,9 +242,7 @@ def validate_fem(
     if mesh.tets.ndim != 2 or mesh.tets.shape[1] != 4:
         raise SchemaError(f"tets must be (M, 4); got {mesh.tets.shape}")
     if mesh.tissue.shape != (mesh.tets.shape[0],):
-        raise SchemaError(
-            f"tissue length {mesh.tissue.shape} != n_tets {mesh.tets.shape[0]}"
-        )
+        raise SchemaError(f"tissue length {mesh.tissue.shape} != n_tets {mesh.tets.shape[0]}")
     if not np.isfinite(mesh.nodes).all():
         raise SchemaError("nodes contain non-finite values")
     n = len(mesh.nodes)
@@ -263,11 +270,12 @@ def validate_fem(
 
 # ── sensor array (FieldTrip grad layout) ───────────────────────────────────
 
+
 @dataclass(frozen=True)
 class SensorArray:
-    coilpos: np.ndarray        # (C, 3) float64 mm
-    coilori: np.ndarray        # (C, 3) float64 unit-norm
-    labels: tuple[str, ...]    # length C
+    coilpos: np.ndarray  # (C, 3) float64 mm
+    coilori: np.ndarray  # (C, 3) float64 unit-norm
+    labels: tuple[str, ...]  # length C
     chantype: tuple[str, ...]  # length C, default "megmag"
     chanunit: tuple[str, ...]  # length C, default "T"
     unit: str = "mm"
@@ -281,10 +289,10 @@ def save_sensors(path: Path, sensors: SensorArray) -> None:
         g = f.create_group("grad")
         g.create_dataset("coilpos", data=pos)
         g.create_dataset("coilori", data=ori)
-        g.create_dataset("label",    data=_encode_strings(list(sensors.labels)))
+        g.create_dataset("label", data=_encode_strings(list(sensors.labels)))
         g.create_dataset("chantype", data=_encode_strings(list(sensors.chantype)))
         g.create_dataset("chanunit", data=_encode_strings(list(sensors.chanunit)))
-        g.create_dataset("unit",     data=np.bytes_(sensors.unit.encode("ascii")))
+        g.create_dataset("unit", data=np.bytes_(sensors.unit.encode("ascii")))
     logger.info("Wrote sensors → %s (%d channels)", path, len(pos))
 
 
@@ -303,10 +311,14 @@ def load_sensors(path: Path) -> SensorArray:
         pos = np.asarray(g["coilpos"][...], dtype=np.float64)
         ori = np.asarray(g["coilori"][...], dtype=np.float64)
         labels = tuple(_decode_bytes(g["label"][...]))
-        chantype = tuple(_decode_bytes(g["chantype"][...])) if "chantype" in g \
-                   else tuple(["megmag"] * len(pos))
-        chanunit = tuple(_decode_bytes(g["chanunit"][...])) if "chanunit" in g \
-                   else tuple(["T"] * len(pos))
+        chantype = (
+            tuple(_decode_bytes(g["chantype"][...]))
+            if "chantype" in g
+            else tuple(["megmag"] * len(pos))
+        )
+        chanunit = (
+            tuple(_decode_bytes(g["chanunit"][...])) if "chanunit" in g else tuple(["T"] * len(pos))
+        )
         unit = "mm"
         if "unit" in g:
             try:
@@ -316,8 +328,9 @@ def load_sensors(path: Path) -> SensorArray:
     n = ori.shape[0]
     if n and not np.allclose(np.linalg.norm(ori, axis=1), 1.0, atol=1e-6):
         ori = ori / np.linalg.norm(ori, axis=1, keepdims=True)
-    return SensorArray(coilpos=pos, coilori=ori, labels=labels,
-                       chantype=chantype, chanunit=chanunit, unit=unit)
+    return SensorArray(
+        coilpos=pos, coilori=ori, labels=labels, chantype=chantype, chanunit=chanunit, unit=unit
+    )
 
 
 def validate_sensors(sensors: SensorArray) -> None:
@@ -327,9 +340,11 @@ def validate_sensors(sensors: SensorArray) -> None:
     if sensors.coilori.shape != sensors.coilpos.shape:
         raise SchemaError("coilori must match coilpos shape")
     n = len(sensors.coilpos)
-    for name, seq in (("labels", sensors.labels),
-                      ("chantype", sensors.chantype),
-                      ("chanunit", sensors.chanunit)):
+    for name, seq in (
+        ("labels", sensors.labels),
+        ("chantype", sensors.chantype),
+        ("chanunit", sensors.chanunit),
+    ):
         if len(seq) != n:
             raise SchemaError(f"{name} length {len(seq)} != n_channels {n}")
     if n and not np.isfinite(sensors.coilpos).all():
@@ -343,6 +358,7 @@ def validate_sensors(sensors: SensorArray) -> None:
 
 
 # ── convenience ────────────────────────────────────────────────────────────
+
 
 def write_with_validation(
     path: Path, write_fn: Callable[[Path], None], validate_fn: Callable[[Path], None]

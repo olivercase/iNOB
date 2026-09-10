@@ -15,6 +15,7 @@ Recomputing the leadfield is the expensive step (~7 min per chunk × 32
 chunks for the full 8190-channel array). For research-paper figures we
 typically run on a *coarse* sensor subset or use the cluster.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,7 @@ class PerturbationResult:
 
 def _channel_amplitude(L: np.ndarray) -> np.ndarray:
     """RMS amplitude per channel (across all source moments)."""
-    return np.sqrt(np.mean(L ** 2, axis=1))
+    return np.sqrt(np.mean(L**2, axis=1))
 
 
 def relative_change(L_perturbed: np.ndarray, L_baseline: np.ndarray) -> np.ndarray:
@@ -54,12 +55,15 @@ def relative_change(L_perturbed: np.ndarray, L_baseline: np.ndarray) -> np.ndarr
 
 
 def summarise_perturbation(
-    rel: np.ndarray, *, tissue: str, factor: float,
+    rel: np.ndarray,
+    *,
+    tissue: str,
+    factor: float,
 ) -> PerturbationResult:
     return PerturbationResult(
         tissue=tissue,
         factor=factor,
-        rms_rel_change=float(np.sqrt(np.mean(rel ** 2))),
+        rms_rel_change=float(np.sqrt(np.mean(rel**2))),
         p50_rel_change=float(np.percentile(rel, 50)),
         p95_rel_change=float(np.percentile(rel, 95)),
     )
@@ -90,16 +94,17 @@ def sweep(
     results: list[PerturbationResult] = []
     for tissue in cfg.sensitivity.tissues:
         if tissue not in cfg.forward.conductivities_sm:
-            logger.warning("sensitivity.tissues: %r not in conductivities_sm; skipping",
-                           tissue)
+            logger.warning("sensitivity.tissues: %r not in conductivities_sm; skipping", tissue)
             continue
         sigma0 = cfg.forward.conductivities_sm[tissue]
         for factor in cfg.sensitivity.perturbations:
             new_sigma = float(sigma0) * float(factor)
-            logger.info("[sensitivity] %s × %.2f (σ %.4g → %.4g S/m)",
-                        tissue, factor, sigma0, new_sigma)
+            logger.info(
+                "[sensitivity] %s × %.2f (σ %.4g → %.4g S/m)", tissue, factor, sigma0, new_sigma
+            )
 
             from dataclasses import replace
+
             new_cond = dict(cfg.forward.conductivities_sm)
             new_cond[tissue] = new_sigma
             cfg_p = replace(cfg, forward=replace(cfg.forward, conductivities_sm=new_cond))
@@ -111,7 +116,8 @@ def sweep(
             res = summarise_perturbation(rel, tissue=tissue, factor=factor)
             logger.info(
                 "  rel change rms=%.3f%% p50=%.3f%% p95=%.3f%%",
-                100 * res.rms_rel_change, 100 * res.p50_rel_change,
+                100 * res.rms_rel_change,
+                100 * res.p50_rel_change,
                 100 * res.p95_rel_change,
             )
             results.append(res)

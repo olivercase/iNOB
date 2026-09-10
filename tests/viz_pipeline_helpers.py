@@ -4,6 +4,7 @@ Not a test module itself (no ``test_`` prefix) — pytest will not collect it.
 Builds a tiny but complete on-disk pipeline (geometry, MEG/EEG sensors,
 MEG/EEG leadfields) under a tmp_path project root, using ``configs/tiny_test.yaml``.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -43,12 +44,13 @@ def _build_meg_sensors(n_rings: int = 6) -> SensorArray:
         coilori[3 * i + 0] = R[i]
         coilori[3 * i + 1] = T1[i]
         coilori[3 * i + 2] = T2[i]
-    labels = tuple(
-        f"mag-{i // 3:04d}-{['R', 'T1', 'T2'][i % 3]}" for i in range(3 * n)
-    )
+    labels = tuple(f"mag-{i // 3:04d}-{['R', 'T1', 'T2'][i % 3]}" for i in range(3 * n))
     return SensorArray(
-        coilpos=coilpos, coilori=coilori, labels=labels,
-        chantype=tuple(["megmag"] * (3 * n)), chanunit=tuple(["T"] * (3 * n)),
+        coilpos=coilpos,
+        coilori=coilori,
+        labels=labels,
+        chantype=tuple(["megmag"] * (3 * n)),
+        chanunit=tuple(["T"] * (3 * n)),
         unit="mm",
     )
 
@@ -60,8 +62,11 @@ def _build_electrodes(rows: int = 2, cols: int = 4, pitch: float = 5.0) -> Senso
     n = len(pos)
     labels = tuple(f"elec-{r:02d}-{c:02d}" for r in range(rows) for c in range(cols))
     return SensorArray(
-        coilpos=pos, coilori=np.tile([0.0, -1.0, 0.0], (n, 1)),
-        labels=labels, chantype=tuple(["eeg"] * n), chanunit=tuple(["V"] * n),
+        coilpos=pos,
+        coilori=np.tile([0.0, -1.0, 0.0], (n, 1)),
+        labels=labels,
+        chantype=tuple(["eeg"] * n),
+        chanunit=tuple(["V"] * n),
         unit="mm",
     )
 
@@ -70,9 +75,7 @@ def _build_leadfield(sensors: SensorArray, *, seed: int, scale: float) -> Leadfi
     n_c = sensors.coilpos.shape[0]
     rng = np.random.default_rng(seed)
     L_fT = rng.standard_normal((n_c, 3 * N_SOURCES)) * scale
-    source_pos = np.column_stack(
-        [np.zeros(N_SOURCES), np.zeros(N_SOURCES), SOURCE_Z]
-    )
+    source_pos = np.column_stack([np.zeros(N_SOURCES), np.zeros(N_SOURCES), SOURCE_Z])
     return Leadfield(
         L=L_fT * 1e-6,
         L_fT_per_nAm=L_fT,
@@ -95,18 +98,20 @@ def build_pipeline_cfg(tmp_path: Path) -> Config:
     skin = trimesh.creation.icosphere(radius=1.0, subdivisions=4)
     skin.vertices = skin.vertices * np.array([100.0, 100.0, 300.0])
     vagus = trimesh.creation.icosphere(radius=15.0, subdivisions=2)
-    geom = Geometry(compartments={
-        "mesh_skin": CompartmentMesh(
-            name="mesh_skin",
-            vertices=np.asarray(skin.vertices, dtype=np.float64),
-            faces=np.asarray(skin.faces, dtype=np.int64),
-        ),
-        "mesh_vagus_left": CompartmentMesh(
-            name="mesh_vagus_left",
-            vertices=np.asarray(vagus.vertices, dtype=np.float64),
-            faces=np.asarray(vagus.faces, dtype=np.int64),
-        ),
-    })
+    geom = Geometry(
+        compartments={
+            "mesh_skin": CompartmentMesh(
+                name="mesh_skin",
+                vertices=np.asarray(skin.vertices, dtype=np.float64),
+                faces=np.asarray(skin.faces, dtype=np.int64),
+            ),
+            "mesh_vagus_left": CompartmentMesh(
+                name="mesh_vagus_left",
+                vertices=np.asarray(vagus.vertices, dtype=np.float64),
+                faces=np.asarray(vagus.faces, dtype=np.int64),
+            ),
+        }
+    )
     save_geometry(cfg.outputs.geometry_mat, geom)
 
     meg_sensors = _build_meg_sensors()

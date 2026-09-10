@@ -6,6 +6,7 @@ curvature: it over-fills the volume several-fold and drags the centroid off
 the true axis — and the centroid is exactly where source dipoles get sampled.
 These tests use a synthetic curved tube so they do not depend on the atlas.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -17,8 +18,9 @@ from inob.mesh.shrinkwrap import occupancy_from_mesh
 from inob.mesh.voxelize import voxelize_mesh, voxelize_solid_for_mesh
 
 
-def _curved_tube(radius: float = 5.0, length: float = 400.0,
-                 bow: float = 25.0, n: int = 120, seg: int = 16) -> trimesh.Trimesh:
+def _curved_tube(
+    radius: float = 5.0, length: float = 400.0, bow: float = 25.0, n: int = 120, seg: int = 16
+) -> trimesh.Trimesh:
     """An S-shaped tube: straight in z, bowed in y — a spinal cord in miniature.
 
     The double bend matters: it mimics the cervical lordosis and thoracic
@@ -41,10 +43,8 @@ def _curved_tube(radius: float = 5.0, length: float = 400.0,
     v = np.cross(tangents, u)
 
     theta = np.linspace(0.0, 2.0 * np.pi, seg, endpoint=False)
-    rings = (
-        centres[:, None, :]
-        + radius * (np.cos(theta)[None, :, None] * u[:, None, :]
-                    + np.sin(theta)[None, :, None] * v[:, None, :])
+    rings = centres[:, None, :] + radius * (
+        np.cos(theta)[None, :, None] * u[:, None, :] + np.sin(theta)[None, :, None] * v[:, None, :]
     )
     verts = rings.reshape(-1, 3)
 
@@ -85,14 +85,12 @@ def test_hull_overfills_a_curved_tube_far_worse_than_surface() -> None:
     """
     tube = _curved_tube()
     pitch = 3.0
-    voxel_mm3 = pitch ** 3
+    voxel_mm3 = pitch**3
     true_cm3 = tube.volume / 1000.0
     X, Y, Z, mn = _grid(tube, pitch)
 
-    hull_cm3 = voxelize_solid_for_mesh(
-        tube, X, Y, Z, pitch=pitch, mn=mn).sum() * voxel_mm3 / 1000.0
-    surf_cm3 = voxelize_mesh(
-        tube, X, pitch=pitch, mn=mn, closing_mm=2.0).sum() * voxel_mm3 / 1000.0
+    hull_cm3 = voxelize_solid_for_mesh(tube, X, Y, Z, pitch=pitch, mn=mn).sum() * voxel_mm3 / 1000.0
+    surf_cm3 = voxelize_mesh(tube, X, pitch=pitch, mn=mn, closing_mm=2.0).sum() * voxel_mm3 / 1000.0
 
     # The hull inflates the tissue several-fold...
     assert hull_cm3 > 3.0 * true_cm3
@@ -140,6 +138,7 @@ def test_every_voxelisation_entry_declares_a_method() -> None:
 
 # ── repair guards ──────────────────────────────────────────────────────────
 
+
 def test_drop_degenerate_components_removes_stray_triangles() -> None:
     """The shipped cord STL carries two isolated single triangles; they break
     boolean union and mislead pymeshfix into keeping a fragment."""
@@ -173,6 +172,7 @@ def test_drop_degenerate_components_keeps_multiple_real_bodies() -> None:
 
 # ── reproducibility ────────────────────────────────────────────────────────
 
+
 def test_surface_sampling_is_seeded() -> None:
     """Unseeded sampling draws from the global RNG, so adding a compartment
     would perturb the geometry of every compartment built after it."""
@@ -192,6 +192,7 @@ def test_surface_sampling_is_seeded() -> None:
 
 def test_compartment_seeds_are_independent_of_build_order() -> None:
     from inob.geometry.builder import compartment_seed
+
     # Same name, same seed, regardless of what else is in the config.
     assert compartment_seed("mesh_spinal_cord", 0) == compartment_seed("mesh_spinal_cord", 0)
     assert compartment_seed("mesh_spinal_cord", 0) != compartment_seed("mesh_bone", 0)

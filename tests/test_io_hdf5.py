@@ -1,4 +1,5 @@
 """HDF5 I/O tests: schema, atomic writes, validation."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -28,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ── geometry ───────────────────────────────────────────────────────────────
 
+
 def test_geometry_roundtrip(tmp_path: Path, tiny_geometry: Geometry) -> None:
     p = tmp_path / "geom.mat"
     save_geometry(p, tiny_geometry)
@@ -55,19 +57,30 @@ def test_geometry_validate_rejects_bad_face_index(tiny_geometry: Geometry) -> No
 def test_geometry_validate_rejects_nonfinite() -> None:
     verts = np.array([[0.0, 0.0, 0.0], [np.nan, 0.0, 0.0], [0.0, 1.0, 0.0]])
     faces = np.array([[0, 1, 2]], dtype=np.int64)
-    g = Geometry(compartments={
-        "mesh_skin": CompartmentMesh("mesh_skin", verts, faces),
-    })
+    g = Geometry(
+        compartments={
+            "mesh_skin": CompartmentMesh("mesh_skin", verts, faces),
+        }
+    )
     with pytest.raises(SchemaError, match="non-finite"):
         validate_geometry(g)
 
 
 def test_geometry_unit_guard_rejects_metres() -> None:
     # 0.1 m cube — extent 0.1, below 1 mm threshold
-    verts = np.array([
-        [0, 0, 0], [0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1],
-        [0.1, 0.1, 0], [0.1, 0, 0.1], [0, 0.1, 0.1], [0.1, 0.1, 0.1],
-    ], dtype=np.float64)
+    verts = np.array(
+        [
+            [0, 0, 0],
+            [0.1, 0, 0],
+            [0, 0.1, 0],
+            [0, 0, 0.1],
+            [0.1, 0.1, 0],
+            [0.1, 0, 0.1],
+            [0, 0.1, 0.1],
+            [0.1, 0.1, 0.1],
+        ],
+        dtype=np.float64,
+    )
     faces = np.array([[0, 1, 2]], dtype=np.int64)
     g = Geometry(compartments={"mesh_skin": CompartmentMesh("mesh_skin", verts, faces)})
     with pytest.raises(SchemaError, match="implausible for mm"):
@@ -75,6 +88,7 @@ def test_geometry_unit_guard_rejects_metres() -> None:
 
 
 # ── FEM ────────────────────────────────────────────────────────────────────
+
 
 def test_fem_roundtrip(tiny_fem_path: Path, tiny_fem: FemMesh) -> None:
     loaded = load_fem(tiny_fem_path)
@@ -93,8 +107,9 @@ def test_fem_validate_rejects_oob_tet() -> None:
     nodes = np.zeros((4, 3))
     nodes[1, 0] = nodes[2, 1] = nodes[3, 2] = 10.0
     tets = np.array([[0, 1, 2, 99]], dtype=np.int32)
-    mesh = FemMesh(nodes=nodes, tets=tets, tissue=np.array([1], dtype=np.int32),
-                   tissue_labels=("a",))
+    mesh = FemMesh(
+        nodes=nodes, tets=tets, tissue=np.array([1], dtype=np.int32), tissue_labels=("a",)
+    )
     with pytest.raises(SchemaError, match="out of range"):
         validate_fem(mesh)
 
@@ -103,8 +118,9 @@ def test_fem_validate_rejects_noncontiguous_tissues() -> None:
     nodes = np.eye(4, 3) * 10
     nodes[0] = 0
     tets = np.array([[0, 1, 2, 3]], dtype=np.int32)
-    mesh = FemMesh(nodes=nodes, tets=tets, tissue=np.array([3], dtype=np.int32),
-                   tissue_labels=("a", "b", "c"))
+    mesh = FemMesh(
+        nodes=nodes, tets=tets, tissue=np.array([3], dtype=np.int32), tissue_labels=("a", "b", "c")
+    )
     with pytest.raises(SchemaError, match="not contiguous"):
         validate_fem(mesh)
 
@@ -144,6 +160,7 @@ def test_fem_load_legacy_geometry() -> None:
 
 # ── sensors ────────────────────────────────────────────────────────────────
 
+
 def test_sensors_roundtrip(tiny_sensors_path: Path, tiny_sensors: SensorArray) -> None:
     loaded = load_sensors(tiny_sensors_path)
     np.testing.assert_array_equal(loaded.coilpos, tiny_sensors.coilpos)
@@ -182,6 +199,7 @@ def test_sensors_load_legacy_artifact() -> None:
 
 # ── atomic write ───────────────────────────────────────────────────────────
 
+
 def test_atomic_write_leaves_no_partial_on_failure(tmp_path: Path) -> None:
     target = tmp_path / "broken.h5"
     sentinel = "preexisting"
@@ -203,5 +221,6 @@ def test_atomic_write_replaces_atomically(tmp_path: Path) -> None:
         h.create_dataset("v", data=np.arange(5))
     # File is now real HDF5
     import h5py
+
     with h5py.File(str(target), "r") as f:
         np.testing.assert_array_equal(f["v"][...], np.arange(5))

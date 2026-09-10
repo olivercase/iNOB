@@ -5,6 +5,7 @@ Loaders accept paths or globs; on ambiguous / missing inputs they raise
 straight at the problem (instead of bubbling up ``StopIteration`` from a
 ``next(glob)`` deep in the call stack).
 """
+
 from __future__ import annotations
 
 import glob as _glob

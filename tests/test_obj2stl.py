@@ -1,4 +1,5 @@
 """OBJ → STL conversion CLI utility."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,6 +19,7 @@ def obj_file(tmp_path: Path) -> Path:
 
 
 # ── convert_obj_to_stl ──────────────────────────────────────────────────
+
 
 def test_convert_obj_to_stl_basic(tmp_path: Path, obj_file: Path) -> None:
     stl_path = tmp_path / "mesh.stl"
@@ -60,6 +62,7 @@ def test_convert_obj_to_stl_same_path_raises(tmp_path: Path) -> None:
 
 # ── _parse_arguments ─────────────────────────────────────────────────────
 
+
 def test_parse_arguments_both_positional() -> None:
     args = _parse_arguments(["in.obj", "out.stl"])
     assert args.obj_path == Path("in.obj")
@@ -74,6 +77,7 @@ def test_parse_arguments_none_given() -> None:
 
 # ── main ─────────────────────────────────────────────────────────────────
 
+
 def test_main_success(tmp_path: Path, obj_file: Path, capsys: pytest.CaptureFixture) -> None:
     stl_path = tmp_path / "out.stl"
     rc = main([str(obj_file), str(stl_path)])
@@ -83,9 +87,7 @@ def test_main_success(tmp_path: Path, obj_file: Path, capsys: pytest.CaptureFixt
     assert "Converted" in out
 
 
-def test_main_missing_input_returns_1(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
+def test_main_missing_input_returns_1(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     rc = main([str(tmp_path / "missing.obj"), str(tmp_path / "out.stl")])
     assert rc == 1
     err = capsys.readouterr().err

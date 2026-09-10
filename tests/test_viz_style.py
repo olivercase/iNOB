@@ -1,4 +1,5 @@
 """Tests for inob.viz.style (palette, cmaps, rcParams, panel labels)."""
+
 from __future__ import annotations
 
 import matplotlib
@@ -33,8 +34,8 @@ def test_divergent_cmap_endpoints() -> None:
     hi = np.array(cmap(1.0))
     mid = np.array(cmap(0.5))
     # blue at 0, red at 1, white-ish in the middle.
-    assert lo[2] > lo[0]   # more blue than red channel
-    assert hi[0] > hi[2]   # more red than blue channel
+    assert lo[2] > lo[0]  # more blue than red channel
+    assert hi[0] > hi[2]  # more red than blue channel
     assert mid[0] > 0.9 and mid[1] > 0.9 and mid[2] > 0.9
 
 

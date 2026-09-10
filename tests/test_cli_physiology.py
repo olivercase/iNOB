@@ -4,6 +4,7 @@ The CLI is profile-driven: it selects the target's physiology profile and
 forwards only the per-scenario knobs the user actually set into
 ``profile.scenarios(**kw)``, so each scenario keeps its own documented defaults.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,7 +35,8 @@ class _FakeProfile:
 def _patch(monkeypatch, calls):
     monkeypatch.setattr(cli_mod, "profile_for_tag", lambda tag: _FakeProfile(calls))
     monkeypatch.setattr(
-        cli_mod, "render_physiology",
+        cli_mod,
+        "render_physiology",
         lambda cfg, **kw: calls.update({"render": kw}),
     )
 
@@ -55,11 +57,26 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
 def test_main_custom_args(tmp_path, monkeypatch) -> None:
     calls = {}
     _patch(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--hr-bpm", "80", "--breath-bpm", "10", "--n-fibres-baro", "50",
-        "--n-fibres-rar", "20", "--n-fibres-sar", "5", "--fs-hz", "1000",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--hr-bpm",
+            "80",
+            "--breath-bpm",
+            "10",
+            "--n-fibres-baro",
+            "50",
+            "--n-fibres-rar",
+            "20",
+            "--n-fibres-sar",
+            "5",
+            "--fs-hz",
+            "1000",
+        ]
+    )
     assert rc == 0
     # Only the knobs the user set are forwarded, each prefixed by its scenario.
     assert calls["scenario_kw"] == {

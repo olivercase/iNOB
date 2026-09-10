@@ -19,6 +19,7 @@ The frontend (Next.js, ``gui/web``, port 3000) proxies ``/api`` here via the
 rewrites in ``gui/web/next.config.mjs``; the ``/api/run`` WebSocket connects
 straight to this port.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -131,10 +132,13 @@ app = FastAPI(title="iNOB GUI backend", version=_inob_version)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", "http://127.0.0.1:5173",  # legacy Vite frontend
-        "http://localhost:3000", "http://127.0.0.1:3000",  # Next.js frontend (gui/web)
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",  # legacy Vite frontend
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",  # Next.js frontend (gui/web)
         # …and the port Next falls back to when 3000 is taken by something else.
-        "http://localhost:3001", "http://127.0.0.1:3001",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -164,11 +168,14 @@ def system_info() -> dict[str, Any]:
         # Apple silicon is heterogeneous: perflevel0 is the performance core
         # cluster. Solving on those alone is often faster than oversubscribing
         # across the efficiency cores too, so offer it as a choice.
-        for key, target in (("hw.physicalcpu", "physical"),
-                            ("hw.perflevel0.logicalcpu", "performance")):
+        for key, target in (
+            ("hw.physicalcpu", "physical"),
+            ("hw.perflevel0.logicalcpu", "performance"),
+        ):
             try:
-                out = subprocess.run(["sysctl", "-n", key], capture_output=True,
-                                     text=True, timeout=5)
+                out = subprocess.run(
+                    ["sysctl", "-n", key], capture_output=True, text=True, timeout=5
+                )
                 if out.returncode == 0 and out.stdout.strip().isdigit():
                     value = int(out.stdout.strip())
                     if target == "physical":
@@ -283,10 +290,16 @@ def _can_solve(python: str, duneuro_path: str | None) -> bool:
     )
     try:
         out = subprocess.run(
-            [python, "-c", probe], capture_output=True, text=True, timeout=90,
-            env={**os.environ,
-                 "PYTHONPATH": os.pathsep.join(filter(None, [
-                     str(PROJECT_ROOT / "src"), os.environ.get("PYTHONPATH", "")]))},
+            [python, "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    filter(None, [str(PROJECT_ROOT / "src"), os.environ.get("PYTHONPATH", "")])
+                ),
+            },
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -303,9 +316,10 @@ def _interpreter_tag(python: str) -> str:
         return cached
     try:
         out = subprocess.run(
-            [python, "-c",
-             "import sys; print(f'python3.{sys.version_info.minor}')"],
-            capture_output=True, text=True, timeout=30,
+            [python, "-c", "import sys; print(f'python3.{sys.version_info.minor}')"],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         tag = out.stdout.strip() if out.returncode == 0 else "unknown"
     except (OSError, subprocess.SubprocessError):
@@ -366,8 +380,7 @@ def _solver_choice() -> dict[str, Any]:
     configured = _active_duneuro_path()
 
     try:
-        builds = list(duneuro_setup.discover(configured).get(
-            "candidates", []))  # type: ignore[arg-type]
+        builds = list(duneuro_setup.discover(configured).get("candidates", []))  # type: ignore[arg-type]
     except Exception as e:
         logger.warning("could not search for DUNEuro builds: %s", e)
         builds = []
@@ -389,17 +402,14 @@ def _solver_choice() -> dict[str, Any]:
         for path in paths:
             if _can_solve(python, path):
                 choice = {"python": python, "duneuro_path": path, "found": True}
-                logger.info("solver: %s%s", python,
-                            f" with {path}" if path else "")
+                logger.info("solver: %s%s", python, f" with {path}" if path else "")
                 _SOLVER["resolved"] = choice
                 return choice
 
     # Nothing works yet. Run anyway on this interpreter so the failure is the
     # pipeline's own clear message rather than a guess made here.
-    choice = {"python": explicit_py or sys.executable,
-              "duneuro_path": configured, "found": False}
-    logger.info("solver: no working DUNEuro found; runs will use %s",
-                choice["python"])
+    choice = {"python": explicit_py or sys.executable, "duneuro_path": configured, "found": False}
+    logger.info("solver: no working DUNEuro found; runs will use %s", choice["python"])
     _SOLVER["resolved"] = choice
     return choice
 
@@ -422,6 +432,7 @@ def solver_rescan() -> dict[str, Any]:
 
 
 # ── config ────────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/config")
 def get_config() -> dict[str, Any]:
@@ -466,6 +477,7 @@ def reset_config() -> dict[str, Any]:
 # user point the solver at a local build from the GUI and see, honestly, whether
 # this backend can actually load it (a build is tied to one Python version).
 
+
 def _active_duneuro_path() -> str | None:
     raw, _ = _read_raw_safe(_active_config_path())
     value = (raw.get("forward") or {}).get("duneuro_path")
@@ -473,6 +485,7 @@ def _active_duneuro_path() -> str | None:
 
 
 # ── forward-model ladder (Biot–Savart → Sarvas → FEM) ──────────────────────
+
 
 @app.post("/api/ladder")
 def run_ladder_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
@@ -489,8 +502,7 @@ def run_ladder_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
     rungs = payload.get("rungs") or list(LADDER_RUNGS)
     rungs = [r for r in rungs if r in LADDER_RUNGS]
     if not rungs:
-        raise HTTPException(status_code=422,
-                            detail={"errors": ["no valid rungs requested"]})
+        raise HTTPException(status_code=422, detail={"errors": ["no valid rungs requested"]})
 
     try:
         cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
@@ -499,7 +511,8 @@ def run_ladder_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
 
     try:
         return run_ladder(
-            cfg, rungs=rungs,
+            cfg,
+            rungs=rungs,
             Q_nAm=float(payload.get("Q_nAm", 1.0)),
             source_idx=int(payload.get("source_idx", -1)),
         )
@@ -507,9 +520,11 @@ def run_ladder_endpoint(payload: dict[str, Any]) -> dict[str, Any]:
         # Almost always: fem rung requested but geometry/mesh/leadfield missing.
         raise HTTPException(
             status_code=409,
-            detail={"errors": [str(e)],
-                    "hint": "Build the model first (Run), or drop the fem rung "
-                            "to compare only the analytic rungs."},
+            detail={
+                "errors": [str(e)],
+                "hint": "Build the model first (Run), or drop the fem rung "
+                "to compare only the analytic rungs.",
+            },
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
@@ -559,8 +574,13 @@ _MESH_CACHE = Path(tempfile.gettempdir()) / "inob_gui_meshes"
 # Viewer render order / default visibility. Skin and bone are large and occlude
 # the interior structures the user actually plans around, so they load hidden.
 _TISSUE_ORDER = [
-    "skin", "bone", "muscle", "blood_vessel",
-    "spinal_cord", "vagus_left", "vagus_right",
+    "skin",
+    "bone",
+    "muscle",
+    "blood_vessel",
+    "spinal_cord",
+    "vagus_left",
+    "vagus_right",
 ]
 _HIDDEN_BY_DEFAULT = {"skin", "bone"}
 
@@ -604,15 +624,17 @@ def _tissue_sources() -> dict[str, list[Path]]:
     if skin:
         _add("skin", [_abs_path(skin)])
 
-    for name, key in (("bone", "bone_dir"), ("muscle", "muscle_dir"),
-                      ("blood_vessel", "vessel_dir"),
-                      ("spinal_cord", "spinal_cord_dir")):
+    for name, key in (
+        ("bone", "bone_dir"),
+        ("muscle", "muscle_dir"),
+        ("blood_vessel", "vessel_dir"),
+        ("spinal_cord", "spinal_cord_dir"),
+    ):
         d = data.get(key)
         if d:
             _add(name, sorted(_abs_path(d).glob("*.stl")))
 
-    for name, key in (("vagus_left", "vagus_left_glob"),
-                      ("vagus_right", "vagus_right_glob")):
+    for name, key in (("vagus_left", "vagus_left_glob"), ("vagus_right", "vagus_right_glob")):
         pat = data.get(key)
         if pat:
             _add(name, [Path(m) for m in sorted(glob.glob(str(_abs_path(pat))))])
@@ -639,6 +661,7 @@ def _merged_stl(name: str, paths: list[Path]) -> Path | None:
         return cached
     try:
         from inob.io.stl import concat_stls
+
         mesh = concat_stls(list(paths), check_units_mm=False)
         mesh.export(cached, file_type="stl")  # binary STL
         return cached
@@ -663,11 +686,9 @@ def _mesh_index() -> dict[str, tuple[Path, int]]:
     # Same key discipline as the on-disk merge cache: paths plus mtimes, so an
     # edited/added/removed STL still invalidates immediately.
     try:
-        key = "|".join(
-            f"{n}:{p}:{p.stat().st_mtime_ns}" for n, ps in sources.items() for p in ps
-        )
+        key = "|".join(f"{n}:{p}:{p.stat().st_mtime_ns}" for n, ps in sources.items() for p in ps)
     except OSError:
-        key = None          # a source vanished mid-scan; rebuild rather than memo
+        key = None  # a source vanished mid-scan; rebuild rather than memo
     if key is not None and _MESH_INDEX_MEMO["key"] == key:
         return _MESH_INDEX_MEMO["index"]
 
@@ -726,9 +747,7 @@ _FIGURE_KEYS: tuple[tuple[str, str, str, str], ...] = (
 )
 
 # Directories under ``outputs:`` whose PNGs are all figures of one stage.
-_FIGURE_DIRS: tuple[tuple[str, str, str], ...] = (
-    ("sensitivity_dir", "forward", "Sensitivity"),
-)
+_FIGURE_DIRS: tuple[tuple[str, str, str], ...] = (("sensitivity_dir", "forward", "Sensitivity"),)
 
 _FIGURE_SCAN_LIMIT = 60
 
@@ -780,8 +799,12 @@ def _figure_index() -> OrderedDict[str, dict[str, Any]]:
         if not directory.is_dir():
             continue
         for png in sorted(directory.glob("*.png"))[:_FIGURE_SCAN_LIMIT]:
-            add(_slug(f"{dir_key}_{png.stem}"), png, stage,
-                f"{label} — {png.stem.replace('_', ' ')}")
+            add(
+                _slug(f"{dir_key}_{png.stem}"),
+                png,
+                stage,
+                f"{label} — {png.stem.replace('_', ' ')}",
+            )
 
     # Anything else a run dropped under the output base: viz figures the config
     # does not name individually (topoplots, comparisons, physiology panels).
@@ -791,8 +814,7 @@ def _figure_index() -> OrderedDict[str, dict[str, Any]]:
         if base_path.is_dir():
             for png in sorted(base_path.rglob("*.png"))[:_FIGURE_SCAN_LIMIT]:
                 rel = png.relative_to(base_path)
-                add(_slug(str(rel.with_suffix(""))), png, "viz",
-                    png.stem.replace("_", " "))
+                add(_slug(str(rel.with_suffix(""))), png, "viz", png.stem.replace("_", " "))
 
     return index
 
@@ -801,8 +823,7 @@ def _figure_index() -> OrderedDict[str, dict[str, Any]]:
 def list_figures() -> dict[str, Any]:
     return {
         "figures": [
-            {k: v for k, v in meta.items() if k != "path"}
-            for meta in _figure_index().values()
+            {k: v for k, v in meta.items() if k != "path"} for meta in _figure_index().values()
         ]
     }
 
@@ -823,6 +844,7 @@ def get_figure(key: str) -> FileResponse:
 # actually reads for a solved source — so the GUI can draw it in the 3-D well
 # and let it be interrogated.
 
+
 @app.get("/api/sensors")
 def sensor_array(modality: str = "meg") -> dict[str, Any]:
     """Sensor positions and orientations for the array that was built."""
@@ -833,13 +855,14 @@ def sensor_array(modality: str = "meg") -> dict[str, Any]:
     except ConfigError as e:
         raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
 
-    path = (cfg.outputs.electrodes_mat if modality.lower() == "eeg"
-            else cfg.outputs.sensors_mat)
+    path = cfg.outputs.electrodes_mat if modality.lower() == "eeg" else cfg.outputs.sensors_mat
     if not path.exists():
         raise HTTPException(
             status_code=409,
-            detail={"errors": [f"no {modality.upper()} array has been built yet"],
-                    "hint": "Run the Sensor array step first."},
+            detail={
+                "errors": [f"no {modality.upper()} array has been built yet"],
+                "hint": "Run the Sensor array step first.",
+            },
         )
 
     array = load_sensors(path)
@@ -871,16 +894,16 @@ def field_map(source: int = 0, modality: str = "meg") -> dict[str, Any]:
     except ConfigError as e:
         raise HTTPException(status_code=422, detail={"errors": [str(e)]}) from e
 
-    path = (cfg.outputs.forward_eeg_npz if modality.lower() == "eeg"
-            else cfg.outputs.forward_npz)
+    path = cfg.outputs.forward_eeg_npz if modality.lower() == "eeg" else cfg.outputs.forward_npz
     try:
         lf = load_leadfield(path)
     except FileNotFoundError as e:
         raise HTTPException(
             status_code=409,
-            detail={"errors": [str(e)],
-                    "hint": "Run the forward solve — the field map is read from "
-                            "its leadfield."},
+            detail={
+                "errors": [str(e)],
+                "hint": "Run the forward solve — the field map is read from its leadfield.",
+            },
         ) from e
 
     n_sources = int(np.asarray(lf.source_pos).shape[0])
@@ -894,7 +917,7 @@ def field_map(source: int = 0, modality: str = "meg") -> dict[str, Any]:
     # The magnitude over those three is what a sensor would read for a unit
     # dipole there, whatever its orientation.
     L = np.asarray(lf.L_fT_per_nAm, dtype=float)
-    block = L[:, 3 * source: 3 * source + 3]
+    block = L[:, 3 * source : 3 * source + 3]
     values = np.linalg.norm(block, axis=1)
 
     pos = np.asarray(lf.coil_pos, dtype=float)
@@ -907,11 +930,12 @@ def field_map(source: int = 0, modality: str = "meg") -> dict[str, Any]:
         "source_pos": [round(float(v), 2) for v in src],
         "unit": unit,
         "peak": round(float(values.max()), 4),
-        "rms": round(float(np.sqrt((values ** 2).mean())), 4),
+        "rms": round(float(np.sqrt((values**2).mean())), 4),
         "count": len(values),
         "positions": [[round(float(v), 2) for v in p] for p in pos],
-        "orientations": [[round(float(v), 4) for v in o]
-                         for o in np.asarray(lf.coil_orient, dtype=float)],
+        "orientations": [
+            [round(float(v), 4) for v in o] for o in np.asarray(lf.coil_orient, dtype=float)
+        ],
         "values": [round(float(v), 4) for v in values],
         "names": list(lf.channel_names)[: len(values)],
     }
@@ -940,9 +964,11 @@ def volume_field(max_points: int = 20000) -> dict[str, Any]:
     except FileNotFoundError as e:
         raise HTTPException(
             status_code=409,
-            detail={"errors": [str(e)],
-                    "hint": "Run `inob volume-field --stimulation` — the cloud "
-                            "is read from the NPZ it writes."},
+            detail={
+                "errors": [str(e)],
+                "hint": "Run `inob volume-field --stimulation` — the cloud "
+                "is read from the NPZ it writes.",
+            },
         ) from e
 
     pos = np.asarray(field.positions_mm, dtype=float)
@@ -975,6 +1001,7 @@ def volume_field(max_points: int = 20000) -> dict[str, Any]:
 # requested tissue — optionally restricted to a named vertebral level, which is
 # how a spinal study actually specifies where it is looking.
 
+
 @app.get("/api/sources/suggest")
 def suggest_sources(
     tissue: str = "vagus_left",
@@ -995,17 +1022,21 @@ def suggest_sources(
     if not cfg.outputs.fem_mat.exists():
         raise HTTPException(
             status_code=409,
-            detail={"errors": ["the FEM mesh has not been built yet"],
-                    "hint": "Run the FEM meshing step first — sources are placed "
-                            "inside its tetrahedra."},
+            detail={
+                "errors": ["the FEM mesh has not been built yet"],
+                "hint": "Run the FEM meshing step first — sources are placed "
+                "inside its tetrahedra.",
+            },
         )
 
     fem = load_fem(cfg.outputs.fem_mat)
     if tissue not in fem.label_to_id:
         raise HTTPException(
             status_code=422,
-            detail={"errors": [f"{tissue!r} is not in the mesh"],
-                    "hint": f"have: {', '.join(sorted(fem.label_to_id))}"},
+            detail={
+                "errors": [f"{tissue!r} is not in the mesh"],
+                "hint": f"have: {', '.join(sorted(fem.label_to_id))}",
+            },
         )
 
     nodes = np.asarray(fem.nodes)
@@ -1022,8 +1053,10 @@ def suggest_sources(
         if any(p.strip() not in VERTEBRA_LEVELS for p in key.split("-") if p.strip()):
             raise HTTPException(
                 status_code=422,
-                detail={"errors": [f"unknown vertebral level {level!r}"],
-                        "hint": f"have: {', '.join(VERTEBRA_LEVELS)}"},
+                detail={
+                    "errors": [f"unknown vertebral level {level!r}"],
+                    "hint": f"have: {', '.join(VERTEBRA_LEVELS)}",
+                },
             )
         z_lo, z_hi = level_span_z_band(cfg.data.bone_dir, key)
         band = (z_lo, z_hi)
@@ -1031,11 +1064,14 @@ def suggest_sources(
         if len(inside) == 0:
             raise HTTPException(
                 status_code=409,
-                detail={"errors": [
-                    f"no {tissue} tetrahedra lie within {key.upper()} "
-                    f"({z_lo:.0f}–{z_hi:.0f} mm)"],
+                detail={
+                    "errors": [
+                        f"no {tissue} tetrahedra lie within {key.upper()} "
+                        f"({z_lo:.0f}–{z_hi:.0f} mm)"
+                    ],
                     "hint": "That tissue does not reach this level. Pick another "
-                            "level, or another source tissue."},
+                    "level, or another source tissue.",
+                },
             )
         centroids = inside
 
@@ -1043,10 +1079,7 @@ def suggest_sources(
     # places sources over a span, not all at one height.
     count = max(1, min(int(count), 24))
     order = np.argsort(centroids[:, 2])
-    picks = [
-        centroids[order[int(len(order) * (i + 0.5) / count)]]
-        for i in range(count)
-    ]
+    picks = [centroids[order[int(len(order) * (i + 0.5) / count)]] for i in range(count)]
 
     return {
         "tissue": tissue,
@@ -1054,9 +1087,7 @@ def suggest_sources(
         "z_band_mm": list(band) if band else None,
         "available": len(centroids),
         "sources": [
-            {"x": round(float(pt[0]), 2),
-             "y": round(float(pt[1]), 2),
-             "z": round(float(pt[2]), 2)}
+            {"x": round(float(pt[0]), 2), "y": round(float(pt[1]), 2), "z": round(float(pt[2]), 2)}
             for pt in picks
         ],
     }
@@ -1090,9 +1121,11 @@ def sampled_sources(
     if not cfg.outputs.fem_mat.exists():
         raise HTTPException(
             status_code=409,
-            detail={"errors": ["the FEM mesh has not been built yet"],
-                    "hint": "Run the FEM meshing step first — dipoles are "
-                            "sampled inside its tetrahedra."},
+            detail={
+                "errors": ["the FEM mesh has not been built yet"],
+                "hint": "Run the FEM meshing step first — dipoles are "
+                "sampled inside its tetrahedra.",
+            },
         )
 
     fwd = cfg.forward
@@ -1137,12 +1170,13 @@ def vertebral_levels() -> dict[str, Any]:
         try:
             z_lo, z_hi = vertebra_z_band(cfg.data.bone_dir, level)
         except Exception:
-            continue          # not segmented in this dataset — simply not offered
+            continue  # not segmented in this dataset — simply not offered
         out.append({"level": level, "z_lo_mm": round(z_lo, 1), "z_hi_mm": round(z_hi, 1)})
     return {"levels": out}
 
 
 # ── cluster submission ──────────────────────────────────────────────────────────
+
 
 @app.get("/api/cluster/profiles")
 def cluster_profiles() -> dict[str, Any]:
@@ -1176,7 +1210,8 @@ def cluster_status(profile: str, job_id: str) -> dict[str, Any]:
 def cluster_fetch(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return cluster.fetch(
-            payload.get("profile"), payload.get("job_id"),
+            payload.get("profile"),
+            payload.get("job_id"),
             modality=payload.get("modality", "meg"),
         )
     except cluster.ClusterError as e:
@@ -1185,14 +1220,18 @@ def cluster_fetch(payload: dict[str, Any]) -> dict[str, Any]:
 
 # ── run (streaming logs over WebSocket) ─────────────────────────────────────────
 
+
 class _QueueLogHandler(logging.Handler):
     """A logging handler that pushes formatted records onto a thread-safe queue."""
 
     def __init__(self, q: queue.Queue[str]) -> None:
         super().__init__()
         self._q = q
-        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-                                             datefmt="%H:%M:%S"))
+        self.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)-7s %(name)s: %(message)s", datefmt="%H:%M:%S"
+            )
+        )
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -1221,8 +1260,7 @@ async def run_ws(ws: WebSocket) -> None:
     # Single-flight: refuse a second concurrent run rather than race on the
     # shared output artefacts / logger.
     if not _RUN_LOCK.acquire(blocking=False):
-        await ws.send_json({"type": "error",
-                            "message": "a pipeline run is already in progress"})
+        await ws.send_json({"type": "error", "message": "a pipeline run is already in progress"})
         await ws.close()
         return
 
@@ -1284,10 +1322,16 @@ async def run_ws(ws: WebSocket) -> None:
         """
         solver = _solver_choice()
         argv = [
-            str(solver["python"]), "-u", "-m", "inob.cli.pipeline",
-            "--config", str(_active_config_path()),
-            "--project-root", str(PROJECT_ROOT),
-            "--stages", ",".join(stages),
+            str(solver["python"]),
+            "-u",
+            "-m",
+            "inob.cli.pipeline",
+            "--config",
+            str(_active_config_path()),
+            "--project-root",
+            str(PROJECT_ROOT),
+            "--stages",
+            ",".join(stages),
         ]
         # A build found by searching is passed to the run, so an auto-detected
         # DUNEuro works without anyone having to save it into the config first.
@@ -1300,7 +1344,7 @@ async def run_ws(ws: WebSocket) -> None:
             argv += ["--set", override]
 
         env = dict(os.environ)
-        env["MPLBACKEND"] = "Agg"          # matplotlib stays off any GUI path
+        env["MPLBACKEND"] = "Agg"  # matplotlib stays off any GUI path
         # This project's src first, so the child can never pick up a stale
         # editable install of inob from elsewhere on the machine.
         env["PYTHONPATH"] = os.pathsep.join(
@@ -1313,9 +1357,14 @@ async def run_ws(ws: WebSocket) -> None:
         # them to keep burning every core with nothing to report to. Killing
         # the group takes the whole solve down together.
         proc = subprocess.Popen(
-            argv, cwd=str(PROJECT_ROOT), env=env,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, start_new_session=True,
+            argv,
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            start_new_session=True,
         )
         child["proc"] = proc
         _ACTIVE_CHILD["proc"] = proc
@@ -1328,7 +1377,9 @@ async def run_ws(ws: WebSocket) -> None:
             m = re.search(r"\[(ok|skip|FAIL)]\s+(\w+)", line)
             if m:
                 statuses[m.group(2)] = {
-                    "ok": "ran", "skip": "skipped", "FAIL": "failed",
+                    "ok": "ran",
+                    "skip": "skipped",
+                    "FAIL": "failed",
                 }[m.group(1)]
         code = proc.wait()
         child["proc"] = None
@@ -1376,22 +1427,23 @@ async def run_ws(ws: WebSocket) -> None:
 
             # Turn the solved leadfield into the planning answer. This is numpy
             # and h5py only — no rendering — so it is safe on this thread.
-            cfg = load_config(_active_config_path(), overrides=overrides,
-                              project_root=PROJECT_ROOT)
+            cfg = load_config(_active_config_path(), overrides=overrides, project_root=PROJECT_ROOT)
             try:
                 result["detect"] = compute_detectability(
-                    cfg, strengths_nAm=strengths or None,
-                    threshold_snr=threshold_snr, modality=modality,
+                    cfg,
+                    strengths_nAm=strengths or None,
+                    threshold_snr=threshold_snr,
+                    modality=modality,
                 )
             except FileNotFoundError as e:
                 logger.info("detectability skipped (no leadfield yet): %s", e)
                 result["detect_unavailable"] = {
                     "reason": "No leadfield has been computed yet, so "
-                              "trials-to-detect cannot be calculated.",
+                    "trials-to-detect cannot be calculated.",
                     "detail": str(e),
                     "hint": "Run the full pipeline including the forward "
-                            "solve. That stage needs DUNEuro (duneuropy) "
-                            "installed, or submit it to the cluster.",
+                    "solve. That stage needs DUNEuro (duneuropy) "
+                    "installed, or submit it to the cluster.",
                 }
         except Exception as e:  # surfaced to the client, not swallowed
             error["message"] = f"{type(e).__name__}: {e}"
@@ -1431,10 +1483,12 @@ async def run_ws(ws: WebSocket) -> None:
                     # stop it: ask it to terminate rather than waiting out a
                     # solve the user has already abandoned.
                     _stop_child(child.get("proc"))
-                    await ws.send_json({
-                        "type": "log",
-                        "line": "— cancel requested; stopping the run —",
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "log",
+                            "line": "— cancel requested; stopping the run —",
+                        }
+                    )
         except (WebSocketDisconnect, RuntimeError, ValueError):
             # Client vanished or sent junk. The run continues (it holds the
             # lock and owns the artefacts); we simply stop listening.
@@ -1452,18 +1506,23 @@ async def run_ws(ws: WebSocket) -> None:
         if error:
             await ws.send_json({"type": "error", **error})
         elif result.get("cancelled"):
-            await ws.send_json({
-                "type": "done", "cancelled": True,
-                "statuses": result.get("statuses", {}),
-            })
+            await ws.send_json(
+                {
+                    "type": "done",
+                    "cancelled": True,
+                    "statuses": result.get("statuses", {}),
+                }
+            )
         else:
             if "detect" in result:
                 await ws.send_json({"type": "result", "detect": result["detect"]})
-            await ws.send_json({
-                "type": "done",
-                "statuses": result.get("statuses", {}),
-                "detect_unavailable": result.get("detect_unavailable"),
-            })
+            await ws.send_json(
+                {
+                    "type": "done",
+                    "statuses": result.get("statuses", {}),
+                    "detect_unavailable": result.get("detect_unavailable"),
+                }
+            )
     except WebSocketDisconnect:
         pass
     finally:

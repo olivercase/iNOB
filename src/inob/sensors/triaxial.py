@@ -6,6 +6,7 @@ three coils oriented (Radial, Tangent-1, Tangent-2). The output layout
 matches the existing FieldTrip-style ``grad`` group — all R first, then
 all T1, then all T2 — so downstream code is unchanged.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,7 +56,10 @@ def cylindrical_raycast(
 
     logger.info(
         "rays: %d (%d z-slices x %d angles, radius=%.0f mm)",
-        len(origins), len(zs), n_theta, radius,
+        len(origins),
+        len(zs),
+        n_theta,
+        radius,
     )
 
     if trimesh.ray.has_embree:
@@ -64,7 +68,9 @@ def cylindrical_raycast(
         logger.info("embree not available — falling back to slow ray.ray_triangle")
         intersector = mesh.ray
     locations, ray_idx, tri_idx = intersector.intersects_location(
-        ray_origins=origins, ray_directions=directions, multiple_hits=True,
+        ray_origins=origins,
+        ray_directions=directions,
+        multiple_hits=True,
     )
     if len(locations) == 0:
         return np.empty((0, 3)), np.empty((0, 3))
@@ -147,7 +153,10 @@ def generate_sensor_array(
         z_max = z_hi
     logger.info(
         "Head-foot crop: Z in [%.1f, %.1f] mm (bbox Z in [%.1f, %.1f])",
-        z_min, z_max, z_lo, z_hi,
+        z_min,
+        z_max,
+        z_lo,
+        z_hi,
     )
 
     positions, normals = cylindrical_raycast(
@@ -160,9 +169,7 @@ def generate_sensor_array(
     )
     logger.info("hit %d surface points", len(positions))
     if len(positions) == 0:
-        raise RuntimeError(
-            "No surface hits — check sensors.z_crop_low_factor / mesh bounds."
-        )
+        raise RuntimeError("No surface hits — check sensors.z_crop_low_factor / mesh bounds.")
 
     positions_offset = positions + normals * cfg.sensors.depth_mm
     array = build_triaxial(positions_offset, normals)

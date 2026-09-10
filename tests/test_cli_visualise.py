@@ -1,4 +1,5 @@
 """CLI: visualise argparse targets + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,10 +12,14 @@ TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 
 def _patch(monkeypatch, calls):
     monkeypatch.setattr(
-        cli_mod, "render_geometry", lambda cfg, **kw: calls.setdefault("geom", kw),
+        cli_mod,
+        "render_geometry",
+        lambda cfg, **kw: calls.setdefault("geom", kw),
     )
     monkeypatch.setattr(
-        cli_mod, "render_fem", lambda cfg, **kw: calls.setdefault("fem", kw),
+        cli_mod,
+        "render_fem",
+        lambda cfg, **kw: calls.setdefault("fem", kw),
     )
 
 
@@ -31,9 +36,16 @@ def test_main_target_all_calls_both(tmp_path, monkeypatch) -> None:
 def test_main_target_geom_only(tmp_path, monkeypatch) -> None:
     calls = {}
     _patch(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--target", "geom",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "geom",
+        ]
+    )
     assert rc == 0
     assert "geom" in calls and "fem" not in calls
 
@@ -41,9 +53,16 @@ def test_main_target_geom_only(tmp_path, monkeypatch) -> None:
 def test_main_target_fem_only(tmp_path, monkeypatch) -> None:
     calls = {}
     _patch(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--target", "fem",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "fem",
+        ]
+    )
     assert rc == 0
     assert "fem" in calls and "geom" not in calls
 
@@ -51,10 +70,19 @@ def test_main_target_fem_only(tmp_path, monkeypatch) -> None:
 def test_main_no_sensors_flag(tmp_path, monkeypatch) -> None:
     calls = {}
     _patch(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--target", "geom", "--no-sensors", "--dpi", "72",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "geom",
+            "--no-sensors",
+            "--dpi",
+            "72",
+        ]
+    )
     assert rc == 0
     assert calls["geom"]["with_sensors"] is False
     assert calls["geom"]["dpi"] == 72

@@ -39,6 +39,7 @@ With q_unit = unit dipole moment (the moment direction with the largest
 projection by default — call ``snr_per_source(L, ..., moment="rms")`` for an
 isotropic average).
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,15 +54,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class NoiseFloors:
-    meg_per_channel_fT: float          # σ_n in fT for one OPM channel, effective
-    eeg_per_channel_uV: float          # σ_n in µV for one HD electrode × bandwidth
-    meg_sensor_gain: float = 1.0       # |H(f_CAP)| — the CAP fraction the OPM passes
+    meg_per_channel_fT: float  # σ_n in fT for one OPM channel, effective
+    eeg_per_channel_uV: float  # σ_n in µV for one HD electrode × bandwidth
+    meg_sensor_gain: float = 1.0  # |H(f_CAP)| — the CAP fraction the OPM passes
     meg_noise_bandwidth_hz: float = 0.0  # equivalent noise BW of band ∩ sensor
-    signal_hz: float = 0.0             # f_CAP the gain was evaluated at
+    signal_hz: float = 0.0  # f_CAP the gain was evaluated at
 
 
 def compute_noise_floors(
-    cfg: Config, *, signal_hz: float | None = None,
+    cfg: Config,
+    *,
+    signal_hz: float | None = None,
 ) -> NoiseFloors:
     """Compute σ_n in fT (OPM) and µV (HD electrode) over the recording band.
 
@@ -82,17 +85,26 @@ def compute_noise_floors(
     #   v_n = √(4 k_B T R)  in V/√Hz; with R in kΩ:
     R_ohm = float(n.eeg_electrode_skin_kohm) * 1e3
     k_B = 1.380649e-23
-    T = 310.15        # body temp (37 °C)
-    v_johnson_per_sqrtHz = np.sqrt(4.0 * k_B * T * R_ohm) * 1e6   # → µV/√Hz
+    T = 310.15  # body temp (37 °C)
+    v_johnson_per_sqrtHz = np.sqrt(4.0 * k_B * T * R_ohm) * 1e6  # → µV/√Hz
     amp = float(n.eeg_amplifier_uV_sqrtHz)
-    eeg_per_sqrtHz = np.sqrt(amp ** 2 + v_johnson_per_sqrtHz ** 2)
+    eeg_per_sqrtHz = np.sqrt(amp**2 + v_johnson_per_sqrtHz**2)
     eeg_sigma = eeg_per_sqrtHz * np.sqrt(bw)
     logger.info(
         "Noise floors: OPM=%.2f fT (%s: %.1f fT/√Hz, pole %g Hz → BW_eff %.0f Hz, "
         "gain %.2f at f_CAP=%.0f Hz)  EEG=%.3f µV "
         "(amp=%.2f + Johnson=%.3f µV/√Hz, BW=%g Hz)",
-        meg_sigma, n.opm_sensor, n.opm_intrinsic_fT_sqrtHz, n.opm_bandwidth_hz,
-        meg_bw, gain, signal_hz, eeg_sigma, amp, v_johnson_per_sqrtHz, bw,
+        meg_sigma,
+        n.opm_sensor,
+        n.opm_intrinsic_fT_sqrtHz,
+        n.opm_bandwidth_hz,
+        meg_bw,
+        gain,
+        signal_hz,
+        eeg_sigma,
+        amp,
+        v_johnson_per_sqrtHz,
+        bw,
     )
     return NoiseFloors(
         meg_per_channel_fT=meg_sigma,
@@ -111,11 +123,14 @@ def _cap_frequency(cfg: Config) -> float:
     """
     from inob.physiology.profiles import profile_for
     from inob.sensors.opm_presets import cap_dominant_hz
+
     return cap_dominant_hz(profile_for(cfg).ap_width_ms)
 
 
 def per_source_amplitude(
-    L_human_units: np.ndarray, *, moment: str = "rms",
+    L_human_units: np.ndarray,
+    *,
+    moment: str = "rms",
 ) -> np.ndarray:
     """Per-source signal amplitude (across channels) from a leadfield.
 
@@ -136,7 +151,7 @@ def per_source_amplitude(
         per_chan = np.linalg.norm(L, axis=2)
     else:
         raise ValueError(f"unknown moment={moment!r} (use 'rms' or 'max')")
-    return np.sqrt(np.mean(per_chan ** 2, axis=0))    # RMS across channels
+    return np.sqrt(np.mean(per_chan**2, axis=0))  # RMS across channels
 
 
 def per_source_peak(L_human_units: np.ndarray) -> np.ndarray:
@@ -195,8 +210,11 @@ def per_source_best_bipolar(L_human_units: np.ndarray) -> np.ndarray:
 
 
 def snr_per_source(
-    L_human_units: np.ndarray, sigma_noise: float, *,
-    moment: str = "rms", n_averages: int = 1,
+    L_human_units: np.ndarray,
+    sigma_noise: float,
+    *,
+    moment: str = "rms",
+    n_averages: int = 1,
 ) -> np.ndarray:
     """Predicted SNR per source after ``n_averages`` repetitions.
 
@@ -211,7 +229,7 @@ def array_summary(snr: np.ndarray) -> dict[str, float]:
     return {
         "n_sources": len(snr),
         "min": float(snr.min()),
-        "p5":  float(np.percentile(snr, 5)),
+        "p5": float(np.percentile(snr, 5)),
         "p50": float(np.percentile(snr, 50)),
         "p95": float(np.percentile(snr, 95)),
         "max": float(snr.max()),

@@ -1,4 +1,5 @@
 """CLI: build_fem argparse + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path

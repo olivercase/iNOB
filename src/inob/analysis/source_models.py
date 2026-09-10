@@ -56,6 +56,7 @@ Nothing here needs the activity to be a physiologically faithful dorsal-column
 volley. It needs current in the cord that is either stationary or ascending,
 which is the distinction the modalities are being compared on.
 """
+
 from __future__ import annotations
 
 import logging
@@ -187,27 +188,37 @@ def compare_source_models(
         return float(np.abs(col).max())
 
     def eeg_amp(col: np.ndarray) -> float:
-        return float(col.max() - col.min())          # best bipolar pair
+        return float(col.max() - col.min())  # best bipolar pair
 
     rows: list[ModelRow] = []
 
     # 1. Synchronous: every source at Q, summed in phase.
     sync = L_meg.sum(axis=1) * Q_nAm
     sync_e = L_eeg.sum(axis=1) * Q_nAm
-    rows.append(ModelRow(
-        "synchronous",
-        f"all {L_meg.shape[1]} cord sources active in phase, {Q_nAm:g} nA·m each",
-        meg_amp(sync), eeg_amp(sync_e), meg_sigma_fT, eeg_sigma_uV,
-    ))
+    rows.append(
+        ModelRow(
+            "synchronous",
+            f"all {L_meg.shape[1]} cord sources active in phase, {Q_nAm:g} nA·m each",
+            meg_amp(sync),
+            eeg_amp(sync_e),
+            meg_sigma_fT,
+            eeg_sigma_uV,
+        )
+    )
 
     # 2. Stationary: one source at Q.
     stat = L_meg[:, source_idx] * Q_nAm
     stat_e = L_eeg[:, source_idx] * Q_nAm
-    rows.append(ModelRow(
-        "stationary",
-        f"one segment at source #{source_idx}, {Q_nAm:g} nA·m, not moving",
-        meg_amp(stat), eeg_amp(stat_e), meg_sigma_fT, eeg_sigma_uV,
-    ))
+    rows.append(
+        ModelRow(
+            "stationary",
+            f"one segment at source #{source_idx}, {Q_nAm:g} nA·m, not moving",
+            meg_amp(stat),
+            eeg_amp(stat_e),
+            meg_sigma_fT,
+            eeg_sigma_uV,
+        )
+    )
 
     # 3. Ascending: the same moment, travelling. Measured as a ratio against
     #    the stationary case rather than in the wave simulation's own units —
@@ -226,13 +237,16 @@ def compare_source_models(
         compute_propagation_signals(eeg, profile, stationary_idx=source_idx),
         peak_bipolar,
     )
-    rows.append(ModelRow(
-        "ascending",
-        f"{Q_nAm:g} nA·m travelling rostrally at "
-        f"{profile.mean_cv_m_per_s:.0f} m/s",
-        meg_amp(stat) * meg_factor, eeg_amp(stat_e) * eeg_factor,
-        meg_sigma_fT, eeg_sigma_uV,
-    ))
+    rows.append(
+        ModelRow(
+            "ascending",
+            f"{Q_nAm:g} nA·m travelling rostrally at {profile.mean_cv_m_per_s:.0f} m/s",
+            meg_amp(stat) * meg_factor,
+            eeg_amp(stat_e) * eeg_factor,
+            meg_sigma_fT,
+            eeg_sigma_uV,
+        )
+    )
 
     span = float(arc_mm[-1] - arc_mm[0])
     return SourceModelComparison(
@@ -251,8 +265,12 @@ def compare_source_models(
 
 # ── report ─────────────────────────────────────────────────────────────────
 
+
 def source_model_summary(
-    cfg, *, Q_nAm: float | None = None, source_idx: int | None = None,
+    cfg,
+    *,
+    Q_nAm: float | None = None,
+    source_idx: int | None = None,
 ) -> dict:
     """Headline like-for-like numbers as a JSON-serialisable dict."""
     from inob.config import source_target_tag
@@ -270,7 +288,11 @@ def source_model_summary(
     floors = compute_noise_floors(cfg)
 
     cmp = compare_source_models(
-        meg, eeg, profile, Q_nAm=Q_nAm, source_idx=source_idx,
+        meg,
+        eeg,
+        profile,
+        Q_nAm=Q_nAm,
+        source_idx=source_idx,
         meg_sigma_fT=floors.meg_per_channel_fT,
         eeg_sigma_uV=floors.eeg_per_channel_uV,
     )
@@ -278,8 +300,14 @@ def source_model_summary(
         logger.info(
             "[source-models] %-12s MEG %9.1f fT (SNR %6.2f, N=%s)  "
             "EEG %7.4f µV (SNR %6.3f, N=%s)  gap %.1fx",
-            row.name, row.meg_fT, row.meg_snr, _fmt_n(row.meg_trials),
-            row.eeg_uV, row.eeg_snr, _fmt_n(row.eeg_trials), row.modality_gap,
+            row.name,
+            row.meg_fT,
+            row.meg_snr,
+            _fmt_n(row.meg_trials),
+            row.eeg_uV,
+            row.eeg_snr,
+            _fmt_n(row.eeg_trials),
+            row.modality_gap,
         )
     return {
         "Q_nAm": cmp.Q_nAm,
@@ -317,9 +345,7 @@ def source_model_summary(
             "meg_propagation_factor": cmp.meg_propagation_factor,
             "eeg_propagation_factor": cmp.eeg_propagation_factor,
             "coherence_penalty_meg": cmp.coherence_penalty,
-            "modality_gap_by_model": {
-                row.name: row.modality_gap for row in cmp.rows
-            },
+            "modality_gap_by_model": {row.name: row.modality_gap for row in cmp.rows},
         },
     }
 

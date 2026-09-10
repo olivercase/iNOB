@@ -6,6 +6,7 @@ trusts it. These tests hold the three properties that make `inob <cmd> --help`
 usable — it exists, it says how to invoke the command, and every flag it
 demonstrates is a flag the command actually has.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -61,9 +62,7 @@ def test_help_carries_worked_examples(cmd) -> None:
     text = _help_text(cmd.module)
     assert "examples:" in text, f"{cmd.name} has no examples in its --help"
     body = text.split("examples:", 1)[1]
-    assert f"inob {cmd.name}" in body, (
-        f"{cmd.name}'s examples never invoke it"
-    )
+    assert f"inob {cmd.name}" in body, f"{cmd.name}'s examples never invoke it"
 
 
 @pytest.mark.parametrize("cmd", COMMANDS, ids=lambda c: c.name)
@@ -75,8 +74,7 @@ def test_every_demonstrated_flag_exists(cmd) -> None:
     real = set(flags.findall(options)) | CROSS_REFERENCED.get(cmd.name, set())
     used = set(flags.findall(examples))
     assert not (used - real), (
-        f"inob {cmd.name} demonstrates flags it does not accept: "
-        f"{sorted(used - real)}"
+        f"inob {cmd.name} demonstrates flags it does not accept: {sorted(used - real)}"
     )
 
 
@@ -113,17 +111,14 @@ def test_help_never_advertises_the_legacy_binary(cmd) -> None:
     """The `inob-*` scripts still work, but nothing should teach them."""
     text = _help_text(cmd.module)
     legacy = re.findall(r"\binob-[a-z][a-z-]*", text)
-    assert not legacy, (
-        f"inob {cmd.name} --help points at the legacy binaries {sorted(set(legacy))}"
-    )
+    assert not legacy, f"inob {cmd.name} --help points at the legacy binaries {sorted(set(legacy))}"
 
 
 @pytest.mark.parametrize("cmd", COMMANDS, ids=lambda c: c.name)
 def test_help_fits_an_eighty_column_terminal(cmd) -> None:
     over = [ln for ln in _help_text(cmd.module).splitlines() if len(ln) > WIDTH - 1]
-    assert not over, (
-        f"inob {cmd.name} --help wraps badly at {WIDTH} columns:\n"
-        + "\n".join(f"  {len(ln)}: {ln}" for ln in over)
+    assert not over, f"inob {cmd.name} --help wraps badly at {WIDTH} columns:\n" + "\n".join(
+        f"  {len(ln)}: {ln}" for ln in over
     )
 
 
@@ -137,8 +132,7 @@ def test_example_descriptions_share_one_column(cmd) -> None:
     """
     body = _help_text(cmd.module).split("examples:", 1)[1]
     columns = {
-        m.end(1) for ln in body.splitlines()
-        if (m := re.match(r"^(  inob \S.*?\s{2,})\S", ln))
+        m.end(1) for ln in body.splitlines() if (m := re.match(r"^(  inob \S.*?\s{2,})\S", ln))
     }
     assert len(columns) <= 1, (
         f"inob {cmd.name} --help starts its example descriptions in columns "
@@ -157,9 +151,7 @@ def test_readme_command_table_lists_every_command() -> None:
     table = readme.split("| Group | Commands |", 1)[1].split("\n\n", 1)[0]
     listed = {name for name in re.findall(r"`([a-z][a-z-]*)`", table)}
     missing = {c.name for c in COMMANDS} - listed
-    assert not missing, (
-        f"README command table omits {sorted(missing)}; `inob --help` has them"
-    )
+    assert not missing, f"README command table omits {sorted(missing)}; `inob --help` has them"
     unknown = listed - set(BY_NAME)
     assert not unknown, f"README command table invents {sorted(unknown)}"
 
@@ -169,9 +161,7 @@ def test_readme_files_each_command_under_its_own_group(cmd) -> None:
     """A command listed under the wrong heading is worse than one left out."""
     readme = (pathlib.Path(__file__).resolve().parents[1] / "README.md").read_text()
     table = readme.split("| Group | Commands |", 1)[1].split("\n\n", 1)[0]
-    row = next(
-        (r for r in table.splitlines() if f"`{cmd.name}`" in r), None
-    )
+    row = next((r for r in table.splitlines() if f"`{cmd.name}`" in r), None)
     assert row is not None, f"{cmd.name} is not in the README table"
     assert row.split("|")[1].strip() == cmd.group, (
         f"README files {cmd.name} under {row.split('|')[1].strip()!r}, "

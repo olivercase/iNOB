@@ -1,4 +1,5 @@
 """Tests for inob.viz.topoplot: pure helpers + render smoke tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,6 +25,7 @@ from inob.viz.topoplot import (
 from tests.viz_pipeline_helpers import build_pipeline_cfg
 
 # ── _column_for_source ──────────────────────────────────────────────────────
+
 
 def test_column_for_source_moments() -> None:
     L = np.arange(2 * 6, dtype=float).reshape(2, 6)
@@ -57,6 +59,7 @@ def test_column_for_source_unknown_moment_raises() -> None:
 
 # ── _radial_channel_mask ────────────────────────────────────────────────────
 
+
 def test_radial_channel_mask_triaxial_block_layout() -> None:
     labels = [f"mag-{i:04d}-{m}" for i in range(3) for m in ("R", "T1", "T2")]
     mask = _radial_channel_mask(labels)
@@ -72,6 +75,7 @@ def test_radial_channel_mask_fallback_suffix_scan() -> None:
 
 # ── _grid_shape_from_labels ──────────────────────────────────────────────────
 
+
 def test_grid_shape_from_labels_rectangular() -> None:
     labels = tuple(f"elec-{r:02d}-{c:02d}" for r in range(2) for c in range(4))
     assert _grid_shape_from_labels(labels) == (2, 4)
@@ -84,9 +88,13 @@ def test_grid_shape_from_labels_non_rectangular_returns_none() -> None:
 
 # ── _paddle_uv_from_labels ───────────────────────────────────────────────────
 
+
 def test_paddle_uv_from_labels_none_when_no_head_foot() -> None:
     labels = tuple(f"elec-{r:02d}-{c:02d}" for r in range(2) for c in range(2))
-    assert _paddle_uv_from_labels(labels, pitch_mm=5.0, head_offset_mm=15.0, foot_offset_mm=15.0) is None
+    assert (
+        _paddle_uv_from_labels(labels, pitch_mm=5.0, head_offset_mm=15.0, foot_offset_mm=15.0)
+        is None
+    )
 
 
 def test_paddle_uv_from_labels_shape_and_head_foot_placement() -> None:
@@ -101,12 +109,14 @@ def test_paddle_uv_from_labels_shape_and_head_foot_placement() -> None:
 
 # ── TopoFrame ────────────────────────────────────────────────────────────────
 
+
 def test_topoframe_defaults() -> None:
     tf = TopoFrame(source_idx=2)
     assert tf.moment == "z"
 
 
 # ── render smoke tests ───────────────────────────────────────────────────────
+
 
 def test_render_meg_topoplot_returns_fig_and_axes(tmp_path: Path) -> None:
     cfg = build_pipeline_cfg(tmp_path)

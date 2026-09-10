@@ -6,6 +6,7 @@ Lookup order for the project root, in priority:
 3. Walk up from cwd looking for a marker (``configs/default.yaml`` or ``pyproject.toml``)
 4. Fallback to cwd
 """
+
 from __future__ import annotations
 
 import os

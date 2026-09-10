@@ -1,4 +1,5 @@
 """Mesh-quality metrics + validation gates."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -13,23 +14,29 @@ from inob.mesh.quality import (
 
 
 def _regular_tet() -> tuple[np.ndarray, np.ndarray]:
-    nodes = np.array([
-        [0.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [0.5, np.sqrt(3) / 2, 0.0],
-        [0.5, np.sqrt(3) / 6, np.sqrt(6) / 3],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [0.5, np.sqrt(3) / 6, np.sqrt(6) / 3],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3]], dtype=np.int64)
     return nodes, tets
 
 
 def _degenerate_tet() -> tuple[np.ndarray, np.ndarray]:
-    nodes = np.array([
-        [0.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [2.0, 0.0, 0.0],     # collinear with the first three
-        [3.0, 1e-6, 0.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],  # collinear with the first three
+            [3.0, 1e-6, 0.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3]], dtype=np.int64)
     return nodes, tets
 

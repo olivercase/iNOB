@@ -1,4 +1,5 @@
 """Tests for inob.viz.cap_compare (propagating vs stationary CAP figure)."""
+
 from __future__ import annotations
 
 import matplotlib
@@ -34,17 +35,21 @@ def cervical_leadfield(cfg) -> Leadfield:
     L = rng.standard_normal((C, 3 * S)) * 1e-12
     coil_pos = np.repeat(
         np.array([[60.0, 0.0, 0.0], [-60.0, 0.0, 0.0], [0.0, 60.0, 0.0], [0.0, -60.0, 0.0]]),
-        3, axis=0,
+        3,
+        axis=0,
     )
     coil_orient = np.tile(np.eye(3), (4, 1))
-    labels = tuple(
-        f"mag-{i // 3:04d}-{['R', 'T1', 'T2'][i % 3]}" for i in range(C)
-    )
+    labels = tuple(f"mag-{i // 3:04d}-{['R', 'T1', 'T2'][i % 3]}" for i in range(C))
     lf = Leadfield(
-        L=L, L_fT_per_nAm=L * 1e6, source_pos=source_pos,
-        coil_pos=coil_pos, coil_orient=coil_orient, channel_names=labels,
+        L=L,
+        L_fT_per_nAm=L * 1e6,
+        source_pos=source_pos,
+        coil_pos=coil_pos,
+        coil_orient=coil_orient,
+        channel_names=labels,
         conductivities=np.array([3e-4, 4.3e-4]),
-        tissue_labels=("vagus_left", "skin"), seed=0,
+        tissue_labels=("vagus_left", "skin"),
+        seed=0,
     )
     save_leadfield(cfg.outputs.forward_npz, lf)
     return lf
@@ -52,7 +57,7 @@ def cervical_leadfield(cfg) -> Leadfield:
 
 def test_fwhm_ms_basic() -> None:
     t = np.linspace(-5, 5, 1001)
-    x = np.exp(-t ** 2 / (2 * 1.0 ** 2))  # sigma=1 Gaussian, FWHM ~= 2.355
+    x = np.exp(-(t**2) / (2 * 1.0**2))  # sigma=1 Gaussian, FWHM ~= 2.355
     fwhm = _fwhm_ms(x, t)
     assert 2.0 < fwhm < 2.7
 
@@ -67,7 +72,11 @@ def test_fwhm_ms_single_nonzero_sample_returns_nan() -> None:
 def test_render_cap_compare_writes_png(cfg, cervical_leadfield: Leadfield, tmp_path: Path) -> None:
     out_path = tmp_path / "cap_compare.png"
     out = render_cap_compare(
-        cfg, n_fibres=10, duration_ms=6.0, fs_hz=5_000.0, out_path=out_path,
+        cfg,
+        n_fibres=10,
+        duration_ms=6.0,
+        fs_hz=5_000.0,
+        out_path=out_path,
     )
     assert out == out_path
     assert out.exists()

@@ -4,6 +4,7 @@ Renders a 4-panel PNG (lateral / posterior / axial projections + 3-D view)
 of the geometry HDF5 produced by :mod:`inob.geometry.builder`. Optionally
 overlays the sensor array on each panel.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,9 +22,9 @@ from inob.io.hdf5 import load_geometry, load_sensors
 logger = logging.getLogger(__name__)
 
 MESH_STYLES: dict[str, dict] = {
-    "mesh_skin":        dict(colour="#E8C5A0", alpha=0.10, label="Skin"),
-    "mesh_bone":        dict(colour="#DDCC77", alpha=0.45, label="Bone"),
-    "mesh_vagus_left":  dict(colour="#44BB99", alpha=0.95, label="Left vagus nerve"),
+    "mesh_skin": dict(colour="#E8C5A0", alpha=0.10, label="Skin"),
+    "mesh_bone": dict(colour="#DDCC77", alpha=0.45, label="Bone"),
+    "mesh_vagus_left": dict(colour="#44BB99", alpha=0.95, label="Left vagus nerve"),
     "mesh_vagus_right": dict(colour="#CC6677", alpha=0.95, label="Right vagus nerve"),
 }
 MAX_TRIS_3D = 12_000
@@ -43,10 +44,13 @@ def _draw_projection(ax, meshes, xi, yi, xlabel, ylabel, title, rng):
         sub = _subsample_faces(faces, MAX_TRIS_PROJ, rng)
         pts = vertices[sub].reshape(-1, 3)
         ax.scatter(
-            pts[:, xi], pts[:, yi],
-            s=0.3, c=style["colour"],
+            pts[:, xi],
+            pts[:, yi],
+            s=0.3,
+            c=style["colour"],
             alpha=min(style["alpha"] + 0.1, 0.9),
-            linewidths=0, rasterized=True,
+            linewidths=0,
+            rasterized=True,
         )
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -60,8 +64,10 @@ def _draw_3d(ax, meshes, rng):
         style = MESH_STYLES.get(key, dict(colour="grey", alpha=0.3))
         sub = _subsample_faces(faces, MAX_TRIS_3D, rng)
         coll = Poly3DCollection(
-            vertices[sub], alpha=style["alpha"],
-            facecolor=style["colour"], edgecolor="none",
+            vertices[sub],
+            alpha=style["alpha"],
+            facecolor=style["colour"],
+            edgecolor="none",
         )
         ax.add_collection3d(coll)
     ax.set_xlabel("X (mm)")
@@ -72,13 +78,22 @@ def _draw_3d(ax, meshes, rng):
 
 
 def render_geometry(
-    cfg: Config, *, dpi: int = 150, show: bool = False, with_sensors: bool = True,
+    cfg: Config,
+    *,
+    dpi: int = 150,
+    show: bool = False,
+    with_sensors: bool = True,
 ) -> Path:
     """Render the 4-panel geometry overview to ``cfg.outputs.geometry_png``."""
-    matplotlib.rcParams.update({
-        "font.family": "sans-serif", "font.size": 9,
-        "axes.titlesize": 10, "axes.labelsize": 9, "axes.linewidth": 0.8,
-    })
+    matplotlib.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.size": 9,
+            "axes.titlesize": 10,
+            "axes.labelsize": 9,
+            "axes.linewidth": 0.8,
+        }
+    )
     rng = np.random.default_rng(cfg.reproducibility.seed)
 
     mat_path = cfg.outputs.geometry_mat
@@ -97,12 +112,13 @@ def render_geometry(
 
     fig = plt.figure(figsize=(14, 12))
     fig.suptitle(f"iNOB Geometry — {mat_path.name}", fontsize=11, y=0.98)
-    gs = fig.add_gridspec(2, 2, hspace=0.30, wspace=0.25,
-                          left=0.07, right=0.96, top=0.94, bottom=0.06)
-    ax_lat  = fig.add_subplot(gs[0, 0])
+    gs = fig.add_gridspec(
+        2, 2, hspace=0.30, wspace=0.25, left=0.07, right=0.96, top=0.94, bottom=0.06
+    )
+    ax_lat = fig.add_subplot(gs[0, 0])
     ax_post = fig.add_subplot(gs[0, 1])
-    ax_ax   = fig.add_subplot(gs[1, 0])
-    ax_3d   = fig.add_subplot(gs[1, 1], projection="3d")
+    ax_ax = fig.add_subplot(gs[1, 0])
+    ax_3d = fig.add_subplot(gs[1, 1], projection="3d")
 
     _draw_projection(ax_lat, meshes, 0, 1, "X (mm)", "Y (mm)", "Lateral (X – Y)", rng)
     _draw_projection(ax_post, meshes, 2, 1, "Z (mm)", "Y (mm)", "Posterior (Z – Y)", rng)
@@ -115,15 +131,32 @@ def render_geometry(
         positions = sensors.coilpos[:n]
         normals = sensors.coilori[:n]
         for ax, (xi, yi) in ((ax_lat, (0, 1)), (ax_post, (2, 1)), (ax_ax, (0, 2))):
-            ax.scatter(positions[:, xi], positions[:, yi],
-                       s=4, c="#332288", alpha=0.85, linewidths=0, rasterized=True)
-        ax_3d.scatter(positions[:, 0], positions[:, 1], positions[:, 2],
-                      s=4, c="#332288", depthshade=False)
+            ax.scatter(
+                positions[:, xi],
+                positions[:, yi],
+                s=4,
+                c="#332288",
+                alpha=0.85,
+                linewidths=0,
+                rasterized=True,
+            )
+        ax_3d.scatter(
+            positions[:, 0], positions[:, 1], positions[:, 2], s=4, c="#332288", depthshade=False
+        )
         step = max(1, len(positions) // 200)
         P = positions[::step]
         N = normals[::step] * 25.0
-        ax_3d.quiver(P[:, 0], P[:, 1], P[:, 2], N[:, 0], N[:, 1], N[:, 2],
-                     color="#882255", linewidth=0.5, arrow_length_ratio=0.0)
+        ax_3d.quiver(
+            P[:, 0],
+            P[:, 1],
+            P[:, 2],
+            N[:, 0],
+            N[:, 1],
+            N[:, 2],
+            color="#882255",
+            linewidth=0.5,
+            arrow_length_ratio=0.0,
+        )
 
     ax_lat.set_xlim(xlim)
     ax_lat.set_ylim(ylim)
@@ -136,14 +169,24 @@ def render_geometry(
     ax_3d.set_zlim(zlim)
 
     import matplotlib.patches as mpatches
+
     patches = [
-        mpatches.Patch(color=MESH_STYLES[k]["colour"],
-                       alpha=max(MESH_STYLES[k]["alpha"], 0.5),
-                       label=MESH_STYLES[k]["label"])
-        for k in meshes if k in MESH_STYLES
+        mpatches.Patch(
+            color=MESH_STYLES[k]["colour"],
+            alpha=max(MESH_STYLES[k]["alpha"], 0.5),
+            label=MESH_STYLES[k]["label"],
+        )
+        for k in meshes
+        if k in MESH_STYLES
     ]
-    fig.legend(handles=patches, loc="lower center", ncol=min(len(patches), 5),
-               framealpha=0.9, fontsize=8, bbox_to_anchor=(0.5, 0.01))
+    fig.legend(
+        handles=patches,
+        loc="lower center",
+        ncol=min(len(patches), 5),
+        framealpha=0.9,
+        fontsize=8,
+        bbox_to_anchor=(0.5, 0.01),
+    )
 
     out = cfg.outputs.geometry_png
     out.parent.mkdir(parents=True, exist_ok=True)

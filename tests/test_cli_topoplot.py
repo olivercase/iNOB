@@ -1,4 +1,5 @@
 """CLI: topoplot argparse targets + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,7 +22,9 @@ def _fig():
 def test_main_target_dual(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "render_dual_topoplot", lambda cfg, **kw: calls.update(kw),
+        cli_mod,
+        "render_dual_topoplot",
+        lambda cfg, **kw: calls.update(kw),
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
@@ -31,14 +34,23 @@ def test_main_target_dual(tmp_path, monkeypatch) -> None:
 
 def test_main_target_meg_saves_png(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        cli_mod, "render_meg_topoplot",
+        cli_mod,
+        "render_meg_topoplot",
         lambda cfg, **kw: (_fig(), None),
     )
     out = tmp_path / "meg.png"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--target", "meg", "--out", str(out),
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "meg",
+            "--out",
+            str(out),
+        ]
+    )
     assert rc == 0
     assert out.exists()
 
@@ -46,10 +58,18 @@ def test_main_target_meg_saves_png(tmp_path, monkeypatch) -> None:
 def test_main_target_eeg_saves_png(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(cli_mod, "render_eeg_topoplot", lambda cfg, **kw: _fig())
     out = tmp_path / "eeg.png"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--target", "eeg", "--out", str(out),
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "eeg",
+            "--out",
+            str(out),
+        ]
+    )
     assert rc == 0
     assert out.exists()
 
@@ -57,11 +77,21 @@ def test_main_target_eeg_saves_png(tmp_path, monkeypatch) -> None:
 def test_main_target_montage(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "render_meg_montage", lambda cfg, **kw: calls.update(kw),
+        cli_mod,
+        "render_meg_montage",
+        lambda cfg, **kw: calls.update(kw),
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--target", "montage", "--n-sources", "3",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "montage",
+            "--n-sources",
+            "3",
+        ]
+    )
     assert rc == 0
     assert calls["n_sources"] == 3

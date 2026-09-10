@@ -24,6 +24,7 @@ Local solve and cluster-reduce paths produce the SAME schema:
     tissue_labels  (K,)     bytes/str
     seed           ()       int        reproducibility seed used to build inputs
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,9 +38,14 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 REQUIRED_KEYS: tuple[str, ...] = (
-    "L", "L_fT_per_nAm", "source_pos",
-    "coil_pos", "coil_orient", "channel_names",
-    "conductivities", "tissue_labels",
+    "L",
+    "L_fT_per_nAm",
+    "source_pos",
+    "coil_pos",
+    "coil_orient",
+    "channel_names",
+    "conductivities",
+    "tissue_labels",
 )
 
 
@@ -49,13 +55,13 @@ class SchemaError(ValueError):
 
 @dataclass(frozen=True)
 class Leadfield:
-    L: np.ndarray                # (C, 3S) Tesla per A·m
-    L_fT_per_nAm: np.ndarray     # (C, 3S) fT/nAm
-    source_pos: np.ndarray       # (S, 3) mm
-    coil_pos: np.ndarray         # (C, 3) mm
-    coil_orient: np.ndarray      # (C, 3) unit-norm
+    L: np.ndarray  # (C, 3S) Tesla per A·m
+    L_fT_per_nAm: np.ndarray  # (C, 3S) fT/nAm
+    source_pos: np.ndarray  # (S, 3) mm
+    coil_pos: np.ndarray  # (C, 3) mm
+    coil_orient: np.ndarray  # (C, 3) unit-norm
     channel_names: tuple[str, ...]
-    conductivities: np.ndarray   # (K,) S/mm
+    conductivities: np.ndarray  # (K,) S/mm
     tissue_labels: tuple[str, ...]
     seed: int | None = None
 
@@ -64,8 +70,7 @@ def save_leadfield(path: Path, lf: Leadfield) -> None:
     """Atomically save a :class:`Leadfield` to ``path``."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp.npz",
-                                dir=path.parent)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp.npz", dir=path.parent)
     os.close(fd)
     tmp_path = Path(tmp)
     try:
@@ -82,7 +87,9 @@ def save_leadfield(path: Path, lf: Leadfield) -> None:
             seed=np.array(-1 if lf.seed is None else int(lf.seed), dtype=np.int64),
         )
         # numpy added a default .npz suffix, keep it consistent
-        candidate = tmp_path if tmp_path.exists() else tmp_path.with_suffix(tmp_path.suffix + ".npz")
+        candidate = (
+            tmp_path if tmp_path.exists() else tmp_path.with_suffix(tmp_path.suffix + ".npz")
+        )
         os.replace(candidate, path)
     except BaseException:
         for p in (tmp_path, tmp_path.with_suffix(tmp_path.suffix + ".npz")):
@@ -115,16 +122,18 @@ def load_leadfield(path: Path) -> Leadfield:
         seed = int(f["seed"]) if "seed" in keys else None
     if seed is not None and seed < 0:
         seed = None
-    channel_names = tuple(
-        s.decode() if isinstance(s, bytes) else str(s) for s in cn
-    )
-    tissue_labels = tuple(
-        s.decode() if isinstance(s, bytes) else str(s) for s in labels
-    )
+    channel_names = tuple(s.decode() if isinstance(s, bytes) else str(s) for s in cn)
+    tissue_labels = tuple(s.decode() if isinstance(s, bytes) else str(s) for s in labels)
     return Leadfield(
-        L=L, L_fT_per_nAm=L_fT, source_pos=sp,
-        coil_pos=cp, coil_orient=co, channel_names=channel_names,
-        conductivities=cond, tissue_labels=tissue_labels, seed=seed,
+        L=L,
+        L_fT_per_nAm=L_fT,
+        source_pos=sp,
+        coil_pos=cp,
+        coil_orient=co,
+        channel_names=channel_names,
+        conductivities=cond,
+        tissue_labels=tissue_labels,
+        seed=seed,
     )
 
 

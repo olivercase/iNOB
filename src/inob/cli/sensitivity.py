@@ -14,6 +14,7 @@ Recomputing a leadfield is the expensive step; MEG transfer-matrix solves on
 the full array are slow, so the EEG sweep is the cheap one. Use ``--modality``
 to run them independently (e.g. EEG locally, MEG on the cluster).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 def _meg_forward_fn(cfg: Config, out_npz: Path) -> np.ndarray:
     from inob.forward.solve import run_forward
+
     cfg2 = replace(cfg, outputs=replace(cfg.outputs, forward_npz=out_npz))
     run_forward(cfg2)
     return load_leadfield(out_npz).L
@@ -41,6 +43,7 @@ def _meg_forward_fn(cfg: Config, out_npz: Path) -> np.ndarray:
 
 def _eeg_forward_fn(cfg: Config, out_npz: Path) -> np.ndarray:
     from inob.forward.eeg import run_eeg_forward
+
     cfg2 = replace(cfg, outputs=replace(cfg.outputs, forward_eeg_npz=out_npz))
     run_eeg_forward(cfg2)
     return load_leadfield(out_npz).L
@@ -113,23 +116,30 @@ see `inob --help` for the full list.""",
     )
     add_common_args(p)
     p.add_argument(
-        "--modality", choices=["meg", "eeg", "both"], default="both",
+        "--modality",
+        choices=["meg", "eeg", "both"],
+        default="both",
         help="Which modality(ies) to sweep (default: both).",
     )
     p.add_argument(
-        "--plot", action="store_true",
+        "--plot",
+        action="store_true",
         help="Render the MEG-vs-EEG comparison figure after the sweep.",
     )
     p.add_argument(
-        "--plot-only", action="store_true",
+        "--plot-only",
+        action="store_true",
         help="Skip the solves; render the figure from existing JSON.",
     )
     p.add_argument(
-        "--keep-unit", action="store_true",
+        "--keep-unit",
+        action="store_true",
         help="Also run the factor=1.0 perturbation (a no-op; off by default).",
     )
     p.add_argument(
-        "--out", type=Path, default=None,
+        "--out",
+        type=Path,
+        default=None,
         help="Figure output PNG (default: sensitivity_dir/sensitivity_comparison.png).",
     )
     p.add_argument("--dpi", type=int, default=300)
@@ -145,6 +155,7 @@ see `inob --help` for the full list.""",
 
     if args.plot or args.plot_only:
         from inob.viz.sensitivity_plot import render_sensitivity
+
         out_png = args.out or (cfg.outputs.sensitivity_dir / "sensitivity_comparison.png")
         render_sensitivity(cfg, out_path=out_png, dpi=args.dpi)
         logger.info("[sensitivity] figure → %s", out_png)

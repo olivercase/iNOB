@@ -1,4 +1,5 @@
 """Tests for inob.viz.fem (PyVista FEM render)."""
+
 from __future__ import annotations
 
 import os
@@ -39,7 +40,8 @@ def _can_render() -> bool:
     try:
         done = subprocess.run(
             [sys.executable, "-c", probe],
-            capture_output=True, timeout=120,
+            capture_output=True,
+            timeout=120,
             env={**os.environ, "PYVISTA_OFF_SCREEN": "true", "MPLBACKEND": "Agg"},
         )
         return done.returncode == 0

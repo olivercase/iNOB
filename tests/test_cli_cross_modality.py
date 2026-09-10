@@ -1,4 +1,5 @@
 """CLI: cross_modality argparse defaults + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +13,8 @@ TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 def test_main_defaults(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "render_cross_modality",
+        cli_mod,
+        "render_cross_modality",
         lambda cfg, **kwargs: calls.update(kwargs),
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
@@ -27,13 +29,24 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
 def test_main_custom_args(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "render_cross_modality",
+        cli_mod,
+        "render_cross_modality",
         lambda cfg, **kwargs: calls.update(kwargs),
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--source-idx", "3", "--noise-uV", "1.5", "--noise-seed", "7",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--source-idx",
+            "3",
+            "--noise-uV",
+            "1.5",
+            "--noise-seed",
+            "7",
+        ]
+    )
     assert rc == 0
     assert calls["source_idx"] == 3
     assert calls["noise_uV"] == 1.5

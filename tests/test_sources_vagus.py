@@ -1,4 +1,5 @@
 """Vagus dipole-sampling tests."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -15,20 +16,25 @@ def _build_tube_fem(length_mm: float = 100.0, n_slabs: int = 50) -> FemMesh:
     tets_list = []
     base_idx = 0
     for z in z_centres:
-        nodes_list.append([
-            [0.0, 0.0, z],
-            [1.0, 0.0, z],
-            [0.0, 1.0, z],
-            [0.0, 0.0, z + 1.0],
-        ])
+        nodes_list.append(
+            [
+                [0.0, 0.0, z],
+                [1.0, 0.0, z],
+                [0.0, 1.0, z],
+                [0.0, 0.0, z + 1.0],
+            ]
+        )
         tets_list.append([base_idx, base_idx + 1, base_idx + 2, base_idx + 3])
         base_idx += 4
     nodes = np.vstack(nodes_list).astype(np.float64)
     tets = np.array(tets_list, dtype=np.int32)
     tissue = np.ones(len(tets), dtype=np.int32)
     return FemMesh(
-        nodes=nodes, tets=tets, tissue=tissue,
-        tissue_labels=("vagus_left",), unit="mm",
+        nodes=nodes,
+        tets=tets,
+        tissue=tissue,
+        tissue_labels=("vagus_left",),
+        unit="mm",
     )
 
 
@@ -51,7 +57,8 @@ def test_source_unknown_tissue_raises() -> None:
 def test_source_empty_tissue_raises() -> None:
     fem = _build_tube_fem()
     fem_empty = FemMesh(
-        nodes=fem.nodes, tets=fem.tets,
+        nodes=fem.nodes,
+        tets=fem.tets,
         tissue=np.full(len(fem.tets), 1, dtype=np.int32),
         tissue_labels=("vagus_left", "skin"),  # skin declared but no tets use it
     )

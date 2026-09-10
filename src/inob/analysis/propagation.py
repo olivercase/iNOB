@@ -37,6 +37,7 @@ sweeps across all of them — so the ratio it yields is a single event-level
 number, not a function of position along the polyline. Callers that plot
 against source position must apply it as a scalar and say so.
 """
+
 from __future__ import annotations
 
 import logging
@@ -65,7 +66,9 @@ MAX_POLYLINE_TORTUOSITY: float = 3.0
 
 
 def is_ordered_polyline(
-    source_pos_mm: np.ndarray, *, max_tortuosity: float = MAX_POLYLINE_TORTUOSITY,
+    source_pos_mm: np.ndarray,
+    *,
+    max_tortuosity: float = MAX_POLYLINE_TORTUOSITY,
 ) -> bool:
     """Whether ``source_pos_mm`` is an arc-length-ordered path.
 
@@ -106,19 +109,19 @@ class PropagationSignals:
     caller scales as it prefers.
     """
 
-    t_ms: np.ndarray            # (T,)
-    stationary: np.ndarray      # (C, T) — all moment lumped at the hot spot
-    segment: np.ndarray         # (C, T) — propagating over the active segment
-    whole: np.ndarray           # (C, T) — propagating over the whole polyline
+    t_ms: np.ndarray  # (T,)
+    stationary: np.ndarray  # (C, T) — all moment lumped at the hot spot
+    segment: np.ndarray  # (C, T) — propagating over the active segment
+    whole: np.ndarray  # (C, T) — propagating over the whole polyline
 
-    hot_idx: int                # rostral end of the polyline (wave end point)
-    stationary_idx: int         # where the stationary model lumps the moment
+    hot_idx: int  # rostral end of the polyline (wave end point)
+    stationary_idx: int  # where the stationary model lumps the moment
     n_fibres: int
     ap_width_ms: float
     Q_total_nAm: float
     cv_mean_m_per_s: float
-    segment_mm: float           # active-segment length actually simulated
-    total_span_mm: float        # whole-polyline arc length
+    segment_mm: float  # active-segment length actually simulated
+    total_span_mm: float  # whole-polyline arc length
     # How many source positions fall inside the active segment. A propagating
     # model needs several to be a wavefront rather than a point: if the source
     # spacing is coarser than the segment, the window collapses onto one source
@@ -171,8 +174,7 @@ def compute_propagation_signals(
     error is large enough to flip the ratio's direction.
     """
     n_fibres = profile.n_fibres if n_fibres is None else n_fibres
-    ap_amplitude_mV = (profile.ap_amplitude_mV if ap_amplitude_mV is None
-                       else ap_amplitude_mV)
+    ap_amplitude_mV = profile.ap_amplitude_mV if ap_amplitude_mV is None else ap_amplitude_mV
     sigma_in_Sm = profile.sigma_in_Sm if sigma_in_Sm is None else sigma_in_Sm
     ap_width_ms = profile.ap_width_ms if ap_width_ms is None else ap_width_ms
 
@@ -186,20 +188,19 @@ def compute_propagation_signals(
 
     fibres = profile.fibres
     cv_per_d = conduction_velocity_m_per_s(
-        fibres.diameters_um, **(profile.cv_kwargs or {}),
+        fibres.diameters_um,
+        **(profile.cv_kwargs or {}),
     )
     cv_mean = float(np.sum(cv_per_d * fibres.weights))
     # Per-fibre dipole moment, A·m, as a function of diameter d (Hämäläinen).
     Q_per_fibre_Am = (
-        np.pi * (fibres.diameters_um * 1e-6) ** 2
-        * sigma_in_Sm * (ap_amplitude_mV * 1e-3) / 4.0
+        np.pi * (fibres.diameters_um * 1e-6) ** 2 * sigma_in_Sm * (ap_amplitude_mV * 1e-3) / 4.0
     )
 
     total_span_mm = float(arc_mm[-1] - arc_mm[0])
     if segment_mm is None:
         segment_mm = (
-            total_span_mm if profile.propagation_span_mm is None
-            else profile.propagation_span_mm
+            total_span_mm if profile.propagation_span_mm is None else profile.propagation_span_mm
         )
 
     # The window must cover the transit or the propagating trace is cut off
@@ -209,8 +210,12 @@ def compute_propagation_signals(
     if duration_ms is None:
         transit_ms = profile.transit_ms(segment_mm)
         duration_ms = max(30.0, 2.5 * transit_ms + 10.0 * ap_width_ms)
-        logger.debug("propagation window %.0f ms (transit %.2f ms over %.0f mm)",
-                     duration_ms, transit_ms, segment_mm)
+        logger.debug(
+            "propagation window %.0f ms (transit %.2f ms over %.0f mm)",
+            duration_ms,
+            transit_ms,
+            segment_mm,
+        )
 
     n = round(duration_ms * fs_hz / 1000.0)
     t_ms = np.arange(n) / fs_hz * 1000.0
@@ -230,7 +235,9 @@ def compute_propagation_signals(
             "sources are ~%.0f mm apart, so the propagating trace over it is a "
             "point, not a wavefront. Re-solve at a finer forward.source_spacing_mm "
             "(or widen the segment) before reading the segment ratio.",
-            segment_mm, len(seg_idx), spacing_mm,
+            segment_mm,
+            len(seg_idx),
+            spacing_mm,
         )
 
     def stationary_signal() -> np.ndarray:
@@ -245,7 +252,9 @@ def compute_propagation_signals(
         return L_long[:, lump_idx][:, None] * Q_total_Am * shape[None, :]
 
     def moving_wavelet(
-        x_start_idx: int, x_end_idx: int, *,
+        x_start_idx: int,
+        x_end_idx: int,
+        *,
         time_peak_at_hotspot: bool = True,
     ) -> np.ndarray:
         """Physically correct: a single AP wavelet of total moment N×<Q>_w
@@ -272,7 +281,7 @@ def compute_propagation_signals(
 
         x_lo = arc_m[min(x_start_idx, x_end_idx)]
         x_hi = arc_m[max(x_start_idx, x_end_idx)]
-        margin_m = 0.005     # 5 mm slop so AP envelope decays smoothly off-segment
+        margin_m = 0.005  # 5 mm slop so AP envelope decays smoothly off-segment
 
         # Wavelet position per (diameter, sample), snapped to the nearest source.
         # arc_m is a cumulative arc length and therefore sorted, so searchsorted
@@ -281,13 +290,14 @@ def compute_propagation_signals(
         right = np.searchsorted(arc_m, x_dt).clip(1, len(arc_m) - 1)
         left = right - 1
         nearest = np.where(
-            np.abs(x_dt - arc_m[left]) <= np.abs(arc_m[right] - x_dt), left, right,
+            np.abs(x_dt - arc_m[left]) <= np.abs(arc_m[right] - x_dt),
+            left,
+            right,
         )
 
         # Weight of each (diameter, sample) contribution, zero off-segment.
         on_seg = (x_dt >= x_lo - margin_m) & (x_dt <= x_hi + margin_m)
-        w_dt = (n_fibres * (fibres.weights * Q_per_fibre_Am)[:, None]
-                * shape_t[None, :] * on_seg)
+        w_dt = n_fibres * (fibres.weights * Q_per_fibre_Am)[:, None] * shape_t[None, :] * on_seg
 
         # Accumulate into a (source × sample) moment map, then project through
         # the leadfield once: same arithmetic as the per-sample loop, one matmul.

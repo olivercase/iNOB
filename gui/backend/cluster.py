@@ -17,6 +17,7 @@ Live submission needs SSH access + credentials to UCL Myriad/Kathleen. When
 return a ``state="dryrun"`` response listing the exact commands that WOULD run,
 so the endpoint never fails opaquely.
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,13 +70,13 @@ def validate_job_id(job_id: object) -> str:
     text = "" if job_id is None else str(job_id).strip()
     if not _JOB_ID_SAFE_RE.match(text):
         raise ClusterError(
-            f"invalid job id {text!r} — expected a scheduler job id "
-            "such as '12345' or '12345.7'"
+            f"invalid job id {text!r} — expected a scheduler job id such as '12345' or '12345.7'"
         )
     return text
 
 
 # ── pure helpers (unit-tested, no IO) ────────────────────────────────────────
+
 
 def list_profiles() -> list[str]:
     """Available cluster profiles, from ``cluster/profiles/*.env`` stems."""
@@ -86,9 +87,7 @@ def list_profiles() -> list[str]:
 
 def validate_profile(profile: str) -> None:
     if not profile or not _NAME_RE.match(profile) or profile not in list_profiles():
-        raise ClusterError(
-            f"unknown cluster profile {profile!r} (have {list_profiles()})"
-        )
+        raise ClusterError(f"unknown cluster profile {profile!r} (have {list_profiles()})")
 
 
 def profile_vars(profile: str) -> dict[str, str]:
@@ -118,7 +117,7 @@ def map_sge_state(code: str) -> str:
     """Map an SGE qstat state code to our coarse state vocabulary."""
     code = (code or "").strip()
     if not code:
-        return "done"            # absent from qstat → finished (or never existed)
+        return "done"  # absent from qstat → finished (or never existed)
     if code.startswith("E"):
         return "failed"
     if code in ("qw", "hqw", "hRwq"):
@@ -130,8 +129,11 @@ def map_sge_state(code: str) -> str:
 
 def map_slurm_state(state: str) -> str:
     return {
-        "running": "running", "pending": "queued",
-        "completed": "done", "failed": "failed", "cancelled": "failed",
+        "running": "running",
+        "pending": "queued",
+        "completed": "done",
+        "failed": "failed",
+        "cancelled": "failed",
     }.get((state or "").strip().lower(), "unknown" if state else "done")
 
 
@@ -158,14 +160,20 @@ def build_commands(profile: str, *, modality: str = "meg") -> dict[str, list[str
     host = pv.get("REMOTE_HOST", profile)
 
     def _submit(task: str) -> list[str]:
-        return ["ssh", host,
-                f"cd {REMOTE_BASE}/code && CLUSTER_PROFILE={profile} "
-                f"bash cluster/submit.sh {task}"]
+        return [
+            "ssh",
+            host,
+            f"cd {REMOTE_BASE}/code && CLUSTER_PROFILE={profile} bash cluster/submit.sh {task}",
+        ]
 
     cmds = {
         "stage": ["bash", str(CLUSTER_DIR / "stage.sh")],
-        "push_config": ["rsync", "-avh", str(SUBMIT_CONFIG),
-                        f"{host}:{REMOTE_BASE}/configs/default.yaml"],
+        "push_config": [
+            "rsync",
+            "-avh",
+            str(SUBMIT_CONFIG),
+            f"{host}:{REMOTE_BASE}/configs/default.yaml",
+        ],
     }
     if modality == "eeg":
         cmds["submit_eeg"] = _submit("eeg")
@@ -177,8 +185,11 @@ def build_commands(profile: str, *, modality: str = "meg") -> dict[str, list[str
 
 def submit_tasks(modality: str = "meg") -> tuple[str, ...]:
     """Which ``build_commands`` keys are the actual job submissions, in order."""
-    return ("submit_eeg",) if validate_modality(modality) == "eeg" \
+    return (
+        ("submit_eeg",)
+        if validate_modality(modality) == "eeg"
         else ("submit_array", "submit_reduce")
+    )
 
 
 def _active_config_path() -> Path:
@@ -210,6 +221,7 @@ def write_run_config(sources, *, out_path: Path | None = None) -> Path:
 
 # ── IO ───────────────────────────────────────────────────────────────────────
 
+
 def _dryrun() -> bool:
     return os.environ.get("INOB_CLUSTER_DRYRUN") == "1"
 
@@ -218,7 +230,8 @@ def _ssh_reachable(host: str) -> bool:
     try:
         r = subprocess.run(
             ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, "true"],
-            capture_output=True, timeout=15,
+            capture_output=True,
+            timeout=15,
         )
         return r.returncode == 0
     except Exception:
@@ -227,8 +240,12 @@ def _ssh_reachable(host: str) -> bool:
 
 def _run(argv: list[str], *, env: dict | None = None, timeout: int = 900):
     return subprocess.run(
-        argv, cwd=PROJECT_ROOT, env={**os.environ, **(env or {})},
-        capture_output=True, text=True, timeout=timeout,
+        argv,
+        cwd=PROJECT_ROOT,
+        env={**os.environ, **(env or {})},
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
 
 
@@ -251,12 +268,12 @@ def submit(profile, *, sources=None, modality="meg") -> dict:
 
     if _dryrun() or not _ssh_reachable(host):
         return {
-            "profile": profile, "state": "dryrun", "job_id": None,
+            "profile": profile,
+            "state": "dryrun",
+            "job_id": None,
             "modality": modality,
-            "message": ("dry-run: SSH unreachable or INOB_CLUSTER_DRYRUN=1; "
-                        "commands not executed"),
-            "commands": [" ".join(cmds[k]) for k in
-                         ("stage", "push_config", *tasks)],
+            "message": ("dry-run: SSH unreachable or INOB_CLUSTER_DRYRUN=1; commands not executed"),
+            "commands": [" ".join(cmds[k]) for k in ("stage", "push_config", *tasks)],
         }
 
     env = {"CLUSTER_PROFILE": profile}
@@ -265,9 +282,14 @@ def submit(profile, *, sources=None, modality="meg") -> dict:
         cp = _run(cmds[key], env=env)
         log.append(cp.stdout + cp.stderr)
         if cp.returncode != 0:
-            return {"profile": profile, "state": "failed", "job_id": None,
-                    "modality": modality,
-                    "message": f"{key} failed", "log": "\n".join(log)[-4000:]}
+            return {
+                "profile": profile,
+                "state": "failed",
+                "job_id": None,
+                "modality": modality,
+                "message": f"{key} failed",
+                "log": "\n".join(log)[-4000:],
+            }
 
     # The first task carries the job id we report back; later tasks (reduce)
     # -hold_jid on it. A non-zero exit on any of them is a failed submission,
@@ -277,20 +299,29 @@ def submit(profile, *, sources=None, modality="meg") -> dict:
         cp = _run(cmds[key], env=env, timeout=180)
         log.append(cp.stdout + cp.stderr)
         if cp.returncode != 0:
-            return {"profile": profile, "state": "failed", "job_id": job_id,
-                    "modality": modality,
-                    "message": f"{key} failed", "log": "\n".join(log)[-4000:]}
+            return {
+                "profile": profile,
+                "state": "failed",
+                "job_id": job_id,
+                "modality": modality,
+                "message": f"{key} failed",
+                "log": "\n".join(log)[-4000:],
+            }
         if i == 0:
             job_id = parse_job_id(cp.stdout + cp.stderr)
-    return {"profile": profile, "state": "submitted", "job_id": job_id,
-            "modality": modality,
-            "message": f"submitted {'+'.join(t[7:] for t in tasks)} to {host}",
-            "log": "\n".join(log)[-4000:]}
+    return {
+        "profile": profile,
+        "state": "submitted",
+        "job_id": job_id,
+        "modality": modality,
+        "message": f"submitted {'+'.join(t[7:] for t in tasks)} to {host}",
+        "log": "\n".join(log)[-4000:],
+    }
 
 
 def status(profile, job_id) -> dict:
     validate_profile(profile)
-    job_id = validate_job_id(job_id)   # never interpolate unvalidated input
+    job_id = validate_job_id(job_id)  # never interpolate unvalidated input
     pv = profile_vars(profile)
     host = pv.get("REMOTE_HOST", profile)
     sched = pv.get("SCHEDULER", "sge").lower()
@@ -319,16 +350,15 @@ def leadfield_name(modality: str = "meg") -> str:
     modality = validate_modality(modality)
     try:
         from inob.config import load_config
+
         cfg = load_config(_active_config_path(), project_root=PROJECT_ROOT)
-        npz = cfg.outputs.forward_eeg_npz if modality == "eeg" \
-            else cfg.outputs.forward_npz
+        npz = cfg.outputs.forward_eeg_npz if modality == "eeg" else cfg.outputs.forward_npz
         return Path(npz).name
     except Exception as e:
         # An unreadable config must not make fetching impossible; fall back to
         # the untagged default rather than a target that may well be wrong.
         logger.warning("could not resolve leadfield name from config: %s", e)
-        return "duneuro_eeg_leadfield.npz" if modality == "eeg" \
-            else "duneuro_leadfield.npz"
+        return "duneuro_eeg_leadfield.npz" if modality == "eeg" else "duneuro_leadfield.npz"
 
 
 def fetch(profile, job_id=None, *, modality: str = "meg") -> dict:
@@ -342,10 +372,17 @@ def fetch(profile, job_id=None, *, modality: str = "meg") -> dict:
     name = leadfield_name(modality)
     cmd = ["rsync", "-avh", f"{host}:{REMOTE_BASE}/{name}", f"{dest}/"]
     if _dryrun() or not _ssh_reachable(host):
-        return {"state": "dryrun", "modality": modality, "leadfield": name,
-                "command": " ".join(cmd)}
+        return {
+            "state": "dryrun",
+            "modality": modality,
+            "leadfield": name,
+            "command": " ".join(cmd),
+        }
     dest.mkdir(parents=True, exist_ok=True)
     cp = _run(cmd, timeout=900)
-    return {"state": "done" if cp.returncode == 0 else "failed",
-            "modality": modality, "leadfield": name,
-            "log": (cp.stdout + cp.stderr)[-2000:]}
+    return {
+        "state": "done" if cp.returncode == 0 else "failed",
+        "modality": modality,
+        "leadfield": name,
+        "log": (cp.stdout + cp.stderr)[-2000:],
+    }

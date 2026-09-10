@@ -1,4 +1,5 @@
 """Tests for inob.sources.muscle: volume-fill sampling and per-muscle fibre axes."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,9 +15,14 @@ from inob.sources.muscle import (
     muscle_sources,
 )
 
-_TET_OFFSETS = np.array([
-    [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
-])
+_TET_OFFSETS = np.array(
+    [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+)
 
 
 def _tet_nodes(centre) -> np.ndarray:
@@ -40,8 +46,11 @@ def _fem_from_centroids(centroids: list, *, tissue_id: int = 1) -> FemMesh:
         tets.append([base, base + 1, base + 2, base + 3])
         tissue.append(filler_id)
     return FemMesh(
-        np.asarray(nodes), np.asarray(tets, dtype=np.int32),
-        np.asarray(tissue, dtype=np.int32), ("muscle", "bone", "skin"), "mm",
+        np.asarray(nodes),
+        np.asarray(tets, dtype=np.int32),
+        np.asarray(tissue, dtype=np.int32),
+        ("muscle", "bone", "skin"),
+        "mm",
     )
 
 
@@ -75,8 +84,11 @@ def test_muscle_sources_volume_fill_returns_real_muscle_points() -> None:
 
 def test_muscle_sources_raises_without_muscle_tissue() -> None:
     fem = FemMesh(
-        np.eye(4, 3), np.array([[0, 1, 2, 3]], dtype=np.int32),
-        np.array([1], dtype=np.int32), ("bone",), "mm",
+        np.eye(4, 3),
+        np.array([[0, 1, 2, 3]], dtype=np.int32),
+        np.array([1], dtype=np.int32),
+        ("bone",),
+        "mm",
     )
     with pytest.raises(ValueError, match="muscle"):
         muscle_sources(fem, spacing_mm=5.0)
@@ -88,8 +100,12 @@ def test_muscle_source_orientations_follow_each_muscles_own_axis(
     """A source near the Z-elongated box gets a Z axis; near the X-elongated
     box, an X axis — not one global axis shared across both muscles."""
     fem = _fem_from_centroids(
-        [[0.0, 0.0, -30.0], [0.0, 0.0, 30.0],       # near a_long_z
-         [470.0, 0.0, 0.0], [530.0, 0.0, 0.0]],     # near b_long_x
+        [
+            [0.0, 0.0, -30.0],
+            [0.0, 0.0, 30.0],  # near a_long_z
+            [470.0, 0.0, 0.0],
+            [530.0, 0.0, 0.0],
+        ],  # near b_long_x
     )
     pos = muscle_sources(fem, spacing_mm=200.0)
     orient = muscle_source_orientations(fem, pos, muscle_dir=two_muscle_stls)
@@ -116,6 +132,7 @@ def test_muscle_source_stl_assignment_matches_orientation_rule(
     idx = muscle_source_stl_assignment(pos, muscle_dir=two_muscle_stls)
 
     from inob.sources.muscle import _muscle_stl_axes
+
     axes_arr, _centres = _muscle_stl_axes(two_muscle_stls)
     for i, o in zip(idx, orient, strict=True):
         np.testing.assert_allclose(axes_arr[i], o)

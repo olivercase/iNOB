@@ -9,6 +9,7 @@ Which scenarios run is decided by the target's physiology profile
 The per-scenario knobs below apply to whichever scenarios the target defines;
 irrelevant ones are ignored.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -59,29 +60,60 @@ see `inob --help` for the full list.""",
     )
     add_common_args(p)
     # vagus scenarios
-    p.add_argument("--hr-bpm", type=float, default=None,
-                   help="[vagus] Heart rate for the baroreceptor scenario.")
-    p.add_argument("--breath-bpm", type=float, default=None,
-                   help="[vagus] Respiratory rate for the deep-breathing scenario.")
+    p.add_argument(
+        "--hr-bpm",
+        type=float,
+        default=None,
+        help="[vagus] Heart rate for the baroreceptor scenario.",
+    )
+    p.add_argument(
+        "--breath-bpm",
+        type=float,
+        default=None,
+        help="[vagus] Respiratory rate for the deep-breathing scenario.",
+    )
     p.add_argument("--baro-duration-s", type=float, default=None)
     p.add_argument("--resp-duration-s", type=float, default=None)
-    p.add_argument("--n-fibres-baro", type=int, default=None,
-                   help="[vagus] Fibres per cardiac burst (baroreceptor).")
-    p.add_argument("--n-fibres-rar", type=int, default=None,
-                   help="[vagus] RAR phasic burst fibres at inspiration onset.")
-    p.add_argument("--n-fibres-sar", type=int, default=None,
-                   help="[vagus] SAR tonic-train fibres.")
+    p.add_argument(
+        "--n-fibres-baro",
+        type=int,
+        default=None,
+        help="[vagus] Fibres per cardiac burst (baroreceptor).",
+    )
+    p.add_argument(
+        "--n-fibres-rar",
+        type=int,
+        default=None,
+        help="[vagus] RAR phasic burst fibres at inspiration onset.",
+    )
+    p.add_argument("--n-fibres-sar", type=int, default=None, help="[vagus] SAR tonic-train fibres.")
     # spine scenarios
-    p.add_argument("--median-rate-hz", type=float, default=None,
-                   help="[spine] Median-nerve stimulation rate (default 4.7 Hz).")
-    p.add_argument("--tibial-rate-hz", type=float, default=None,
-                   help="[spine] Tibial-nerve stimulation rate (default 3.1 Hz).")
+    p.add_argument(
+        "--median-rate-hz",
+        type=float,
+        default=None,
+        help="[spine] Median-nerve stimulation rate (default 4.7 Hz).",
+    )
+    p.add_argument(
+        "--tibial-rate-hz",
+        type=float,
+        default=None,
+        help="[spine] Tibial-nerve stimulation rate (default 3.1 Hz).",
+    )
     p.add_argument("--median-duration-s", type=float, default=None)
     p.add_argument("--tibial-duration-s", type=float, default=None)
-    p.add_argument("--n-fibres-median", type=int, default=None,
-                   help="[spine] Afferents in the median-nerve volley.")
-    p.add_argument("--n-fibres-tibial", type=int, default=None,
-                   help="[spine] Afferents in the tibial-nerve volley.")
+    p.add_argument(
+        "--n-fibres-median",
+        type=int,
+        default=None,
+        help="[spine] Afferents in the median-nerve volley.",
+    )
+    p.add_argument(
+        "--n-fibres-tibial",
+        type=int,
+        default=None,
+        help="[spine] Afferents in the tibial-nerve volley.",
+    )
     p.add_argument("--fs-hz", type=float, default=30_000.0)
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--dpi", type=int, default=300)
@@ -94,7 +126,9 @@ see `inob --help` for the full list.""",
     if not profile.validated:
         logger.warning(
             "[physiology] PHYSIOLOGY-TODO: '%s' has no validated dynamics (%s); "
-            "output is PROVISIONAL.", profile.label, profile.paradigm,
+            "output is PROVISIONAL.",
+            profile.label,
+            profile.paradigm,
         )
 
     # Only forward the knobs the user actually set, so each scenario keeps its
@@ -122,13 +156,15 @@ see `inob --help` for the full list.""",
         logger.error("%s", e)
         return 2
     except TypeError as e:
-        logger.error("scenario parameter not accepted by the %s profile: %s",
-                     profile.label, e)
+        logger.error("scenario parameter not accepted by the %s profile: %s", profile.label, e)
         return 2
 
     render_physiology(
-        cfg, scenarios=scenarios, fs_hz=args.fs_hz,
-        out_path=args.out, dpi=args.dpi,
+        cfg,
+        scenarios=scenarios,
+        fs_hz=args.fs_hz,
+        out_path=args.out,
+        dpi=args.dpi,
     )
     return 0
 

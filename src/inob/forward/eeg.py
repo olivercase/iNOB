@@ -21,6 +21,7 @@ produced by :func:`inob.forward.solve.run_forward` with the magnetic
 fields replaced by surface potentials (units V/(A·m), µV/(nA·m) for the
 human-friendly variant).
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,7 +56,11 @@ EEG_CALIBRATION_FACTOR: float = 0.622
 
 
 def attach_electrodes(
-    driver, dp, electrode_pos: np.ndarray, *, electrode_type: str = "closest_subentity_center",
+    driver,
+    dp,
+    electrode_pos: np.ndarray,
+    *,
+    electrode_type: str = "closest_subentity_center",
 ) -> None:
     """Attach surface electrodes to a DUNEuro driver.
 
@@ -69,7 +74,10 @@ def attach_electrodes(
 
 
 def compute_eeg_leadfield(
-    driver, dp, driver_cfg: dict, src_pos_mm: np.ndarray,
+    driver,
+    dp,
+    driver_cfg: dict,
+    src_pos_mm: np.ndarray,
     source_model_cfg: dict | None = None,
 ) -> np.ndarray:
     """Compute the EEG leadfield using DUNEuro's transfer-matrix path.
@@ -108,36 +116,38 @@ def run_eeg_forward(cfg: Config) -> Path:
     """Run the local EEG forward solve and write the leadfield NPZ."""
     fem = load_fem(cfg.outputs.fem_mat)
     validate_fem(fem)
-    logger.info("FEM: %d nodes, %d tets, labels=%s",
-                len(fem.nodes), len(fem.tets), list(fem.tissue_labels))
+    logger.info(
+        "FEM: %d nodes, %d tets, labels=%s", len(fem.nodes), len(fem.tets), list(fem.tissue_labels)
+    )
 
     electrodes = load_sensors(cfg.outputs.electrodes_mat)
     validate_sensors(electrodes)
     logger.info("Electrodes: %d HD contacts", len(electrodes.coilpos))
 
     src_pos_mm = resolve_source_positions(cfg, fem)
-    logger.info("%d sources (z=%.0f..%.0f)",
-                len(src_pos_mm), src_pos_mm[:, 2].min(), src_pos_mm[:, 2].max())
+    logger.info(
+        "%d sources (z=%.0f..%.0f)", len(src_pos_mm), src_pos_mm[:, 2].min(), src_pos_mm[:, 2].max()
+    )
 
     dp = import_duneuro(cfg)
     driver, driver_cfg, cond = build_driver(cfg, fem)
     attach_electrodes(driver, dp, electrodes.coilpos)
 
     logger.info("Source model: %s", cfg.forward.source_model.type)
-    L = compute_eeg_leadfield(driver, dp, driver_cfg, src_pos_mm,
-                              build_source_model_config(cfg))
+    L = compute_eeg_leadfield(driver, dp, driver_cfg, src_pos_mm, build_source_model_config(cfg))
     # DUNEuro mm-mode EEG → µV/(nA·m): ×EEG_CALIBRATION_FACTOR (see constant
     # above; derivation in docs/VALIDATION.md §2).
     L_uV_per_nAm = L * EEG_CALIBRATION_FACTOR
     logger.info(
         "µV/(nA·m): min=%.3e max=%.3e rms=%.3e",
-        L_uV_per_nAm.min(), L_uV_per_nAm.max(),
-        np.sqrt(np.mean(L_uV_per_nAm ** 2)),
+        L_uV_per_nAm.min(),
+        L_uV_per_nAm.max(),
+        np.sqrt(np.mean(L_uV_per_nAm**2)),
     )
 
     lf = Leadfield(
         L=L,
-        L_fT_per_nAm=L_uV_per_nAm,    # reuse field; semantics noted below
+        L_fT_per_nAm=L_uV_per_nAm,  # reuse field; semantics noted below
         source_pos=src_pos_mm,
         coil_pos=electrodes.coilpos,
         coil_orient=electrodes.coilori,

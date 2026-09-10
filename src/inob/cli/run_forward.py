@@ -1,4 +1,5 @@
 """CLI: run the local DUNEuro forward solve."""
+
 from __future__ import annotations
 
 import argparse
@@ -22,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
         # Reached as the `inob-forward` console script, so sys.argv is ours to
         # re-exec. Dispatch through `inob forward` handles its own switch.
         from inob.duneuro_env import reexec_with_duneuro
+
         reexec_with_duneuro()
     p = argparse.ArgumentParser(
         prog="inob forward",

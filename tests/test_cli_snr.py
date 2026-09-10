@@ -1,4 +1,5 @@
 """CLI: snr argparse defaults + wiring."""
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,9 @@ class _FakeFloors:
 
 
 def _patch(monkeypatch, calls):
-    monkeypatch.setattr(cli_mod, "load_leadfield", lambda path: (calls.setdefault("lf_path", path), _FakeLF())[1])
+    monkeypatch.setattr(
+        cli_mod, "load_leadfield", lambda path: (calls.setdefault("lf_path", path), _FakeLF())[1]
+    )
     monkeypatch.setattr(cli_mod, "compute_noise_floors", lambda cfg: _FakeFloors())
 
 
@@ -45,9 +48,16 @@ def test_main_eeg_modality_uses_eeg_npz(tmp_path, monkeypatch, capsys) -> None:
     calls = {}
     _patch(monkeypatch, calls)
     cfg_eeg_npz = tmp_path / "outputs" / "forward" / "duneuro_eeg_leadfield_vagus.npz"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--modality", "eeg",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--modality",
+            "eeg",
+        ]
+    )
     assert rc == 0
     assert calls["lf_path"] == cfg_eeg_npz
     out = json.loads(capsys.readouterr().out)
@@ -58,10 +68,16 @@ def test_main_explicit_leadfield_overrides(tmp_path, monkeypatch, capsys) -> Non
     calls = {}
     _patch(monkeypatch, calls)
     custom = tmp_path / "custom.npz"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--leadfield", str(custom),
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--leadfield",
+            str(custom),
+        ]
+    )
     assert rc == 0
     assert calls["lf_path"] == custom
 
@@ -70,10 +86,16 @@ def test_main_writes_json_when_out_given(tmp_path, monkeypatch) -> None:
     calls = {}
     _patch(monkeypatch, calls)
     out_file = tmp_path / "snr_out" / "result.json"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--out", str(out_file),
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--out",
+            str(out_file),
+        ]
+    )
     assert rc == 0
     assert out_file.exists()
     data = json.loads(out_file.read_text())
@@ -83,10 +105,16 @@ def test_main_writes_json_when_out_given(tmp_path, monkeypatch) -> None:
 def test_main_n_averages_forwarded(tmp_path, monkeypatch, capsys) -> None:
     calls = {}
     _patch(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--n-averages", "4",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--n-averages",
+            "4",
+        ]
+    )
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out["n_averages"] == 4

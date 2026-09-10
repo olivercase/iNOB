@@ -14,6 +14,7 @@ All four panels share a single source: the dipole position highlighted in
 ``glow`` (gold). Field amplitudes are the longitudinal (along-nerve) moment
 — what a propagating compound action potential actually generates.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,6 +51,7 @@ def _fmt_peak(value: float) -> str:
     if value == 0 or not np.isfinite(value):
         return f"{value:.1f}"
     from math import floor, log10
+
     decimals = max(0, 2 - floor(log10(abs(value))))
     return f"{value:.{decimals}f}"
 
@@ -57,7 +59,7 @@ def _fmt_peak(value: float) -> str:
 @dataclass(frozen=True)
 class TopoFrame:
     source_idx: int
-    moment: str = "z"   # longitudinal moment along the cervical vagus
+    moment: str = "z"  # longitudinal moment along the cervical vagus
 
 
 # Default to the longitudinal (Z) moment, the one a propagating CAP creates.
@@ -65,6 +67,7 @@ DEFAULT_MOMENT = "z"
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
+
 
 def _column_for_source(L: np.ndarray, source_idx: int, moment: str) -> np.ndarray:
     """Slice the leadfield to a single (channel) vector for one source.
@@ -78,7 +81,7 @@ def _column_for_source(L: np.ndarray, source_idx: int, moment: str) -> np.ndarra
         raise IndexError(f"source_idx {source_idx} out of range [0, {three_S // 3})")
     block = L[:, 3 * source_idx : 3 * source_idx + 3]
     if moment == "rms":
-        return np.sqrt(np.mean(block ** 2, axis=1))
+        return np.sqrt(np.mean(block**2, axis=1))
     if moment == "norm":
         return np.linalg.norm(block, axis=1)
     if moment in {"x", "y", "z"}:
@@ -97,8 +100,12 @@ def _radial_channel_mask(labels: list[str]) -> np.ndarray:
 
 
 def _draw_skin_3d(
-    ax, vertices: np.ndarray, faces: np.ndarray, *,
-    alpha: float = 0.05, max_tris: int = 6_000,
+    ax,
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    *,
+    alpha: float = 0.05,
+    max_tris: int = 6_000,
     rng: np.random.Generator | None = None,
 ) -> None:
     if rng is None:
@@ -108,8 +115,10 @@ def _draw_skin_3d(
         idx = rng.choice(n, max_tris, replace=False)
         faces = faces[idx]
     coll = Poly3DCollection(
-        vertices[faces], alpha=alpha,
-        facecolor=NATURE_PALETTE["skin"], edgecolor="none",
+        vertices[faces],
+        alpha=alpha,
+        facecolor=NATURE_PALETTE["skin"],
+        edgecolor="none",
     )
     ax.add_collection3d(coll)
 
@@ -137,7 +146,9 @@ def _grid_shape_from_labels(labels: tuple[str, ...]) -> tuple[int, int] | None:
 
 
 def _paddle_uv_from_labels(
-    labels: tuple[str, ...], pitch_mm: float, head_offset_mm: float,
+    labels: tuple[str, ...],
+    pitch_mm: float,
+    head_offset_mm: float,
     foot_offset_mm: float,
 ) -> np.ndarray | None:
     """Reconstruct (u, v) coords for paddle32 channels in the patch frame.
@@ -178,8 +189,9 @@ def _paddle_uv_from_labels(
     return out
 
 
-def _draw_paddle_silhouette(ax, uv: np.ndarray, *, contact_radius: float = 1.6,
-                             head_radius_factor: float = 1.6) -> None:
+def _draw_paddle_silhouette(
+    ax, uv: np.ndarray, *, contact_radius: float = 1.6, head_radius_factor: float = 1.6
+) -> None:
     """Outline the PEDOT:PSS paddle as a teal substrate behind the contacts."""
     from matplotlib.patches import Circle
 
@@ -192,36 +204,69 @@ def _draw_paddle_silhouette(ax, uv: np.ndarray, *, contact_radius: float = 1.6,
     body_ymax = float(body[:, 1].max()) + 4.0
 
     # Body slab
-    ax.add_patch(plt.Rectangle(
-        (body_xmin, body_ymin),
-        body_xmax - body_xmin, body_ymax - body_ymin,
-        facecolor="#9FCFD3", edgecolor=NATURE_PALETTE["axis"],
-        linewidth=0.4, alpha=0.55, zorder=1,
-    ))
+    ax.add_patch(
+        plt.Rectangle(
+            (body_xmin, body_ymin),
+            body_xmax - body_xmin,
+            body_ymax - body_ymin,
+            facecolor="#9FCFD3",
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidth=0.4,
+            alpha=0.55,
+            zorder=1,
+        )
+    )
     # Head + foot connector slabs
-    ax.add_patch(plt.Rectangle(
-        (-2.0, body_ymax),
-        4.0, head[1] - body_ymax,
-        facecolor="#9FCFD3", edgecolor="none", alpha=0.55, zorder=1,
-    ))
-    ax.add_patch(plt.Rectangle(
-        (-2.0, foot[1]),
-        4.0, body_ymin - foot[1],
-        facecolor="#9FCFD3", edgecolor="none", alpha=0.55, zorder=1,
-    ))
+    ax.add_patch(
+        plt.Rectangle(
+            (-2.0, body_ymax),
+            4.0,
+            head[1] - body_ymax,
+            facecolor="#9FCFD3",
+            edgecolor="none",
+            alpha=0.55,
+            zorder=1,
+        )
+    )
+    ax.add_patch(
+        plt.Rectangle(
+            (-2.0, foot[1]),
+            4.0,
+            body_ymin - foot[1],
+            facecolor="#9FCFD3",
+            edgecolor="none",
+            alpha=0.55,
+            zorder=1,
+        )
+    )
     # Head and foot terminations (rounded)
-    ax.add_patch(Circle((head[0], head[1]),
-                        contact_radius * head_radius_factor + 1.2,
-                        facecolor="#9FCFD3", edgecolor=NATURE_PALETTE["axis"],
-                        linewidth=0.4, alpha=0.55, zorder=1))
-    ax.add_patch(Circle((foot[0], foot[1]),
-                        contact_radius + 1.2,
-                        facecolor="#9FCFD3", edgecolor=NATURE_PALETTE["axis"],
-                        linewidth=0.4, alpha=0.55, zorder=1))
+    ax.add_patch(
+        Circle(
+            (head[0], head[1]),
+            contact_radius * head_radius_factor + 1.2,
+            facecolor="#9FCFD3",
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidth=0.4,
+            alpha=0.55,
+            zorder=1,
+        )
+    )
+    ax.add_patch(
+        Circle(
+            (foot[0], foot[1]),
+            contact_radius + 1.2,
+            facecolor="#9FCFD3",
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidth=0.4,
+            alpha=0.55,
+            zorder=1,
+        )
+    )
 
 
-def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
-                          vmin: float, vmax: float, colorbar: bool = True) -> None:
+def _draw_eeg_2d_topoplot(
+    ax, electrodes, val: np.ndarray, cfg: Config, *, vmin: float, vmax: float, colorbar: bool = True
+) -> None:
     """Render the EEG patch as a 2-D topoplot.
 
     Auto-detects layout from the channel labels: paddle32 → bicubic
@@ -247,8 +292,11 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
             cols = max(cols, c)
         rows += 1
         cols += 1
-        body_idx = [i for i, lab in enumerate(electrodes.labels)
-                    if not (lab.startswith("elec-head") or lab.startswith("elec-foot"))]
+        body_idx = [
+            i
+            for i, lab in enumerate(electrodes.labels)
+            if not (lab.startswith("elec-head") or lab.startswith("elec-foot"))
+        ]
         body_uv = paddle_uv[body_idx]
         body_grid = np.full((rows, cols), np.nan)
         for i in body_idx:
@@ -261,12 +309,19 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
         v_lo = body_uv[:, 1].min() - 0.5 * pitch
         v_hi = body_uv[:, 1].max() + 0.5 * pitch
         im = ax.imshow(
-            body_grid, cmap=divergent_cmap(), vmin=vmin, vmax=vmax,
+            body_grid,
+            cmap=divergent_cmap(),
+            vmin=vmin,
+            vmax=vmax,
             extent=(u_lo, u_hi, v_lo, v_hi),
-            aspect="equal", origin="lower", interpolation="bicubic", zorder=2,
+            aspect="equal",
+            origin="lower",
+            interpolation="bicubic",
+            zorder=2,
         )
         # Plot circular contacts on top so positions are visible.
         from matplotlib.patches import Circle
+
         contact_r = 1.6
         for k, lab in enumerate(electrodes.labels):
             uv = paddle_uv[k]
@@ -274,20 +329,28 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
                 r = contact_r * 1.8
             else:
                 r = contact_r
-            ax.add_patch(Circle(
-                (uv[0], uv[1]), r,
-                facecolor=divergent_cmap()(
-                    (val[k] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
-                ),
-                edgecolor=NATURE_PALETTE["axis"], linewidth=0.4, zorder=3,
-            ))
+            ax.add_patch(
+                Circle(
+                    (uv[0], uv[1]),
+                    r,
+                    facecolor=divergent_cmap()(
+                        (val[k] - vmin) / (vmax - vmin) if vmax > vmin else 0.5
+                    ),
+                    edgecolor=NATURE_PALETTE["axis"],
+                    linewidth=0.4,
+                    zorder=3,
+                )
+            )
         ax.set_xlim(paddle_uv[:, 0].min() - 8.0, paddle_uv[:, 0].max() + 8.0)
         ax.set_ylim(paddle_uv[:, 1].min() - 8.0, paddle_uv[:, 1].max() + 8.0)
         ax.set_aspect("equal")
         ax.set_xlabel(f"u  (mm, patch frame)  ·  pitch {pitch:.1f} mm")
         ax.set_ylabel("v  (mm, along-body)")
-        cb = (ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04,
-                                 pad=0.03) if colorbar else None)
+        cb = (
+            ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04, pad=0.03)
+            if colorbar
+            else None
+        )
         if cb is not None:
             cb.set_label("µV  (1 nA·m source)", fontsize=8)
             cb.outline.set_visible(False)
@@ -299,28 +362,41 @@ def _draw_eeg_2d_topoplot(ax, electrodes, val: np.ndarray, cfg: Config, *,
         rows, cols = grid_shape
         Z = val.reshape(rows, cols)
         im = ax.imshow(
-            Z, cmap=divergent_cmap(), vmin=vmin, vmax=vmax,
-            aspect="equal", origin="lower", interpolation="bicubic",
+            Z,
+            cmap=divergent_cmap(),
+            vmin=vmin,
+            vmax=vmax,
+            aspect="equal",
+            origin="lower",
+            interpolation="bicubic",
         )
         ax.set_xlabel(f"Column  ·  {cols} contacts @ {pitch:.1f} mm pitch")
         ax.set_ylabel(f"Row  ·  {rows} contacts")
-        cb = (ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04,
-                                 pad=0.03) if colorbar else None)
+        cb = (
+            ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04, pad=0.03)
+            if colorbar
+            else None
+        )
         if cb is not None:
             cb.set_label("µV  (1 nA·m source)", fontsize=8)
             cb.outline.set_visible(False)
         return
 
     im = ax.scatter(
-        electrodes.coilpos[:, 0], electrodes.coilpos[:, 2],
-        c=val, cmap=divergent_cmap(), s=80, vmin=vmin, vmax=vmax,
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.3,
+        electrodes.coilpos[:, 0],
+        electrodes.coilpos[:, 2],
+        c=val,
+        cmap=divergent_cmap(),
+        s=80,
+        vmin=vmin,
+        vmax=vmax,
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.3,
     )
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Z (mm)")
     ax.set_aspect("equal")
-    cb = (ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04,
-                             pad=0.03) if colorbar else None)
+    cb = ax.figure.colorbar(im, ax=ax, shrink=0.85, fraction=0.04, pad=0.03) if colorbar else None
     if cb is not None:
         cb.set_label("µV  (1 nA·m source)", fontsize=8)
         cb.outline.set_visible(False)
@@ -347,10 +423,16 @@ def _format_3d_axis(ax, *, src: np.ndarray, pos_for_lim: np.ndarray | None = Non
 
 # ── single-modality panels (also used by the dual figure) ──────────────────
 
+
 def render_meg_topoplot(
-    cfg: Config, *, source_idx: int = -1, ax=None,
-    show_skin: bool = True, title: str | None = None,
-    moment: str = DEFAULT_MOMENT, panel_label: str | None = None,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
+    ax=None,
+    show_skin: bool = True,
+    title: str | None = None,
+    moment: str = DEFAULT_MOMENT,
+    panel_label: str | None = None,
 ) -> tuple[plt.Figure, plt.Axes]:
     """3-D MEG topoplot for a single source position. Returns (fig, ax)."""
     apply_nature_style()
@@ -386,14 +468,27 @@ def render_meg_topoplot(
 
     vmin, vmax = divergent_norm(val)
     sc = ax.scatter(
-        pos[:, 0], pos[:, 1], pos[:, 2],
-        c=val, cmap=divergent_cmap(), s=44, vmin=vmin, vmax=vmax,
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.25, depthshade=False,
+        pos[:, 0],
+        pos[:, 1],
+        pos[:, 2],
+        c=val,
+        cmap=divergent_cmap(),
+        s=44,
+        vmin=vmin,
+        vmax=vmax,
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.25,
+        depthshade=False,
     )
     ax.scatter(
-        [src[0]], [src[1]], [src[2]],
-        s=160, c=NATURE_PALETTE["glow"],
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*",
+        [src[0]],
+        [src[1]],
+        [src[2]],
+        s=160,
+        c=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.8,
+        marker="*",
     )
     _format_3d_axis(ax, src=src, pos_for_lim=pos)
     ax.set_title(title or "MEG  ·  radial OPM coils")
@@ -406,8 +501,12 @@ def render_meg_topoplot(
 
 
 def render_eeg_topoplot(
-    cfg: Config, *, source_idx: int = -1, figure: plt.Figure | None = None,
-    with_3d_context: bool = True, title: str | None = None,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
+    figure: plt.Figure | None = None,
+    with_3d_context: bool = True,
+    title: str | None = None,
     moment: str = DEFAULT_MOMENT,
 ) -> plt.Figure:
     """Render an EEG topoplot: 2-D grid heatmap + optional 3-D context."""
@@ -423,8 +522,17 @@ def render_eeg_topoplot(
         figure = plt.figure(figsize=(11, 5)) if with_3d_context else plt.figure(figsize=(5.5, 5))
 
     if with_3d_context:
-        gs = GridSpec(1, 2, figure=figure, width_ratios=[1.1, 1.0],
-                      left=0.05, right=0.96, top=0.92, bottom=0.10, wspace=0.25)
+        gs = GridSpec(
+            1,
+            2,
+            figure=figure,
+            width_ratios=[1.1, 1.0],
+            left=0.05,
+            right=0.96,
+            top=0.92,
+            bottom=0.10,
+            wspace=0.25,
+        )
         ax2d = figure.add_subplot(gs[0, 0])
         ax3d = figure.add_subplot(gs[0, 1], projection="3d")
     else:
@@ -445,15 +553,27 @@ def render_eeg_topoplot(
             # The skin backdrop is decorative; the data plot must still draw.
             logger.debug("skin backdrop skipped", exc_info=True)
         ax3d.scatter(
-            electrodes.coilpos[:, 0], electrodes.coilpos[:, 1], electrodes.coilpos[:, 2],
-            c=val, cmap=divergent_cmap(), vmin=vmin, vmax=vmax,
-            s=24, edgecolor=NATURE_PALETTE["axis"], linewidths=0.25,
+            electrodes.coilpos[:, 0],
+            electrodes.coilpos[:, 1],
+            electrodes.coilpos[:, 2],
+            c=val,
+            cmap=divergent_cmap(),
+            vmin=vmin,
+            vmax=vmax,
+            s=24,
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidths=0.25,
             depthshade=False,
         )
         ax3d.scatter(
-            [src[0]], [src[1]], [src[2]],
-            s=130, c=NATURE_PALETTE["glow"],
-            edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*",
+            [src[0]],
+            [src[1]],
+            [src[2]],
+            s=130,
+            c=NATURE_PALETTE["glow"],
+            edgecolor=NATURE_PALETTE["axis"],
+            linewidths=0.8,
+            marker="*",
         )
         _format_3d_axis(ax3d, src=src, pos_for_lim=electrodes.coilpos)
         ax3d.set_title("Patch placement on neck")
@@ -463,9 +583,14 @@ def render_eeg_topoplot(
 
 # ── the headline dual figure ───────────────────────────────────────────────
 
+
 def render_dual_topoplot(
-    cfg: Config, *, source_idx: int = -1, out_path: Path | None = None,
-    dpi: int = 300, moment: str = DEFAULT_MOMENT,
+    cfg: Config,
+    *,
+    source_idx: int = -1,
+    out_path: Path | None = None,
+    dpi: int = 300,
+    moment: str = DEFAULT_MOMENT,
 ) -> Path:
     """Nature Reviews-styled dual MEG/EEG figure (4 panels, single source).
 
@@ -499,9 +624,15 @@ def render_dual_topoplot(
     # ── figure ─────────────────────────────────────────────────────────────
     fig = plt.figure(figsize=(13.5, 11.5))
     gs = GridSpec(
-        2, 2, figure=fig,
-        left=0.04, right=0.97, top=0.93, bottom=0.06,
-        hspace=0.30, wspace=0.20,
+        2,
+        2,
+        figure=fig,
+        left=0.04,
+        right=0.97,
+        top=0.93,
+        bottom=0.06,
+        hspace=0.30,
+        wspace=0.20,
     )
 
     # ── panel a: anatomy + sensor placement context ────────────────────────
@@ -513,37 +644,62 @@ def render_dual_topoplot(
             _draw_skin_3d(ax_a, skin.vertices, skin.faces, alpha=0.05)
         vagus = geom.compartments.get("mesh_vagus_left")
         if vagus is not None:
-            _draw_skin_3d(ax_a, vagus.vertices, vagus.faces, alpha=0.65,
-                          max_tris=12_000)
+            _draw_skin_3d(ax_a, vagus.vertices, vagus.faces, alpha=0.65, max_tris=12_000)
     except Exception:
         # The skin backdrop is decorative; the data plot must still draw.
         logger.debug("skin backdrop skipped", exc_info=True)
     ax_a.scatter(
-        sensors.coilpos[:: 3, 0], sensors.coilpos[:: 3, 1], sensors.coilpos[:: 3, 2],
-        c=NATURE_PALETTE["blue"], s=4, alpha=0.5, depthshade=False,
+        sensors.coilpos[::3, 0],
+        sensors.coilpos[::3, 1],
+        sensors.coilpos[::3, 2],
+        c=NATURE_PALETTE["blue"],
+        s=4,
+        alpha=0.5,
+        depthshade=False,
         label=f"OPM array (n={len(sensors.coilpos) // 3})",
     )
     ax_a.scatter(
-        electrodes.coilpos[:, 0], electrodes.coilpos[:, 1], electrodes.coilpos[:, 2],
-        c=NATURE_PALETTE["red"], s=10, depthshade=False,
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.2,
+        electrodes.coilpos[:, 0],
+        electrodes.coilpos[:, 1],
+        electrodes.coilpos[:, 2],
+        c=NATURE_PALETTE["red"],
+        s=10,
+        depthshade=False,
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.2,
         label=f"HD-EMG patch (n={len(electrodes.coilpos)})",
     )
     # All vagus sources along the polyline
     ax_a.plot(
-        meg_lf.source_pos[:, 0], meg_lf.source_pos[:, 1], meg_lf.source_pos[:, 2],
-        c=NATURE_PALETTE["axis"], lw=0.6, alpha=0.5,
+        meg_lf.source_pos[:, 0],
+        meg_lf.source_pos[:, 1],
+        meg_lf.source_pos[:, 2],
+        c=NATURE_PALETTE["axis"],
+        lw=0.6,
+        alpha=0.5,
     )
     ax_a.scatter(
-        [src[0]], [src[1]], [src[2]],
-        s=180, c=NATURE_PALETTE["glow"],
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*",
-        label="Source", depthshade=False,
+        [src[0]],
+        [src[1]],
+        [src[2]],
+        s=180,
+        c=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.8,
+        marker="*",
+        label="Source",
+        depthshade=False,
     )
-    _format_3d_axis(ax_a, src=src, pos_for_lim=sensors.coilpos[:: 3])
+    _format_3d_axis(ax_a, src=src, pos_for_lim=sensors.coilpos[::3])
     ax_a.set_title("Anatomy and sensor placement")
-    ax_a.legend(loc="upper left", bbox_to_anchor=(0.02, 0.98), fontsize=7,
-                handletextpad=0.5, borderpad=0.3, labelspacing=0.4)
+    ax_a.legend(
+        loc="upper left",
+        bbox_to_anchor=(0.02, 0.98),
+        fontsize=7,
+        handletextpad=0.5,
+        borderpad=0.3,
+        labelspacing=0.4,
+    )
     add_panel_label(ax_a, "a")
 
     # ── panel b: MEG topoplot ──────────────────────────────────────────────
@@ -556,14 +712,27 @@ def render_dual_topoplot(
         logger.debug("skin backdrop skipped", exc_info=True)
     vmin_b, vmax_b = divergent_norm(meg_val)
     sc_b = ax_b.scatter(
-        meg_pos[:, 0], meg_pos[:, 1], meg_pos[:, 2],
-        c=meg_val, cmap=divergent_cmap(), s=46, vmin=vmin_b, vmax=vmax_b,
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.25, depthshade=False,
+        meg_pos[:, 0],
+        meg_pos[:, 1],
+        meg_pos[:, 2],
+        c=meg_val,
+        cmap=divergent_cmap(),
+        s=46,
+        vmin=vmin_b,
+        vmax=vmax_b,
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.25,
+        depthshade=False,
     )
     ax_b.scatter(
-        [src[0]], [src[1]], [src[2]],
-        s=160, c=NATURE_PALETTE["glow"],
-        edgecolor=NATURE_PALETTE["axis"], linewidths=0.8, marker="*",
+        [src[0]],
+        [src[1]],
+        [src[2]],
+        s=160,
+        c=NATURE_PALETTE["glow"],
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidths=0.8,
+        marker="*",
     )
     _format_3d_axis(ax_b, src=src, pos_for_lim=meg_pos)
     ax_b.set_title("MEG topoplot  ·  radial OPM coils")
@@ -584,10 +753,20 @@ def render_dual_topoplot(
     bins = 60
     meg_norm = meg_val / np.abs(meg_val).max() if np.abs(meg_val).max() else meg_val
     eeg_norm = eeg_val / np.abs(eeg_val).max() if np.abs(eeg_val).max() else eeg_val
-    ax_d.hist(meg_norm, bins=bins, color=NATURE_PALETTE["blue"], alpha=0.65,
-              label=f"MEG  ·  peak |L| = {_fmt_peak(np.abs(meg_val).max())} fT")
-    ax_d.hist(eeg_norm, bins=bins, color=NATURE_PALETTE["red"], alpha=0.65,
-              label=f"EEG  ·  peak |L| = {_fmt_peak(np.abs(eeg_val).max())} µV")
+    ax_d.hist(
+        meg_norm,
+        bins=bins,
+        color=NATURE_PALETTE["blue"],
+        alpha=0.65,
+        label=f"MEG  ·  peak |L| = {_fmt_peak(np.abs(meg_val).max())} fT",
+    )
+    ax_d.hist(
+        eeg_norm,
+        bins=bins,
+        color=NATURE_PALETTE["red"],
+        alpha=0.65,
+        label=f"EEG  ·  peak |L| = {_fmt_peak(np.abs(eeg_val).max())} µV",
+    )
     ax_d.axvline(0, color=NATURE_PALETTE["axis"], lw=0.6)
     ax_d.set_xlabel("Channel amplitude  /  modality peak")
     ax_d.set_ylabel("Sensor count")
@@ -598,7 +777,9 @@ def render_dual_topoplot(
     fig.suptitle(
         f"Dual-modality forward model of a single {source_region_label(cfg)} source "
         f"(z = {src[2]:.0f} mm, longitudinal moment)",
-        fontsize=11, fontweight="bold", y=0.985,
+        fontsize=11,
+        fontweight="bold",
+        y=0.985,
     )
 
     _tag = source_region_label(cfg).replace(" + ", "_").replace(" ", "_")
@@ -611,7 +792,11 @@ def render_dual_topoplot(
 
 
 def render_meg_montage(
-    cfg: Config, *, n_sources: int = 5, out_path: Path | None = None, dpi: int = 220,
+    cfg: Config,
+    *,
+    n_sources: int = 5,
+    out_path: Path | None = None,
+    dpi: int = 220,
 ) -> Path:
     """MEG montage: ``n_sources`` evenly-spaced source positions along the vagus."""
     apply_nature_style()
@@ -624,13 +809,18 @@ def render_meg_montage(
     for k, idx in enumerate(indices):
         ax = fig.add_subplot(1, n_sources, k + 1, projection="3d")
         render_meg_topoplot(
-            cfg, source_idx=int(idx), ax=ax, show_skin=True,
+            cfg,
+            source_idx=int(idx),
+            ax=ax,
+            show_skin=True,
             title=f"z = {lf.source_pos[idx, 2]:.0f} mm",
             panel_label=panel_letters[k] if k < len(panel_letters) else None,
         )
     fig.suptitle(
         f"MEG topoplot montage along the {source_region_label(cfg)}",
-        fontsize=11, fontweight="bold", y=0.99,
+        fontsize=11,
+        fontweight="bold",
+        y=0.99,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     _tag = source_region_label(cfg).replace(" + ", "_").replace(" ", "_")

@@ -42,6 +42,7 @@ References
   conduction velocity (skeletal-muscle fibre CV ≈ 3–5 m/s, weakly diameter-
   dependent, unlike saltatory conduction in myelinated nerve).
 """
+
 from __future__ import annotations
 
 import logging
@@ -62,8 +63,12 @@ logger = logging.getLogger(__name__)
 
 # ── fibre populations ──────────────────────────────────────────────────────
 
+
 def a_fibre_population(
-    *, mean_um: float = 8.0, sigma_log: float = 0.30, n_bins: int = 20,
+    *,
+    mean_um: float = 8.0,
+    sigma_log: float = 0.30,
+    n_bins: int = 20,
 ) -> FibreDistribution:
     """Vagal A-myelinated afferents (mean d ≈ 8 µm, mean CV ≈ 47 m/s).
 
@@ -71,13 +76,19 @@ def a_fibre_population(
     :mod:`inob.physiology.scenarios` keeps the original name for compatibility.
     """
     return lognormal_fibre_distribution(
-        mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins,
-        lo_um=2.0, hi_um=15.0,
+        mean_um=mean_um,
+        sigma_log=sigma_log,
+        n_bins=n_bins,
+        lo_um=2.0,
+        hi_um=15.0,
     )
 
 
 def dorsal_column_population(
-    *, mean_um: float = 10.0, sigma_log: float = 0.25, n_bins: int = 20,
+    *,
+    mean_um: float = 10.0,
+    sigma_log: float = 0.25,
+    n_bins: int = 20,
 ) -> FibreDistribution:
     """Dorsal-column ascending afferents (mean d ≈ 10 µm, mean CV ≈ 59 m/s).
 
@@ -89,13 +100,19 @@ def dorsal_column_population(
     Sasaki 2008), which is the observable this population is tuned to match.
     """
     return lognormal_fibre_distribution(
-        mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins,
-        lo_um=3.0, hi_um=16.0,
+        mean_um=mean_um,
+        sigma_log=sigma_log,
+        n_bins=n_bins,
+        lo_um=3.0,
+        hi_um=16.0,
     )
 
 
 def muscle_fibre_population(
-    *, mean_um: float = 60.0, sigma_log: float = 0.20, n_bins: int = 20,
+    *,
+    mean_um: float = 60.0,
+    sigma_log: float = 0.20,
+    n_bins: int = 20,
 ) -> FibreDistribution:
     """Skeletal-muscle fibres (mean d ≈ 60 µm, range 40–80 µm).
 
@@ -106,12 +123,16 @@ def muscle_fibre_population(
     see :data:`MUSCLE_PROFILE`'s ``cv_kwargs``.
     """
     return lognormal_fibre_distribution(
-        mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins,
-        lo_um=40.0, hi_um=80.0,
+        mean_um=mean_um,
+        sigma_log=sigma_log,
+        n_bins=n_bins,
+        lo_um=40.0,
+        hi_um=80.0,
     )
 
 
 # ── profile ────────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class PhysiologyProfile:
@@ -165,7 +186,9 @@ class PhysiologyProfile:
 
     notes: str = ""
     scenario_builder: Callable[..., tuple] | None = field(
-        default=None, repr=False, compare=False,
+        default=None,
+        repr=False,
+        compare=False,
     )
     cv_kwargs: dict | None = None
     """Override for :func:`inob.sources.cap.conduction_velocity_m_per_s`.
@@ -183,7 +206,8 @@ class PhysiologyProfile:
     def mean_cv_m_per_s(self) -> float:
         """Fibre-population-weighted mean conduction velocity."""
         cv = conduction_velocity_m_per_s(
-            self.fibres.diameters_um, **(self.cv_kwargs or {}),
+            self.fibres.diameters_um,
+            **(self.cv_kwargs or {}),
         )
         return float(np.sum(cv * self.fibres.weights))
 
@@ -222,8 +246,11 @@ class PhysiologyProfile:
 
     def describe(self) -> str:
         """One-block summary for figure panels and logs."""
-        span = ("whole polyline" if self.propagation_span_mm is None
-                else f"{self.propagation_span_mm:.0f} mm")
+        span = (
+            "whole polyline"
+            if self.propagation_span_mm is None
+            else f"{self.propagation_span_mm:.0f} mm"
+        )
         return (
             f"{self.label} physiology — {self.paradigm}\n"
             f"Generator: {self.generator}\n"
@@ -236,6 +263,7 @@ class PhysiologyProfile:
 
 # ── the profiles ───────────────────────────────────────────────────────────
 
+
 def _scenario_pair(*prefixed: tuple[str, str]):
     """Build a ``scenario_builder`` from ``(prefix, scenario-function name)`` pairs.
 
@@ -243,22 +271,26 @@ def _scenario_pair(*prefixed: tuple[str, str]):
     route each keyword by prefix — ``baro_duration_s=6.0`` reaches
     ``baroreceptor_scenario(duration_s=6.0)``.
     """
+
     def build(**kwargs) -> tuple:
         from inob.physiology import scenarios as _sc
+
         out = []
         for prefix, fn_name in prefixed:
-            sub = {k[len(prefix) + 1:]: v for k, v in kwargs.items()
-                   if k.startswith(f"{prefix}_")}
+            sub = {k[len(prefix) + 1 :]: v for k, v in kwargs.items() if k.startswith(f"{prefix}_")}
             out.append(getattr(_sc, fn_name)(**sub))
         return tuple(out)
+
     return build
 
 
 _vagus_scenarios = _scenario_pair(
-    ("baro", "baroreceptor_scenario"), ("resp", "respiratory_scenario"),
+    ("baro", "baroreceptor_scenario"),
+    ("resp", "respiratory_scenario"),
 )
 _spine_scenarios = _scenario_pair(
-    ("median", "median_nerve_ssep_scenario"), ("tibial", "tibial_nerve_ssep_scenario"),
+    ("median", "median_nerve_ssep_scenario"),
+    ("tibial", "tibial_nerve_ssep_scenario"),
 )
 
 
@@ -401,7 +433,7 @@ MUSCLE_PROFILE = PhysiologyProfile(
     cv_kwargs={"myelinated_threshold_um": 1000.0, "c_unmyelinated": 4.0},
     generator="motor-endplate junction, propagating bidirectionally to tendons",
     paradigm="PROVISIONAL — single synchronous fibre volley (evoked-M-wave "
-             "analogue); no MUAP/motor-unit/recruitment model",
+    "analogue); no MUAP/motor-unit/recruitment model",
     notes=(
         "Fibre diameter, AP amplitude, and conduction velocity (~4 m/s, "
         "diameter-independent) are now muscle-specific rather than reused "
@@ -442,11 +474,16 @@ def profile_for_tag(tag: str) -> PhysiologyProfile:
         return PROFILES[tag]
     logger.warning(
         "no physiology profile for source-target %r; falling back to vagus "
-        "physiology and marking the output provisional", tag,
+        "physiology and marking the output provisional",
+        tag,
     )
     from dataclasses import replace
+
     return replace(
-        VAGUS_PROFILE, name=tag, label=tag.replace("_", " + "), validated=False,
+        VAGUS_PROFILE,
+        name=tag,
+        label=tag.replace("_", " + "),
+        validated=False,
         generator=f"PROVISIONAL — no profile for {tag!r}; reusing vagus",
         paradigm="PROVISIONAL — physiology not modelled for this target",
     )
@@ -455,4 +492,5 @@ def profile_for_tag(tag: str) -> PhysiologyProfile:
 def profile_for(cfg) -> PhysiologyProfile:
     """Physiology profile implied by ``cfg``'s leadfield filename."""
     from inob.config import source_target_tag
+
     return profile_for_tag(source_target_tag(cfg))

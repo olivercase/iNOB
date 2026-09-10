@@ -1,4 +1,5 @@
 """CLI: build the multi-compartment geometry HDF5."""
+
 from __future__ import annotations
 
 import argparse
@@ -34,15 +35,18 @@ see `inob --help` for the full list.""",
     )
     add_common_args(p)
     p.add_argument(
-        "--shrinkwrap-only", action="store_true",
+        "--shrinkwrap-only",
+        action="store_true",
         help="Skip cheap repair / boolean union; force the voxel shrinkwrap pipeline.",
     )
     p.add_argument(
-        "--check-only", action="store_true",
+        "--check-only",
+        action="store_true",
         help="Validate existing compartments only (do not rebuild).",
     )
     p.add_argument(
-        "--only", default=None,
+        "--only",
+        default=None,
         help="Comma-separated compartment names to build (default: all).",
     )
     args = p.parse_args(argv)

@@ -1,4 +1,5 @@
 """CLI: run_forward argparse + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +15,9 @@ def test_main_uses_the_multicore_path(tmp_path, monkeypatch) -> None:
     # running `inob forward` on one core wastes every other core on the machine.
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "run_forward_local", lambda cfg: calls.setdefault("cfg", cfg),
+        cli_mod,
+        "run_forward_local",
+        lambda cfg: calls.setdefault("cfg", cfg),
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
@@ -24,10 +27,19 @@ def test_main_uses_the_multicore_path(tmp_path, monkeypatch) -> None:
 def test_workers_flag_reaches_the_config(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "run_forward_local", lambda cfg: calls.setdefault("cfg", cfg),
+        cli_mod,
+        "run_forward_local",
+        lambda cfg: calls.setdefault("cfg", cfg),
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--workers", "4",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--workers",
+            "4",
+        ]
+    )
     assert rc == 0
     assert calls["cfg"].forward.local_workers == 4

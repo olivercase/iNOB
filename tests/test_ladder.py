@@ -3,6 +3,7 @@
 The analytic rungs (biot, sarvas) must run from geometry alone; the fem rung
 must require the leadfield and raise cleanly when it is absent.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -14,14 +15,24 @@ from inob.io.npz import Leadfield
 
 
 def _fem() -> FemMesh:
-    nodes = np.array([
-        [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0],
-        [40.0, 0.0, 10.0], [41.0, 0.0, 10.0], [40.0, 1.0, 10.0], [40.0, 0.0, 11.0],
-    ], dtype=np.float64)
+    nodes = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [40.0, 0.0, 10.0],
+            [41.0, 0.0, 10.0],
+            [40.0, 1.0, 10.0],
+            [40.0, 0.0, 11.0],
+        ],
+        dtype=np.float64,
+    )
     tets = np.array([[0, 1, 2, 3], [4, 5, 6, 7]], dtype=np.int32)
     tissue = np.array([1, 2], dtype=np.int32)  # bone, vagus_left
-    return FemMesh(nodes=nodes, tets=tets, tissue=tissue,
-                   tissue_labels=("bone", "vagus_left"), unit="mm")
+    return FemMesh(
+        nodes=nodes, tets=tets, tissue=tissue, tissue_labels=("bone", "vagus_left"), unit="mm"
+    )
 
 
 def _sensors(n: int = 4) -> SensorArray:
@@ -37,15 +48,22 @@ def _sensors(n: int = 4) -> SensorArray:
     )
     c = 3 * n
     return SensorArray(
-        coilpos=coilpos, coilori=coilori, labels=labels,
+        coilpos=coilpos,
+        coilori=coilori,
+        labels=labels,
         chantype=tuple("megmag" for _ in range(c)),
         chanunit=tuple("T" for _ in range(c)),
     )
 
 
-_SRC = np.array([
-    [0.0, 0.0, 0.0], [0.0, 0.0, 5.0], [0.0, 0.0, 10.0],
-], dtype=np.float64)
+_SRC = np.array(
+    [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 5.0],
+        [0.0, 0.0, 10.0],
+    ],
+    dtype=np.float64,
+)
 
 
 @pytest.fixture
@@ -91,6 +109,7 @@ def test_source_idx_default_is_middle(patched):
 def test_fem_rung_requires_leadfield(patched, monkeypatch):
     def _raise(path):
         raise FileNotFoundError(f"leadfield not found: {path}")
+
     monkeypatch.setattr(sc, "load_leadfield", _raise)
     with pytest.raises(FileNotFoundError):
         sc.run_ladder(_Cfg, rungs=["fem"])
@@ -101,11 +120,14 @@ def test_full_ladder_with_leadfield(patched, monkeypatch):
     S = 3
     L = np.ones((3 * n_coils, 3 * S)) * 1e-12
     lf = Leadfield(
-        L=L, L_fT_per_nAm=L * 1e15,
-        source_pos=_SRC, coil_pos=np.zeros((3 * n_coils, 3)),
+        L=L,
+        L_fT_per_nAm=L * 1e15,
+        source_pos=_SRC,
+        coil_pos=np.zeros((3 * n_coils, 3)),
         coil_orient=np.zeros((3 * n_coils, 3)),
         channel_names=tuple(f"c{i}" for i in range(3 * n_coils)),
-        conductivities=np.array([0.3]), tissue_labels=("vagus_left",),
+        conductivities=np.array([0.3]),
+        tissue_labels=("vagus_left",),
     )
     monkeypatch.setattr(sc, "load_leadfield", lambda p: lf)
     r = sc.run_ladder(_Cfg, rungs=["biot", "sarvas", "fem"])

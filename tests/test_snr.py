@@ -1,4 +1,5 @@
 """SNR + noise-floor utility tests (no DUNEuro required)."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -36,7 +37,7 @@ def test_per_source_amplitude_shape_and_units() -> None:
     rng = np.random.default_rng(0)
     L = rng.standard_normal((50, 30)) * 1e-6
     amps = per_source_amplitude(L)
-    assert amps.shape == (10,)   # 30/3 = 10 sources
+    assert amps.shape == (10,)  # 30/3 = 10 sources
     assert (amps > 0).all()
 
 
@@ -63,7 +64,7 @@ def test_per_source_invalid_moment_raises() -> None:
 
 
 def test_per_source_bad_columns_raises() -> None:
-    L = np.zeros((4, 7))      # not divisible by 3
+    L = np.zeros((4, 7))  # not divisible by 3
     with pytest.raises(ValueError, match="not divisible"):
         per_source_amplitude(L)
 
@@ -94,11 +95,12 @@ def test_best_bipolar_matches_all_pairs_brute_force() -> None:
     C, three_S = L.shape
     S = three_S // 3
     L3 = L.reshape(C, S, 3)
-    brute = np.array([
-        max(np.abs(L3[:, s, k][:, None] - L3[:, s, k][None, :]).max()
-            for k in range(3))
-        for s in range(S)
-    ])
+    brute = np.array(
+        [
+            max(np.abs(L3[:, s, k][:, None] - L3[:, s, k][None, :]).max() for k in range(3))
+            for s in range(S)
+        ]
+    )
     assert np.allclose(per_source_best_bipolar(L), brute)
 
 
@@ -140,20 +142,25 @@ def test_opm_bandwidth_rolls_off_both_signal_and_noise() -> None:
 def test_wideband_preset_swaps_noise_and_bandwidth_together() -> None:
     from inob.sensors.opm_presets import OPM_SENSORS
 
-    cfg = load_config(REPO_ROOT / "configs" / "default.yaml",
-                      overrides=["noise.opm_sensor=he4_wideband"])
+    cfg = load_config(
+        REPO_ROOT / "configs" / "default.yaml", overrides=["noise.opm_sensor=he4_wideband"]
+    )
     assert cfg.noise.opm_intrinsic_fT_sqrtHz == OPM_SENSORS["he4_wideband"].noise_fT_sqrtHz
     assert cfg.noise.opm_bandwidth_hz == OPM_SENSORS["he4_wideband"].bandwidth_hz
     nf = compute_noise_floors(cfg)
     # Wide enough to pass the CAP essentially intact...
     assert nf.meg_sensor_gain > 0.95
     # ...but its noise density costs more than the QZFM-3's roll-off does.
-    assert nf.meg_per_channel_fT > compute_noise_floors(
-        load_config(REPO_ROOT / "configs" / "default.yaml")
-    ).meg_per_channel_fT
+    assert (
+        nf.meg_per_channel_fT
+        > compute_noise_floors(
+            load_config(REPO_ROOT / "configs" / "default.yaml")
+        ).meg_per_channel_fT
+    )
 
 
 def test_unknown_opm_preset_is_rejected() -> None:
     with pytest.raises((KeyError, ConfigError)):
-        load_config(REPO_ROOT / "configs" / "default.yaml",
-                    overrides=["noise.opm_sensor=no_such_sensor"])
+        load_config(
+            REPO_ROOT / "configs" / "default.yaml", overrides=["noise.opm_sensor=no_such_sensor"]
+        )

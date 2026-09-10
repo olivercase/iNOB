@@ -1,4 +1,5 @@
 """CLI: render geometry + FEM visualisation PNGs."""
+
 from __future__ import annotations
 
 import argparse
@@ -32,13 +33,21 @@ see `inob --help` for the full list.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_args(p)
-    p.add_argument("--target", choices=("geom", "fem", "all"), default="all",
-                   help="Which visualisation to render (default: all).")
+    p.add_argument(
+        "--target",
+        choices=("geom", "fem", "all"),
+        default="all",
+        help="Which visualisation to render (default: all).",
+    )
     p.add_argument("--dpi", type=int, default=150)
-    p.add_argument("--show", action="store_true",
-                   help="Show interactively (matplotlib for geom; PyVista for fem).")
-    p.add_argument("--no-sensors", action="store_true",
-                   help="Skip sensor overlay on the geometry view.")
+    p.add_argument(
+        "--show",
+        action="store_true",
+        help="Show interactively (matplotlib for geom; PyVista for fem).",
+    )
+    p.add_argument(
+        "--no-sensors", action="store_true", help="Skip sensor overlay on the geometry view."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="visualise")
 

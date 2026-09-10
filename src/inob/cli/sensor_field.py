@@ -4,6 +4,7 @@ Renders the sensor-field figure (dipolar pattern, topography, along-axis
 strength, falloff) and prints quantitative characteristics. Use
 ``--source-target spine`` to analyse a specific region's leadfield.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -55,30 +56,53 @@ see `inob --help` for the full list.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_args(p)
-    p.add_argument("--source-idx", type=int, default=-1,
-                   help="Source index; default (-1) picks the strongest source.")
-    p.add_argument("--moment", choices=tuple(_MOMENTS), default="dominant",
-                   help="Source-moment orientation to visualise (default: dominant).")
-    p.add_argument("--aggregate", choices=("coherent", "rms"), default=None,
-                   help="Show the global field from ALL sources instead of one: "
-                        "'coherent' (in-phase sum) or 'rms' (sensitivity map). "
-                        "Defaults to the longitudinal (z) moment.")
-    p.add_argument("--level", choices=VERTEBRA_LEVELS, default=None,
-                   metavar="LEVEL",
-                   help="Restrict to cord sources at one vertebral level (e.g. "
-                        "'c7'). The Z band is taken from that vertebra's segmented "
-                        "STL in the bone_dir. Mutually exclusive with --z-range. "
-                        f"One of: {', '.join(VERTEBRA_LEVELS)}.")
-    p.add_argument("--z-range", type=float, nargs=2, metavar=("ZLO", "ZHI"),
-                   default=None,
-                   help="Restrict to cord sources with ZLO <= z <= ZHI (mm). "
-                        "Escape hatch when a level isn't segmented.")
+    p.add_argument(
+        "--source-idx",
+        type=int,
+        default=-1,
+        help="Source index; default (-1) picks the strongest source.",
+    )
+    p.add_argument(
+        "--moment",
+        choices=tuple(_MOMENTS),
+        default="dominant",
+        help="Source-moment orientation to visualise (default: dominant).",
+    )
+    p.add_argument(
+        "--aggregate",
+        choices=("coherent", "rms"),
+        default=None,
+        help="Show the global field from ALL sources instead of one: "
+        "'coherent' (in-phase sum) or 'rms' (sensitivity map). "
+        "Defaults to the longitudinal (z) moment.",
+    )
+    p.add_argument(
+        "--level",
+        choices=VERTEBRA_LEVELS,
+        default=None,
+        metavar="LEVEL",
+        help="Restrict to cord sources at one vertebral level (e.g. "
+        "'c7'). The Z band is taken from that vertebra's segmented "
+        "STL in the bone_dir. Mutually exclusive with --z-range. "
+        f"One of: {', '.join(VERTEBRA_LEVELS)}.",
+    )
+    p.add_argument(
+        "--z-range",
+        type=float,
+        nargs=2,
+        metavar=("ZLO", "ZHI"),
+        default=None,
+        help="Restrict to cord sources with ZLO <= z <= ZHI (mm). "
+        "Escape hatch when a level isn't segmented.",
+    )
     p.add_argument("--out", type=Path, default=None, help="Figure output path.")
     p.add_argument("--dpi", type=int, default=300)
-    p.add_argument("--no-figure", action="store_true",
-                   help="Skip the figure; print characteristics only.")
-    p.add_argument("--print-summary", action="store_true",
-                   help="Print JSON characteristics to stdout.")
+    p.add_argument(
+        "--no-figure", action="store_true", help="Skip the figure; print characteristics only."
+    )
+    p.add_argument(
+        "--print-summary", action="store_true", help="Print JSON characteristics to stdout."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="sensor_field")
 
@@ -100,13 +124,25 @@ see `inob --help` for the full list.""",
     if args.aggregate:
         # Aggregate needs a concrete moment; default to longitudinal (z).
         agg_moment = moment if moment is not None else 2
-        render_aggregate_field(cfg, moment=agg_moment, mode=args.aggregate,
-                               z_range=z_range, region_label=region_label,
-                               out_path=args.out, dpi=args.dpi)
+        render_aggregate_field(
+            cfg,
+            moment=agg_moment,
+            mode=args.aggregate,
+            z_range=z_range,
+            region_label=region_label,
+            out_path=args.out,
+            dpi=args.dpi,
+        )
     elif not args.no_figure:
-        render_sensor_field(cfg, source_idx=args.source_idx, moment=moment,
-                            z_range=z_range, region_label=region_label,
-                            out_path=args.out, dpi=args.dpi)
+        render_sensor_field(
+            cfg,
+            source_idx=args.source_idx,
+            moment=moment,
+            z_range=z_range,
+            region_label=region_label,
+            out_path=args.out,
+            dpi=args.dpi,
+        )
 
     if args.print_summary or args.no_figure:
         lf = load_leadfield(cfg.outputs.forward_npz)

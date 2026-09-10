@@ -6,6 +6,7 @@ the main thread" in that situation, so every GUI run died at the visualisation
 stage while the identical CLI run (main thread) passed. Caught only by actually
 driving the GUI end to end, hence this test.
 """
+
 from __future__ import annotations
 
 import threading
@@ -44,7 +45,7 @@ def test_figure_can_be_built_and_saved_off_the_main_thread(tmp_path) -> None:
     out = tmp_path / "offthread.png"
 
     def _render() -> None:
-        apply_nature_style()          # this is what switches the backend
+        apply_nature_style()  # this is what switches the backend
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(figsize=(2, 2))

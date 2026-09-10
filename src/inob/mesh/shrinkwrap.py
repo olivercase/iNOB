@@ -5,6 +5,7 @@ by voxelising it, dilating + closing the occupancy, and re-extracting the
 surface via marching cubes. Used as the third tier of the watertightening
 pipeline in :mod:`inob.geometry.builder`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,7 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 def occupancy_from_mesh(
-    mesh: trimesh.Trimesh, *, pitch: float, n_samples: int, seed: int | None = None,
+    mesh: trimesh.Trimesh,
+    *,
+    pitch: float,
+    n_samples: int,
+    seed: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build a binary occupancy grid for ``mesh``.
 
@@ -63,7 +68,10 @@ def occupancy_from_mesh(
 
 
 def shrinkwrap_mesh(
-    mesh: trimesh.Trimesh, params: ShrinkwrapParams, *, seed: int | None = None,
+    mesh: trimesh.Trimesh,
+    params: ShrinkwrapParams,
+    *,
+    seed: int | None = None,
 ) -> trimesh.Trimesh:
     """Voxel-shrinkwrap pipeline.
 
@@ -75,7 +83,10 @@ def shrinkwrap_mesh(
     order — see :func:`occupancy_from_mesh`.
     """
     occ, T = occupancy_from_mesh(
-        mesh, pitch=params.pitch, n_samples=params.n_samples, seed=seed,
+        mesh,
+        pitch=params.pitch,
+        n_samples=params.n_samples,
+        seed=seed,
     )
     if params.close_iter > 0:
         occ = binary_closing(occ, iterations=params.close_iter)
@@ -112,10 +123,9 @@ def shrinkwrap_mesh(
             logger.warning("Taubin smoothing failed: %s", e)
         else:
             margin = 2.0 * params.pitch
-            escaped = (
-                (out.vertices < pre_bounds[0] - margin).any()
-                or (out.vertices > pre_bounds[1] + margin).any()
-            )
+            escaped = (out.vertices < pre_bounds[0] - margin).any() or (
+                out.vertices > pre_bounds[1] + margin
+            ).any()
             if escaped:
                 logger.warning(
                     "Taubin smoothing pushed vertices outside the pre-smoothing "

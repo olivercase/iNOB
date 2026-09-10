@@ -1,5 +1,6 @@
 """CLI: pipeline main() argparse wiring (run_pipeline itself is covered by
 test_pipeline_orchestrator.py)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +13,8 @@ TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 
 def _capture(monkeypatch, calls):
     monkeypatch.setattr(
-        cli_mod, "run_pipeline",
+        cli_mod,
+        "run_pipeline",
         lambda cfg, *, stages, force=False: (calls.update(stages=stages, force=force), {})[1],
     )
 
@@ -31,9 +33,15 @@ def test_main_default_builds_and_solves_without_drawing(tmp_path, monkeypatch) -
 def test_main_with_viz_adds_the_figure_stage(tmp_path, monkeypatch) -> None:
     calls = {}
     _capture(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--with-viz",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--with-viz",
+        ]
+    )
     assert rc == 0
     assert set(calls["stages"]) == set(cli_mod.ALL_STAGES)
 
@@ -42,9 +50,16 @@ def test_main_stages_all_is_every_stage(tmp_path, monkeypatch) -> None:
     """`all` still means all — it is the explicit spelling of opting in."""
     calls = {}
     _capture(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--stages", "all",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "all",
+        ]
+    )
     assert rc == 0
     assert calls["stages"] == list(cli_mod.ALL_STAGES)
 
@@ -53,10 +68,16 @@ def test_skip_viz_beats_with_viz(tmp_path, monkeypatch) -> None:
     """The older flag means "definitely not", whatever else is on the line."""
     calls = {}
     _capture(monkeypatch, calls)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--with-viz", "--skip-viz",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--with-viz",
+            "--skip-viz",
+        ]
+    )
     assert rc == 0
     assert "viz" not in calls["stages"]
 
@@ -64,13 +85,20 @@ def test_skip_viz_beats_with_viz(tmp_path, monkeypatch) -> None:
 def test_main_stages_subset(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "run_pipeline",
+        cli_mod,
+        "run_pipeline",
         lambda cfg, *, stages, force=False: (calls.update(stages=stages), {})[1],
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--stages", "geom,fem",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "geom,fem",
+        ]
+    )
     assert rc == 0
     assert calls["stages"] == ["geom", "fem"]
 
@@ -78,12 +106,19 @@ def test_main_stages_subset(tmp_path, monkeypatch) -> None:
 def test_main_force_flag(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "run_pipeline",
+        cli_mod,
+        "run_pipeline",
         lambda cfg, *, stages, force=False: (calls.update(force=force), {})[1],
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path), "--force",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--force",
+        ]
+    )
     assert rc == 0
     assert calls["force"] is True
 
@@ -92,22 +127,36 @@ def test_main_skip_viz_removes_viz_stage(tmp_path, monkeypatch) -> None:
     """Kept working for scripts that pass it against an explicit `--stages all`."""
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "run_pipeline",
+        cli_mod,
+        "run_pipeline",
         lambda cfg, *, stages, force=False: (calls.update(stages=stages), {})[1],
     )
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--stages", "all", "--skip-viz",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "all",
+            "--skip-viz",
+        ]
+    )
     assert rc == 0
     assert "viz" not in calls["stages"]
 
 
 def test_main_invalid_stage_returns_2(tmp_path) -> None:
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--stages", "nope",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "nope",
+        ]
+    )
     assert rc == 2
 
 
@@ -116,6 +165,7 @@ def test_parse_stages_empty_string_is_rejected() -> None:
     import pytest
 
     from inob.cli.pipeline import _parse_stages
+
     with pytest.raises(ValueError, match="no stages selected"):
         _parse_stages("")
     with pytest.raises(ValueError, match="no stages selected"):
@@ -125,16 +175,23 @@ def test_parse_stages_empty_string_is_rejected() -> None:
 def test_parse_stages_omitted_is_not_all() -> None:
     """Omitting the flag and writing `all` are different asks, and differ by viz."""
     from inob.cli.pipeline import ALL_STAGES, DEFAULT_STAGES, _parse_stages
+
     assert _parse_stages(None) == list(DEFAULT_STAGES)
     assert _parse_stages("all") == list(ALL_STAGES)
     assert set(ALL_STAGES) - set(DEFAULT_STAGES) == {"viz"}
 
 
 def test_main_empty_stages_returns_2_not_full_run(tmp_path) -> None:
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--stages", "",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "",
+        ]
+    )
     assert rc == 2
 
 
@@ -147,9 +204,13 @@ def test_stage_helpers_delegate_to_library_functions(tmp_path, monkeypatch) -> N
     calls = {}
     monkeypatch.setattr(geom_mod, "build_geometry", lambda cfg: calls.setdefault("geom", cfg))
     monkeypatch.setattr(fem_mod, "build_fem", lambda cfg: calls.setdefault("fem", cfg))
-    monkeypatch.setattr(sensors_mod, "generate_sensor_array", lambda cfg: calls.setdefault("sensors", cfg))
+    monkeypatch.setattr(
+        sensors_mod, "generate_sensor_array", lambda cfg: calls.setdefault("sensors", cfg)
+    )
     # Forward now defaults to the local multi-core orchestrator.
-    monkeypatch.setattr(local_mod, "run_forward_local", lambda cfg: calls.setdefault("forward", cfg))
+    monkeypatch.setattr(
+        local_mod, "run_forward_local", lambda cfg: calls.setdefault("forward", cfg)
+    )
 
     cfg = object()
     cli_mod._stage_geom(cfg)
@@ -160,6 +221,7 @@ def test_stage_helpers_delegate_to_library_functions(tmp_path, monkeypatch) -> N
 
 
 # --- prerequisite checking -------------------------------------------------
+
 
 class _Recorder:
     """Stand-in for the module logger; keeps formatted messages."""
@@ -175,6 +237,7 @@ class _Recorder:
 
 def _cfg(tmp_path):
     from inob.config import load_config
+
     return load_config(TINY_CFG, project_root=tmp_path)
 
 
@@ -189,19 +252,31 @@ def test_missing_prerequisites_satisfied_within_same_run(tmp_path) -> None:
 
 
 def test_main_returns_2_when_prerequisites_unmet(tmp_path) -> None:
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--stages", "forward",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "forward",
+        ]
+    )
     assert rc == 2
 
 
 def test_main_suggests_transitively_complete_stage_list(tmp_path, monkeypatch) -> None:
     rec = _Recorder()
     monkeypatch.setattr(cli_mod, "logger", rec)
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--stages", "forward",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--stages",
+            "forward",
+        ]
+    )
     assert rc == 2
     assert "build it first: inob run --stages geom,fem,sensors" in rec.messages

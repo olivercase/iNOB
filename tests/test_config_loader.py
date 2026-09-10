@@ -1,4 +1,5 @@
 """Config loader tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -26,7 +27,13 @@ def test_load_default() -> None:
     assert cfg.forward.source_tissue == "vagus_left"
     assert cfg.forward.solver.scheme == "sipg"
     assert cfg.fem.tissues == (
-        "vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "muscle", "bone", "skin",
+        "vagus_left",
+        "vagus_right",
+        "blood_vessel",
+        "spinal_cord",
+        "muscle",
+        "bone",
+        "skin",
     )
 
 
@@ -42,9 +49,7 @@ def test_load_tiny() -> None:
 def test_paths_are_resolved_against_project_root() -> None:
     cfg = load_config(DEFAULT_CFG)
     assert cfg.outputs.geometry_mat == cfg.project_root / "outputs/geometry/geometry.mat"
-    assert cfg.data.torso_skin == (
-        cfg.project_root / "data/torso/FJ2810_BP22617_FMA7163_Skin.stl"
-    )
+    assert cfg.data.torso_skin == (cfg.project_root / "data/torso/FJ2810_BP22617_FMA7163_Skin.stl")
 
 
 def test_dotted_override_scalar() -> None:
@@ -82,7 +87,7 @@ def test_missing_config_file() -> None:
 def test_frozen_config() -> None:
     cfg = load_config(DEFAULT_CFG)
     with pytest.raises(Exception):  # FrozenInstanceError
-        cfg.forward.solver.intorderadd = 99   # type: ignore[misc]
+        cfg.forward.solver.intorderadd = 99  # type: ignore[misc]
 
 
 def test_parse_override_yaml_value() -> None:
@@ -128,14 +133,17 @@ def test_analytic_block_is_optional(tmp_path: Path) -> None:
 
 def test_analytic_override_reaches_config() -> None:
     """Every analytic parameter must be reachable from `--set`."""
-    cfg = load_config(DEFAULT_CFG, overrides=[
-        "analytic.source_axis_mm=12.5",
-        "analytic.sensor_axis_mm=20.0",
-        "analytic.band_tolerance_mm=5.0",
-        "analytic.silent_rel_threshold=0.05",
-        "analytic.bootstrap_n=10",
-        "analytic.bootstrap_seed=7",
-    ])
+    cfg = load_config(
+        DEFAULT_CFG,
+        overrides=[
+            "analytic.source_axis_mm=12.5",
+            "analytic.sensor_axis_mm=20.0",
+            "analytic.band_tolerance_mm=5.0",
+            "analytic.silent_rel_threshold=0.05",
+            "analytic.bootstrap_n=10",
+            "analytic.bootstrap_seed=7",
+        ],
+    )
     assert cfg.analytic.source_axis_mm == 12.5
     assert cfg.analytic.sensor_axis_mm == 20.0
     assert cfg.analytic.band_tolerance_mm == 5.0
@@ -164,11 +172,14 @@ def test_override_type_validation_rejects_bad_scalar() -> None:
 
 
 def test_override_type_validation_coerces_valid_scalar() -> None:
-    cfg = load_config(DEFAULT_CFG, overrides=[
-        "analytic.bootstrap_n=2.0",       # integral float -> int
-        "analytic.source_axis_mm=40",     # int -> float
-        "forward.solver.subtract_mean=false",  # str -> bool
-    ])
+    cfg = load_config(
+        DEFAULT_CFG,
+        overrides=[
+            "analytic.bootstrap_n=2.0",  # integral float -> int
+            "analytic.source_axis_mm=40",  # int -> float
+            "forward.solver.subtract_mean=false",  # str -> bool
+        ],
+    )
     assert cfg.analytic.bootstrap_n == 2 and isinstance(cfg.analytic.bootstrap_n, int)
     assert cfg.analytic.source_axis_mm == 40.0
     assert cfg.forward.solver.subtract_mean is False

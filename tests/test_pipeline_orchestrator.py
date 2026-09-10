@@ -1,4 +1,5 @@
 """Pipeline orchestrator: stage parsing, skip logic, failed markers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,8 +38,7 @@ def test_parse_stages_unknown_raises() -> None:
 
 def test_run_pipeline_skips_when_outputs_exist(tmp_path: Path, monkeypatch) -> None:
     """If primary outputs exist, the stage's run_fn must not be called."""
-    cfg = load_config(REPO_ROOT / "configs" / "default.yaml",
-                      project_root=tmp_path)
+    cfg = load_config(REPO_ROOT / "configs" / "default.yaml", project_root=tmp_path)
     # Make every output exist by touching its primary path.
     for stage in STAGES.values():
         for f in stage.output_paths:
@@ -59,8 +59,7 @@ def test_run_pipeline_skips_when_outputs_exist(tmp_path: Path, monkeypatch) -> N
 
 
 def test_run_pipeline_force_runs_everything(tmp_path: Path, monkeypatch) -> None:
-    cfg = load_config(REPO_ROOT / "configs" / "default.yaml",
-                      project_root=tmp_path)
+    cfg = load_config(REPO_ROOT / "configs" / "default.yaml", project_root=tmp_path)
     for stage in STAGES.values():
         for f in stage.output_paths:
             p = getattr(cfg.outputs, f)
@@ -79,8 +78,7 @@ def test_run_pipeline_force_runs_everything(tmp_path: Path, monkeypatch) -> None
 
 
 def test_run_pipeline_failed_marker(tmp_path: Path, monkeypatch) -> None:
-    cfg = load_config(REPO_ROOT / "configs" / "default.yaml",
-                      project_root=tmp_path)
+    cfg = load_config(REPO_ROOT / "configs" / "default.yaml", project_root=tmp_path)
 
     def raises(_cfg):
         raise RuntimeError("boom")

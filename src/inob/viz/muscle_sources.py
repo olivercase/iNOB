@@ -15,6 +15,7 @@ solve, so it does need the FEM (muscle compartment included, regardless of
 which ``--source-target`` a run is currently pointed at — the FEM carries
 every tissue).
 """
+
 from __future__ import annotations
 
 import logging
@@ -85,15 +86,19 @@ def _muscle_stl_paths(muscle_dir) -> list[Path]:
 def _load_muscle_meshes(muscle_dir) -> list[tuple[str, str, np.ndarray, np.ndarray]]:
     """Every muscle STL as ``(pair name, side, vertices, faces)``."""
     import trimesh
+
     meshes = []
     for p in _muscle_stl_paths(muscle_dir):
         name, side = _muscle_pair_name(p)
         m = trimesh.load(p, process=False)
-        meshes.append((
-            name, side,
-            np.asarray(m.vertices, dtype=np.float64),
-            np.asarray(m.faces, dtype=np.int64),
-        ))
+        meshes.append(
+            (
+                name,
+                side,
+                np.asarray(m.vertices, dtype=np.float64),
+                np.asarray(m.faces, dtype=np.int64),
+            )
+        )
     return meshes
 
 
@@ -108,7 +113,9 @@ def _load_muscle_sources(cfg: Config, *, spacing_mm: float):
     _require_muscle(fem)
     positions = muscle_sources(fem, spacing_mm=spacing_mm)
     orientations = muscle_source_orientations(
-        fem, positions, muscle_dir=cfg.data.muscle_dir,
+        fem,
+        positions,
+        muscle_dir=cfg.data.muscle_dir,
     )
     return fem, positions, orientations
 
@@ -131,6 +138,7 @@ def _compartment_backdrop(cfg: Config, name: str) -> tuple[np.ndarray, np.ndarra
     if not cfg.outputs.geometry_mat.exists():
         return None
     from inob.io.hdf5 import load_geometry
+
     geom = load_geometry(cfg.outputs.geometry_mat)
     comp = geom.compartments.get(name)
     if comp is None:
@@ -146,7 +154,10 @@ def _subsample_faces(faces: np.ndarray, max_tris: int, rng: np.random.Generator)
 
 
 def _crop_to_bbox(
-    verts: np.ndarray, faces: np.ndarray, lo: np.ndarray, hi: np.ndarray,
+    verts: np.ndarray,
+    faces: np.ndarray,
+    lo: np.ndarray,
+    hi: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Keep only faces whose vertices all fall inside ``[lo, hi]``.
 
@@ -169,6 +180,7 @@ class _Panel:
     (Z, Y), a 90°-CCW rotation of the naive Z/Y projection, so the body's
     long axis (Z) runs vertically instead of the view looking "on its side".
     """
+
     __slots__ = ("sx", "sy", "title", "xi", "xlabel", "yi", "ylabel")
 
     def __init__(self, title, xi, sx, xlabel, yi, sy, ylabel):
@@ -192,9 +204,9 @@ class _Panel:
 # the raw (Z, Y) projection, so the body's long axis (Z) reads vertically
 # rather than the figure looking "on its side".
 _PANELS = {
-    "axial":   _Panel("Axial (X – Y)",     0, 1.0, "X (mm)",  1, 1.0, "Y (mm)"),
+    "axial": _Panel("Axial (X – Y)", 0, 1.0, "X (mm)", 1, 1.0, "Y (mm)"),
     "lateral": _Panel("Lateral (−Y – Z)", 1, -1.0, "−Y (mm)", 2, 1.0, "Z (mm)"),
-    "coronal": _Panel("Posterior (X – Z)", 0, 1.0, "X (mm)",  2, 1.0, "Z (mm)"),
+    "coronal": _Panel("Posterior (X – Z)", 0, 1.0, "X (mm)", 2, 1.0, "Z (mm)"),
 }
 
 
@@ -205,8 +217,16 @@ def _draw_backdrop_projection(ax, backdrop, panel: _Panel, rng) -> None:
     verts, faces = backdrop
     sub = _subsample_faces(faces, MAX_TRIS_SKIN_PROJ, rng)
     pts = panel.project(verts[sub].reshape(-1, 3))
-    ax.scatter(pts[:, 0], pts[:, 1], s=0.2, c=NATURE_PALETTE["stone"],
-               alpha=0.35, linewidths=0, rasterized=True, zorder=1)
+    ax.scatter(
+        pts[:, 0],
+        pts[:, 1],
+        s=0.2,
+        c=NATURE_PALETTE["stone"],
+        alpha=0.35,
+        linewidths=0,
+        rasterized=True,
+        zorder=1,
+    )
 
 
 def _draw_backdrop_3d(ax, backdrop, rng) -> None:
@@ -214,35 +234,56 @@ def _draw_backdrop_3d(ax, backdrop, rng) -> None:
         return
     verts, faces = backdrop
     sub = _subsample_faces(faces, MAX_TRIS_SKIN_3D, rng)
-    coll = Poly3DCollection(verts[sub], alpha=0.10,
-                             facecolor=NATURE_PALETTE["stone"], edgecolor="none")
+    coll = Poly3DCollection(
+        verts[sub], alpha=0.10, facecolor=NATURE_PALETTE["stone"], edgecolor="none"
+    )
     ax.add_collection3d(coll)
 
 
 def _draw_mesh_fill_projection(
-    ax, verts, faces, panel: _Panel, colour, max_tris: int, rng, *,
-    alpha: float = 1.0, zorder: int = 2,
+    ax,
+    verts,
+    faces,
+    panel: _Panel,
+    colour,
+    max_tris: int,
+    rng,
+    *,
+    alpha: float = 1.0,
+    zorder: int = 2,
 ) -> None:
     """Solid-filled triangle projection of a mesh (not a point scatter)."""
     sub = _subsample_faces(faces, max_tris, rng)
     tri2d = panel.project(verts[sub])
-    ax.add_collection(PolyCollection(
-        tri2d, facecolor=colour, edgecolor="none", alpha=alpha,
-        zorder=zorder, rasterized=True,
-    ))
+    ax.add_collection(
+        PolyCollection(
+            tri2d,
+            facecolor=colour,
+            edgecolor="none",
+            alpha=alpha,
+            zorder=zorder,
+            rasterized=True,
+        )
+    )
 
 
 def _draw_mesh_fill_3d(ax, verts, faces, colour, max_tris: int, rng, *, alpha: float = 1.0) -> None:
     sub = _subsample_faces(faces, max_tris, rng)
-    ax.add_collection3d(Poly3DCollection(
-        verts[sub], alpha=alpha, facecolor=colour, edgecolor="none",
-    ))
+    ax.add_collection3d(
+        Poly3DCollection(
+            verts[sub],
+            alpha=alpha,
+            facecolor=colour,
+            edgecolor="none",
+        )
+    )
 
 
 def _panel_axes(fig):
     """The 4-panel (axial / lateral / posterior / 3-D) layout shared by both figures."""
-    gs = fig.add_gridspec(2, 2, hspace=0.30, wspace=0.25,
-                          left=0.06, right=0.97, top=0.92, bottom=0.10)
+    gs = fig.add_gridspec(
+        2, 2, hspace=0.30, wspace=0.25, left=0.06, right=0.97, top=0.92, bottom=0.10
+    )
     ax_axial = fig.add_subplot(gs[0, 0])
     ax_lateral = fig.add_subplot(gs[0, 1])
     ax_coronal = fig.add_subplot(gs[1, 0])
@@ -288,7 +329,10 @@ _PAIR_CMAP = plt.get_cmap("tab20")
 
 
 def render_muscle_source_pairs(
-    cfg: Config, *, out_path: Path | None = None, dpi: int = 150,
+    cfg: Config,
+    *,
+    out_path: Path | None = None,
+    dpi: int = 150,
 ) -> Path:
     """Full muscle meshes, each coloured by its anatomical left/right pair.
 
@@ -314,51 +358,91 @@ def render_muscle_source_pairs(
         muscle_lo, muscle_hi = all_pts.min(0), all_pts.max(0)
         crop_pad = 0.35 * (muscle_hi - muscle_lo)
         skin_v, skin_f = _crop_to_bbox(
-            skin[0], skin[1], muscle_lo - crop_pad, muscle_hi + crop_pad,
+            skin[0],
+            skin[1],
+            muscle_lo - crop_pad,
+            muscle_hi + crop_pad,
         )
         skin = (skin_v, skin_f) if len(skin_f) else None
 
     fig = plt.figure(figsize=(13, 11))
     fig.suptitle(
-        f"Muscle anatomy by pair — {len(meshes)} muscles "
-        f"({len(pair_names)} left/right pairs)",
-        fontsize=11, fontweight="bold", y=0.985,
+        f"Muscle anatomy by pair — {len(meshes)} muscles ({len(pair_names)} left/right pairs)",
+        fontsize=11,
+        fontweight="bold",
+        y=0.985,
     )
     axes = _panel_axes(fig)
     ax_axial, ax_lateral, ax_coronal, ax_3d = axes
     for ax, key in ((ax_axial, "axial"), (ax_lateral, "lateral"), (ax_coronal, "coronal")):
         panel = _PANELS[key]
         if skin is not None:
-            _draw_mesh_fill_projection(ax, skin[0], skin[1], panel,
-                                       NATURE_PALETTE["skin"], MAX_TRIS_SKIN_PROJ,
-                                       rng, alpha=0.12, zorder=1)
+            _draw_mesh_fill_projection(
+                ax,
+                skin[0],
+                skin[1],
+                panel,
+                NATURE_PALETTE["skin"],
+                MAX_TRIS_SKIN_PROJ,
+                rng,
+                alpha=0.12,
+                zorder=1,
+            )
         for name, _side, verts, faces in meshes:
-            _draw_mesh_fill_projection(ax, verts, faces, panel, pair_colour[name],
-                                       MAX_TRIS_MUSCLE_PROJ, rng, alpha=1.0, zorder=2)
+            _draw_mesh_fill_projection(
+                ax,
+                verts,
+                faces,
+                panel,
+                pair_colour[name],
+                MAX_TRIS_MUSCLE_PROJ,
+                rng,
+                alpha=1.0,
+                zorder=2,
+            )
     if skin is not None:
-        _draw_mesh_fill_3d(ax_3d, skin[0], skin[1], NATURE_PALETTE["skin"],
-                           MAX_TRIS_SKIN_3D, rng, alpha=0.16)
+        _draw_mesh_fill_3d(
+            ax_3d, skin[0], skin[1], NATURE_PALETTE["skin"], MAX_TRIS_SKIN_3D, rng, alpha=0.16
+        )
     for name, _side, verts, faces in meshes:
-        _draw_mesh_fill_3d(ax_3d, verts, faces, pair_colour[name],
-                           MAX_TRIS_MUSCLE_3D, rng, alpha=1.0)
+        _draw_mesh_fill_3d(
+            ax_3d, verts, faces, pair_colour[name], MAX_TRIS_MUSCLE_3D, rng, alpha=1.0
+        )
     _set_limits(axes, all_pts, margin=view_margin)
     for ax, lbl in zip(axes, "abcd", strict=True):
         add_panel_label(ax, lbl)
 
     handles = [
-        plt.Line2D([0], [0], marker="s", linestyle="none", markersize=8,
-                   markerfacecolor=pair_colour[n], markeredgecolor="none", label=n)
+        plt.Line2D(
+            [0],
+            [0],
+            marker="s",
+            linestyle="none",
+            markersize=8,
+            markerfacecolor=pair_colour[n],
+            markeredgecolor="none",
+            label=n,
+        )
         for n in pair_names
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=6.5,
-              framealpha=0.9, bbox_to_anchor=(0.5, 0.005))
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=4,
+        fontsize=6.5,
+        framealpha=0.9,
+        bbox_to_anchor=(0.5, 0.005),
+    )
 
     out = out_path or (cfg.outputs.base / "muscle_sources_pairs.png")
     return save_figure(fig, out, dpi=dpi)
 
 
 def render_muscle_source_orientations(
-    cfg: Config, *, spacing_mm: float = 15.0, out_path: Path | None = None,
+    cfg: Config,
+    *,
+    spacing_mm: float = 15.0,
+    out_path: Path | None = None,
     dpi: int = 150,
 ) -> Path:
     """Selected muscle source dipoles with their fibre-axis orientation.
@@ -375,14 +459,16 @@ def render_muscle_source_orientations(
     # Arrow length: a visible fraction of the sampling spacing so neighbouring
     # arrows don't overlap into an unreadable mass.
     arrow_len = 0.6 * spacing_mm
-    arrow_colour = NATURE_PALETTE["glow"]   # "source / focal element" accent
+    arrow_colour = NATURE_PALETTE["glow"]  # "source / focal element" accent
 
     backdrop = _muscle_backdrop(cfg)
     fig = plt.figure(figsize=(13, 11))
     fig.suptitle(
         f"Muscle source dipoles — fibre orientation — {len(positions)} sources, "
         f"{spacing_mm:.0f} mm spacing",
-        fontsize=11, fontweight="bold", y=0.985,
+        fontsize=11,
+        fontweight="bold",
+        y=0.985,
     )
     axes = _panel_axes(fig)
     ax_axial, ax_lateral, ax_coronal, ax_3d = axes
@@ -390,23 +476,47 @@ def render_muscle_source_orientations(
         panel = _PANELS[key]
         _draw_backdrop_projection(ax, backdrop, panel, rng)
         p2 = panel.project(positions)
-        o2 = panel.project(orientations)   # a direction transforms the same linear way
-        ax.quiver(p2[:, 0], p2[:, 1], o2[:, 0], o2[:, 1],
-                  color=arrow_colour, scale=1.0 / arrow_len, scale_units="xy",
-                  angles="xy", width=0.003, alpha=0.9, zorder=2)
+        o2 = panel.project(orientations)  # a direction transforms the same linear way
+        ax.quiver(
+            p2[:, 0],
+            p2[:, 1],
+            o2[:, 0],
+            o2[:, 1],
+            color=arrow_colour,
+            scale=1.0 / arrow_len,
+            scale_units="xy",
+            angles="xy",
+            width=0.003,
+            alpha=0.9,
+            zorder=2,
+        )
     _draw_backdrop_3d(ax_3d, backdrop, rng)
     N = orientations * arrow_len
-    ax_3d.quiver(positions[:, 0], positions[:, 1], positions[:, 2],
-                N[:, 0], N[:, 1], N[:, 2],
-                color=arrow_colour, linewidth=0.7, arrow_length_ratio=0.3)
+    ax_3d.quiver(
+        positions[:, 0],
+        positions[:, 1],
+        positions[:, 2],
+        N[:, 0],
+        N[:, 1],
+        N[:, 2],
+        color=arrow_colour,
+        linewidth=0.7,
+        arrow_length_ratio=0.3,
+    )
     all_pts = positions if backdrop is None else np.vstack([positions, backdrop[0]])
     _set_limits(axes, all_pts)
     for ax, lbl in zip(axes, "abcd", strict=True):
         add_panel_label(ax, lbl)
 
     handles = [plt.Line2D([0], [0], color=arrow_colour, lw=2, label="Fibre axis")]
-    fig.legend(handles=handles, loc="lower center", ncol=1, fontsize=8,
-              framealpha=0.9, bbox_to_anchor=(0.5, 0.01))
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=1,
+        fontsize=8,
+        framealpha=0.9,
+        bbox_to_anchor=(0.5, 0.01),
+    )
 
     out = out_path or (cfg.outputs.base / "muscle_sources_orientations.png")
     return save_figure(fig, out, dpi=dpi)

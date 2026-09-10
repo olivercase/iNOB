@@ -1,4 +1,5 @@
 """Watertight geometry build pipeline."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -51,6 +52,7 @@ def populated_data_dirs(cfg: Config) -> Config:
 
 # ── _find_vagus_side ─────────────────────────────────────────────────────
 
+
 def test_find_vagus_side_matches_word_boundary() -> None:
     # "_" counts as a word char, so "left" only matches with a non-word
     # separator (here "-") or at a string boundary either side.
@@ -80,6 +82,7 @@ def test_find_vagus_side_sorted() -> None:
 
 # ── gather_inputs ────────────────────────────────────────────────────────
 
+
 def test_gather_inputs_missing_bone_raises(cfg: Config) -> None:
     with pytest.raises(SchemaError, match="bone"):
         gather_inputs(cfg)
@@ -95,8 +98,13 @@ def test_gather_inputs_missing_torso_skin_raises(cfg: Config) -> None:
 def test_gather_inputs_resolves_all_compartments(populated_data_dirs: Config) -> None:
     out = gather_inputs(populated_data_dirs)
     assert set(out) == {
-        "mesh_skin", "mesh_bone", "mesh_muscle", "mesh_spinal_cord",
-        "mesh_blood_vessel", "mesh_vagus_left", "mesh_vagus_right",
+        "mesh_skin",
+        "mesh_bone",
+        "mesh_muscle",
+        "mesh_spinal_cord",
+        "mesh_blood_vessel",
+        "mesh_vagus_left",
+        "mesh_vagus_right",
     }
     assert out["mesh_skin"] == [populated_data_dirs.data.torso_skin]
     assert len(out["mesh_bone"]) == 1
@@ -113,10 +121,15 @@ def test_gather_inputs_prefers_cleaned_bone_dir(populated_data_dirs: Config) -> 
 
 # ── watertighten ─────────────────────────────────────────────────────────
 
+
 def test_watertighten_returns_watertight_mesh_for_clean_sphere() -> None:
     m = trimesh.creation.icosphere(radius=10.0)
     params = ShrinkwrapParams(
-        pitch=1.0, n_samples=2000, close_iter=1, decimate_target=500, smooth_iter=1,
+        pitch=1.0,
+        n_samples=2000,
+        close_iter=1,
+        decimate_target=500,
+        smooth_iter=1,
     )
     out = watertighten(m, "mesh_vagus_left", params)
     assert isinstance(out, trimesh.Trimesh)
@@ -129,13 +142,18 @@ def test_watertighten_repairs_duplicate_vertices() -> None:
     f_dup = np.vstack([box.faces, box.faces + len(box.vertices)])
     raw = trimesh.Trimesh(v_dup, f_dup, process=False)
     params = ShrinkwrapParams(
-        pitch=1.0, n_samples=2000, close_iter=1, decimate_target=500, smooth_iter=1,
+        pitch=1.0,
+        n_samples=2000,
+        close_iter=1,
+        decimate_target=500,
+        smooth_iter=1,
     )
     out = watertighten(raw, "mesh_skin", params)
     assert out.is_watertight
 
 
 # ── _validate_compartment ────────────────────────────────────────────────
+
 
 def test_validate_compartment_passes_for_watertight_mesh(cfg: Config) -> None:
     m = trimesh.creation.icosphere(radius=5.0)
@@ -162,6 +180,7 @@ def test_validate_compartment_euler_downgraded_to_warning_when_watertight(
 
 # ── _trimesh_to_compartment ──────────────────────────────────────────────
 
+
 def test_trimesh_to_compartment_round_trips_arrays() -> None:
     m = trimesh.creation.box(extents=(5.0, 5.0, 5.0))
     comp = _trimesh_to_compartment("mesh_skin", m)
@@ -174,8 +193,11 @@ def test_trimesh_to_compartment_round_trips_arrays() -> None:
 
 # ── build_geometry (end-to-end, tiny meshes) ─────────────────────────────
 
+
 def test_build_geometry_end_to_end(populated_data_dirs: Config) -> None:
-    out_path = build_geometry(populated_data_dirs, only_compartments=("mesh_skin", "mesh_vagus_left"))
+    out_path = build_geometry(
+        populated_data_dirs, only_compartments=("mesh_skin", "mesh_vagus_left")
+    )
     assert out_path == populated_data_dirs.outputs.geometry_mat
     assert out_path.is_file()
     geom = load_geometry(out_path)
@@ -198,6 +220,7 @@ def test_build_geometry_raises_when_shrinkwrap_params_missing(
 
 
 # ── check_existing ───────────────────────────────────────────────────────
+
 
 def test_check_existing_raises_if_output_missing(cfg: Config) -> None:
     with pytest.raises(FileNotFoundError):

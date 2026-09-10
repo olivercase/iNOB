@@ -7,6 +7,7 @@ module locates candidate builds, and, crucially, reports whether each one is
 *actually importable by this backend* rather than just present on disk, so the
 UI can tell the user the truth instead of offering a dead end.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,6 +20,7 @@ from pathlib import Path
 # Extension file names duneuro-py produces. The directory *containing* one of
 # these is what gets prepended to sys.path (that's the shim `duneuro_path`).
 _MODULE_NAMES = ("duneuropy.so", "duneuropy.dylib", "duneuropy.pyd")
+
 
 # Where local builds tend to live. Ordered best-first. The env var wins so a
 # non-standard build can be surfaced without code changes.
@@ -38,11 +40,17 @@ def _search_roots() -> list[Path]:
         roots.append(Path(env))
 
     home = Path.home()
-    here = Path(__file__).resolve().parents[2]      # the project checkout
+    here = Path(__file__).resolve().parents[2]  # the project checkout
     named = ("duneuro_build", "duneuro", "duneuro-py", "duneuro-src")
 
-    for base in (here, here.parent, home, home / "Scratch" / "inob",
-                 Path("/opt"), Path("/usr/local")):
+    for base in (
+        here,
+        here.parent,
+        home,
+        home / "Scratch" / "inob",
+        Path("/opt"),
+        Path("/usr/local"),
+    ):
         for name in named:
             roots.append(base / name)
 
@@ -92,11 +100,11 @@ def _search_roots() -> list[Path]:
 
 @dataclass
 class Candidate:
-    path: str            # directory to put on sys.path
-    module: str          # the extension file found there
-    label: str           # human label for the dropdown
-    python_tag: str      # e.g. "python3.11", or "unknown"
-    importable: bool     # actually loads in THIS interpreter?
+    path: str  # directory to put on sys.path
+    module: str  # the extension file found there
+    label: str  # human label for the dropdown
+    python_tag: str  # e.g. "python3.11", or "unknown"
+    importable: bool  # actually loads in THIS interpreter?
     note: str = ""
 
 
@@ -143,8 +151,7 @@ def _tags_conflict(build_tag: str, running_tag: str) -> bool:
     return build_tag.startswith("python3.") and build_tag != running_tag
 
 
-def _importable_from(directory: Path, *, timeout: float = 20.0,
-                     build_tag: str = "unknown") -> bool:
+def _importable_from(directory: Path, *, timeout: float = 20.0, build_tag: str = "unknown") -> bool:
     """Can THIS interpreter import duneuropy with ``directory`` on sys.path?
 
     Runs in a subprocess of the current executable so a heavy or crashy
@@ -161,14 +168,12 @@ def _importable_from(directory: Path, *, timeout: float = 20.0,
     if _tags_conflict(build_tag, _running_tag()):
         return False
 
-    code = (
-        "import sys; sys.path.insert(0, sys.argv[1]); "
-        "import duneuropy"
-    )
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import duneuropy"
     try:
         proc = subprocess.run(
             [sys.executable, "-c", code, str(directory)],
-            capture_output=True, timeout=timeout,
+            capture_output=True,
+            timeout=timeout,
         )
         return proc.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
@@ -179,6 +184,7 @@ def running_interpreter() -> dict[str, object]:
     """Describe the interpreter the backend runs under."""
     try:
         import duneuropy  # noqa: F401
+
         importable = True
         where = getattr(sys.modules["duneuropy"], "__file__", None)
     except Exception:
@@ -222,31 +228,38 @@ def discover(active_path: str | None) -> dict[str, object]:
                 if tag != "unknown"
                 else "This backend can't import this build."
             )
-        candidates.append(Candidate(
-            path=str(directory),
-            module=module_file.name,
-            label=f"{directory.name}  ·  {tag}",
-            python_tag=tag,
-            importable=importable,
-            note=note,
-        ))
+        candidates.append(
+            Candidate(
+                path=str(directory),
+                module=module_file.name,
+                label=f"{directory.name}  ·  {tag}",
+                python_tag=tag,
+                importable=importable,
+                note=note,
+            )
+        )
 
     # Surface an already-set custom path that wasn't auto-discovered.
-    if active_path and active_path not in seen_dirs and \
-            Path(active_path).resolve().as_posix() not in seen_dirs:
+    if (
+        active_path
+        and active_path not in seen_dirs
+        and Path(active_path).resolve().as_posix() not in seen_dirs
+    ):
         directory = Path(active_path)
-        candidates.append(Candidate(
-            path=active_path,
-            module="(from config)",
-            label=f"{directory.name}  ·  custom",
-            python_tag=_python_tag_for(directory / "x"),
-            importable=(
-                _importable_from(directory,
-                                 build_tag=_python_tag_for(directory / "x"))
-                if directory.is_dir() else False
-            ),
-            note="" if directory.is_dir() else "Path does not exist.",
-        ))
+        candidates.append(
+            Candidate(
+                path=active_path,
+                module="(from config)",
+                label=f"{directory.name}  ·  custom",
+                python_tag=_python_tag_for(directory / "x"),
+                importable=(
+                    _importable_from(directory, build_tag=_python_tag_for(directory / "x"))
+                    if directory.is_dir()
+                    else False
+                ),
+                note="" if directory.is_dir() else "Path does not exist.",
+            )
+        )
 
     # Importable builds first, then by label.
     candidates.sort(key=lambda c: (not c.importable, c.label))
@@ -260,15 +273,13 @@ def discover(active_path: str | None) -> dict[str, object]:
     }
 
 
-def _overall_hint(interp: dict[str, object],
-                  candidates: list[Candidate]) -> str:
+def _overall_hint(interp: dict[str, object], candidates: list[Candidate]) -> str:
     if interp["duneuropy_importable"]:
         return "DUNEuro is ready — the forward solve will run on this machine."
     importable = [c for c in candidates if c.importable]
     if importable:
         return (
-            "Select a build below to point the solver at it, then save. "
-            "No backend restart needed."
+            "Select a build below to point the solver at it, then save. No backend restart needed."
         )
     if candidates:
         # A build exists but the interpreter can't load it (the common case).

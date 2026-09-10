@@ -19,6 +19,7 @@ where
 
 The result dict matches the web API contract (``gui/web/API_CONTRACT.md``).
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,7 +36,10 @@ logger = logging.getLogger(__name__)
 
 
 def _coerce_strengths(
-    strengths_nAm, n_sources: int, *, default_nAm: float = 70.0,
+    strengths_nAm,
+    n_sources: int,
+    *,
+    default_nAm: float = 70.0,
 ) -> np.ndarray:
     """Return an (S,) strength array, broadcasting a scalar / resizing a list."""
     if strengths_nAm is None:
@@ -47,7 +51,9 @@ def _coerce_strengths(
         return np.full(n_sources, float(arr[0]))
     if arr.size != n_sources:
         logger.warning(
-            "strengths length %d != %d sources; resizing", arr.size, n_sources,
+            "strengths length %d != %d sources; resizing",
+            arr.size,
+            n_sources,
         )
         return np.resize(arr, n_sources)
     return arr
@@ -81,7 +87,7 @@ def compute_detectability(
     else:
         raise ValueError(f"modality must be 'meg' or 'eeg', got {modality!r}")
 
-    peak = per_source_peak(lf.L_fT_per_nAm)          # (S,) fT/nAm or µV/nAm
+    peak = per_source_peak(lf.L_fT_per_nAm)  # (S,) fT/nAm or µV/nAm
     n_sources = int(peak.shape[0])
     pos = np.asarray(lf.source_pos, dtype=float)
     # Default event strength comes from the target's physiology rather than a
@@ -92,13 +98,16 @@ def compute_detectability(
     # results are unchanged.
     profile = profile_for(cfg)
     strengths = _coerce_strengths(
-        strengths_nAm, n_sources, default_nAm=profile.default_strength_nAm,
+        strengths_nAm,
+        n_sources,
+        default_nAm=profile.default_strength_nAm,
     )
     if strengths_nAm is None:
         logger.info(
-            "[detect] source strength %.2f nA·m from the %s physiology profile "
-            "(%s)",
-            profile.default_strength_nAm, profile.label, profile.paradigm,
+            "[detect] source strength %.2f nA·m from the %s physiology profile (%s)",
+            profile.default_strength_nAm,
+            profile.label,
+            profile.paradigm,
         )
 
     snr = (peak * strengths) / sigma if sigma > 0 else np.full(n_sources, np.inf)
@@ -107,16 +116,18 @@ def compute_detectability(
     per_source = []
     for i in range(n_sources):
         s = float(snr[i])
-        trials = math.ceil((thr / s) ** 2) if s > 0 else -1   # -1 == never
-        per_source.append({
-            "index": i,
-            "x": round(float(pos[i, 0]), 2),
-            "y": round(float(pos[i, 1]), 2),
-            "z": round(float(pos[i, 2]), 2),
-            "strength_nAm": round(float(strengths[i]), 4),
-            "snr": round(s, 4),
-            "trials_needed": trials,
-        })
+        trials = math.ceil((thr / s) ** 2) if s > 0 else -1  # -1 == never
+        per_source.append(
+            {
+                "index": i,
+                "x": round(float(pos[i, 0]), 2),
+                "y": round(float(pos[i, 1]), 2),
+                "z": round(float(pos[i, 2]), 2),
+                "strength_nAm": round(float(strengths[i]), 4),
+                "snr": round(s, 4),
+                "trials_needed": trials,
+            }
+        )
 
     finite = snr[np.isfinite(snr)]
     return {
@@ -126,7 +137,7 @@ def compute_detectability(
             "n_sensors": int(lf.coil_pos.shape[0]),
             "mean_snr": round(float(finite.mean()), 4) if finite.size else 0.0,
             "max_snr": round(float(finite.max()), 4) if finite.size else 0.0,
-            "noise_floor_fT": round(sigma, 4),   # contract key (fT for MEG; µV for EEG)
+            "noise_floor_fT": round(sigma, 4),  # contract key (fT for MEG; µV for EEG)
             "noise_unit": unit,
             "threshold_snr": thr,
         },

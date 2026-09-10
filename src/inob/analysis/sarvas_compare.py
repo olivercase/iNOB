@@ -75,6 +75,7 @@ References
   "Volume conductor models for magnetospinography." Sci Rep 15:26258.
   https://doi.org/10.1038/s41598-025-10770-z
 """
+
 from __future__ import annotations
 
 import logging
@@ -109,18 +110,20 @@ class SarvasGeometry:
     that hand-built instances in tests stay terse.
     """
 
-    sphere_centres_mm: np.ndarray   # (S, 3) — one centre per source position
-    axis_xy_mm: np.ndarray          # (2,) — the structure's axis (X, Y) centre
-    source_axis_mm: float = 40.0    # nominal source distance from the axis
-    sensor_axis_mm: float = 58.5    # nominal sensor distance from the axis
+    sphere_centres_mm: np.ndarray  # (S, 3) — one centre per source position
+    axis_xy_mm: np.ndarray  # (2,) — the structure's axis (X, Y) centre
+    source_axis_mm: float = 40.0  # nominal source distance from the axis
+    sensor_axis_mm: float = 58.5  # nominal sensor distance from the axis
     band_tolerance_mm: float = 30.0  # half-width of the faithful-sphere band
-    silent_rel_threshold: float = 0.01   # sphere-silent cutoff vs Biot–Savart
+    silent_rel_threshold: float = 0.01  # sphere-silent cutoff vs Biot–Savart
     bootstrap_n: int = 2000
     bootstrap_seed: int = 0
 
 
 def hamalainen_dipole_moment_nAm(
-    *, fibre_diameter_um: float, sigma_intracellular_S_per_m: float,
+    *,
+    fibre_diameter_um: float,
+    sigma_intracellular_S_per_m: float,
     action_potential_mV: float,
 ) -> float:
     """Hämäläinen current-dipole moment for one axon, in nA·m.
@@ -139,10 +142,10 @@ def hamalainen_dipole_moment_nAm(
     for a discussion. We use σ_in = 1 S/m as the default for benchmark
     consistency with Bu 2024.
     """
-    d_m = fibre_diameter_um * 1e-6                # m
-    dV_V = action_potential_mV * 1e-3             # V
-    Q_Am = np.pi * d_m ** 2 * sigma_intracellular_S_per_m * dV_V / 4.0
-    return float(Q_Am * 1e9)                       # → nA·m
+    d_m = fibre_diameter_um * 1e-6  # m
+    dV_V = action_potential_mV * 1e-3  # V
+    Q_Am = np.pi * d_m**2 * sigma_intracellular_S_per_m * dV_V / 4.0
+    return float(Q_Am * 1e9)  # → nA·m
 
 
 def estimate_cervical_axis_xy(fem, src_pos_mm: np.ndarray) -> np.ndarray:
@@ -172,7 +175,8 @@ def estimate_cervical_axis_xy(fem, src_pos_mm: np.ndarray) -> np.ndarray:
 
 
 def build_sphere_centres(
-    src_pos_mm: np.ndarray, axis_xy_mm: np.ndarray,
+    src_pos_mm: np.ndarray,
+    axis_xy_mm: np.ndarray,
 ) -> np.ndarray:
     """One sphere centre per source: ``[axis_x, axis_y, source_z]``.
 
@@ -207,7 +211,7 @@ def sarvas_predict_at_coils(
     Q_dir = Q_dir / max(float(np.linalg.norm(Q_dir)), 1e-12)
     Q_vec_Am = Q_dir * (Q_nAm * 1e-9)
     sensors_m = (np.asarray(coil_pos_mm) - sphere_centre_mm) * 1e-3
-    B = sarvas_meg_field(r0_m, Q_vec_Am, sensors_m)        # (C, 3) Tesla
+    B = sarvas_meg_field(r0_m, Q_vec_Am, sensors_m)  # (C, 3) Tesla
     # Project onto each coil's orientation (assumed unit-norm).
     return np.einsum("ij,ij->i", B, coil_orient)
 
@@ -233,7 +237,7 @@ def biot_savart_predict_at_coils(
     Q_dir = Q_dir / max(float(np.linalg.norm(Q_dir)), 1e-12)
     Q_vec_Am = Q_dir * (Q_nAm * 1e-9)
     sensors_m = np.asarray(coil_pos_mm, dtype=np.float64) * 1e-3
-    B = infinite_medium_meg_field(r0_m, Q_vec_Am, sensors_m)   # (C, 3) Tesla
+    B = infinite_medium_meg_field(r0_m, Q_vec_Am, sensors_m)  # (C, 3) Tesla
     return np.einsum("ij,ij->i", B, coil_orient)
 
 
@@ -253,15 +257,15 @@ def vagus_tangents(source_pos_mm: np.ndarray) -> np.ndarray:
 class SarvasVsFemResult:
     geometry: SarvasGeometry
     Q_nAm: float
-    source_pos_mm: np.ndarray            # (S, 3)
-    sarvas_T: np.ndarray                 # (C_radial, S) — projected onto coil normal
-    fem_T: np.ndarray                    # (C_radial, S) — same projection
-    coil_pos_mm: np.ndarray              # (C_radial, 3) — radial coils only
-    coil_orient: np.ndarray              # (C_radial, 3)
-    distance_to_axis_mm: np.ndarray      # (C_radial, S) — coil-axis transverse distance
-                                         # in the per-source local sphere frame
-    biot_T: np.ndarray | None = None     # (C_radial, S) — rung 1, free-space
-                                         # Biot–Savart, same projection
+    source_pos_mm: np.ndarray  # (S, 3)
+    sarvas_T: np.ndarray  # (C_radial, S) — projected onto coil normal
+    fem_T: np.ndarray  # (C_radial, S) — same projection
+    coil_pos_mm: np.ndarray  # (C_radial, 3) — radial coils only
+    coil_orient: np.ndarray  # (C_radial, 3)
+    distance_to_axis_mm: np.ndarray  # (C_radial, S) — coil-axis transverse distance
+    # in the per-source local sphere frame
+    biot_T: np.ndarray | None = None  # (C_radial, S) — rung 1, free-space
+    # Biot–Savart, same projection
 
 
 def _radial_coil_mask(channel_names: list[str]) -> np.ndarray:
@@ -297,7 +301,9 @@ def compare_sarvas_vs_fem(
 
     # Source polyline + tangent moments
     src_pos = vagus_sources(
-        fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
+        fem,
+        cfg.forward.source_tissue,
+        spacing_mm=cfg.forward.source_spacing_mm,
     )
     tangents = vagus_tangents(src_pos)
 
@@ -307,8 +313,8 @@ def compare_sarvas_vs_fem(
     coilori = sensors.coilori[radial]
 
     # FEM leadfield in T per A·m → project onto tangent moment, rescale by Q
-    L = lf.L                                  # (C_total, 3*S) Tesla per A·m
-    L = L[radial]                             # (C_radial, 3*S)
+    L = lf.L  # (C_total, 3*S) Tesla per A·m
+    L = L[radial]  # (C_radial, 3*S)
     C, three_S = L.shape
     S = three_S // 3
     # The leadfield's source count must match the polyline `vagus_sources`
@@ -327,7 +333,7 @@ def compare_sarvas_vs_fem(
     L3 = L.reshape(C, S, 3)
     fem_T = np.einsum("csm,sm->cs", L3, tangents)
     Q_per_fibre = float(Q_nAm) * (fibre_count or 1)
-    fem_T = fem_T * (Q_per_fibre * 1e-9)        # → Tesla
+    fem_T = fem_T * (Q_per_fibre * 1e-9)  # → Tesla
 
     # Sarvas geometry — moving sphere, one centre per source on the cervical axis.
     axis_xy = estimate_cervical_axis_xy(fem, src_pos)
@@ -349,29 +355,38 @@ def compare_sarvas_vs_fem(
     distances = np.zeros((C, S), dtype=np.float64)
     for s_idx in range(S):
         sarvas_T[:, s_idx] = sarvas_predict_at_coils(
-            src_pos[s_idx], tangents[s_idx], Q_per_fibre,
-            coilpos, coilori, sphere_centre_mm=centres[s_idx],
+            src_pos[s_idx],
+            tangents[s_idx],
+            Q_per_fibre,
+            coilpos,
+            coilori,
+            sphere_centre_mm=centres[s_idx],
         )
         # Rung 1 — no sphere centre needed (translation invariant).
         biot_T[:, s_idx] = biot_savart_predict_at_coils(
-            src_pos[s_idx], tangents[s_idx], Q_per_fibre, coilpos, coilori,
+            src_pos[s_idx],
+            tangents[s_idx],
+            Q_per_fibre,
+            coilpos,
+            coilori,
         )
         # Transverse axis distance for this source's local sphere frame.
         # Use full 3-D distance from the moving centre — the axis is vertical,
         # so any z-offset between coil and centre still puts the coil outside
         # a sphere of radius source_axis_mm.
         distances[:, s_idx] = np.linalg.norm(
-            coilpos - centres[s_idx][None, :], axis=1,
+            coilpos - centres[s_idx][None, :],
+            axis=1,
         )
 
     src_axis_distances = np.linalg.norm(src_pos[:, :2] - axis_xy[None, :], axis=1)
     logger.info(
         "Sarvas geometry: cervical axis (X, Y) = (%.1f, %.1f) mm; moving centre per source.",
-        float(axis_xy[0]), float(axis_xy[1]),
+        float(axis_xy[0]),
+        float(axis_xy[1]),
     )
     logger.info(
-        "  source–axis distance: min=%.1f  median=%.1f  max=%.1f mm "
-        "(literature: 40 mm)",
+        "  source–axis distance: min=%.1f  median=%.1f  max=%.1f mm (literature: 40 mm)",
         float(src_axis_distances.min()),
         float(np.median(src_axis_distances)),
         float(src_axis_distances.max()),
@@ -414,7 +429,8 @@ def compare_sarvas_vs_fem(
             "Biot–Savart peak %.2f fT/nAm  ·  "
             "Sarvas peak %.2f fT/nAm (%.2f pT @ Q=70)  ·  "
             "FEM peak %.2f fT/nAm (%.2f pT @ Q=70)",
-            Q_per_fibre, n_band,
+            Q_per_fibre,
+            n_band,
             biot_band_peak,
             sarvas_band_peak,
             sarvas_band_peak * 70.0 / 1000.0,
@@ -465,16 +481,20 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
     which is the regime where the Sarvas formula is actually faithful.
     """
     import json
+
     Q = max(float(result.Q_nAm), 1e-30)
     scale_fT_per_nAm = 1.0e15 / Q
     geom = result.geometry
     src_axis_d = np.linalg.norm(
-        result.source_pos_mm[:, :2] - geom.axis_xy_mm[None, :], axis=1,
+        result.source_pos_mm[:, :2] - geom.axis_xy_mm[None, :],
+        axis=1,
     )
 
     # Faithful-sphere band, all three numbers from the `analytic:` config block.
     src_keep = np.abs(src_axis_d - geom.source_axis_mm) <= geom.band_tolerance_mm
-    coil_keep_per_src = np.abs(result.distance_to_axis_mm - geom.sensor_axis_mm) <= geom.band_tolerance_mm
+    coil_keep_per_src = (
+        np.abs(result.distance_to_axis_mm - geom.sensor_axis_mm) <= geom.band_tolerance_mm
+    )
     band_mask = coil_keep_per_src & src_keep[None, :]
 
     def _peak(arr: np.ndarray, mask: np.ndarray | None = None) -> float:
@@ -483,7 +503,7 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
 
     def _rms(arr: np.ndarray, mask: np.ndarray | None = None) -> float:
         a = arr if mask is None else arr[mask]
-        return float(np.sqrt(np.mean(a ** 2))) if a.size else 0.0
+        return float(np.sqrt(np.mean(a**2))) if a.size else 0.0
 
     # Bootstrap a 95% confidence interval on the FEM/Sarvas peak ratio. The
     # 6.8x peak headline is dominated by a small handful of best-aligned
@@ -515,14 +535,10 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
             silent = np.abs(result.sarvas_T) < geom.silent_rel_threshold * np.abs(result.biot_T)
         biot = {
             "biot_peak_fT_per_nAm_full": _peak(result.biot_T) * scale_fT_per_nAm,
-            "biot_rms_fT_per_nAm_full":  _rms(result.biot_T)  * scale_fT_per_nAm,
+            "biot_rms_fT_per_nAm_full": _rms(result.biot_T) * scale_fT_per_nAm,
             "biot_peak_fT_per_nAm_band": biot_peak_band,
-            "ratio_sarvas_to_biot_peak_band": (
-                sarvas_peak_band / max(biot_peak_band, 1e-30)
-            ),
-            "ratio_fem_to_biot_peak_band": (
-                fem_peak_band / max(biot_peak_band, 1e-30)
-            ),
+            "ratio_sarvas_to_biot_peak_band": (sarvas_peak_band / max(biot_peak_band, 1e-30)),
+            "ratio_fem_to_biot_peak_band": (fem_peak_band / max(biot_peak_band, 1e-30)),
             "n_sphere_silent_pairs": int(silent.sum()),
             "n_sphere_silent_pairs_in_band": int((silent & band_mask).sum()),
         }
@@ -537,21 +553,24 @@ def save_comparison_summary(result: SarvasVsFemResult, out_path: Path) -> Path:
         "n_band_pairs": int(band_mask.sum()),
         # Full-array peaks — every (source, coil) pair, regardless of geometry fit.
         "sarvas_peak_fT_per_nAm_full": _peak(result.sarvas_T) * scale_fT_per_nAm,
-        "fem_peak_fT_per_nAm_full":    _peak(result.fem_T)    * scale_fT_per_nAm,
-        "sarvas_rms_fT_per_nAm_full":  _rms(result.sarvas_T)  * scale_fT_per_nAm,
-        "fem_rms_fT_per_nAm_full":     _rms(result.fem_T)     * scale_fT_per_nAm,
+        "fem_peak_fT_per_nAm_full": _peak(result.fem_T) * scale_fT_per_nAm,
+        "sarvas_rms_fT_per_nAm_full": _rms(result.sarvas_T) * scale_fT_per_nAm,
+        "fem_rms_fT_per_nAm_full": _rms(result.fem_T) * scale_fT_per_nAm,
         # Literature-band peaks — restricted to the regime where Sarvas (single
         # sphere with literature 40/58.5 mm radii) is a faithful model.
         "sarvas_peak_fT_per_nAm_band": _peak(result.sarvas_T, band_mask) * scale_fT_per_nAm,
-        "fem_peak_fT_per_nAm_band":    _peak(result.fem_T,    band_mask) * scale_fT_per_nAm,
+        "fem_peak_fT_per_nAm_band": _peak(result.fem_T, band_mask) * scale_fT_per_nAm,
         # Predicted real-CAP signal at Q = 70 nA·m (Bu 2024 convention)
-        "sarvas_peak_pT_at_Q70_band":
-            _peak(result.sarvas_T, band_mask) * scale_fT_per_nAm * 70.0 / 1000.0,
-        "fem_peak_pT_at_Q70_band":
-            _peak(result.fem_T, band_mask) * scale_fT_per_nAm * 70.0 / 1000.0,
+        "sarvas_peak_pT_at_Q70_band": _peak(result.sarvas_T, band_mask)
+        * scale_fT_per_nAm
+        * 70.0
+        / 1000.0,
+        "fem_peak_pT_at_Q70_band": _peak(result.fem_T, band_mask)
+        * scale_fT_per_nAm
+        * 70.0
+        / 1000.0,
         "ratio_fem_to_sarvas_peak_band": (
-            _peak(result.fem_T, band_mask)
-            / max(_peak(result.sarvas_T, band_mask), 1e-30)
+            _peak(result.fem_T, band_mask) / max(_peak(result.sarvas_T, band_mask), 1e-30)
         ),
         # 95% bootstrap CI on the peak ratio.
         "ratio_fem_to_sarvas_peak_band_ci95": [ratio_lo, ratio_hi],
@@ -642,15 +661,15 @@ def run_ladder(
     """
     wanted = [r for r in LADDER_RUNGS if r in set(rungs)]
     if not wanted:
-        raise ValueError(
-            f"no valid rungs in {rungs!r}; choose from {', '.join(LADDER_RUNGS)}"
-        )
+        raise ValueError(f"no valid rungs in {rungs!r}; choose from {', '.join(LADDER_RUNGS)}")
 
     fem = load_fem(cfg.outputs.fem_mat)
     sensors = load_sensors(cfg.outputs.sensors_mat)
 
     src_pos = vagus_sources(
-        fem, cfg.forward.source_tissue, spacing_mm=cfg.forward.source_spacing_mm,
+        fem,
+        cfg.forward.source_tissue,
+        spacing_mm=cfg.forward.source_spacing_mm,
     )
     tangents = vagus_tangents(src_pos)
     s_idx = _resolve_source_index(src_pos.shape[0], source_idx)
@@ -665,15 +684,18 @@ def run_ladder(
         f = np.abs(np.asarray(field_T, dtype=np.float64))
         return {
             "peak_fT_per_nAm": float(f.max()) * to_fT / max(Q_nAm, 1e-30),
-            "rms_fT_per_nAm":
-                float(np.sqrt(np.mean(f ** 2))) * to_fT / max(Q_nAm, 1e-30),
+            "rms_fT_per_nAm": float(np.sqrt(np.mean(f**2))) * to_fT / max(Q_nAm, 1e-30),
         }
 
     results: dict[str, dict] = {}
 
     if "biot" in wanted:
         biot = biot_savart_predict_at_coils(
-            src_pos[s_idx], tangents[s_idx], Q_nAm, coilpos, coilori,
+            src_pos[s_idx],
+            tangents[s_idx],
+            Q_nAm,
+            coilpos,
+            coilori,
         )
         results["biot"] = {"label": _RUNG_LABEL["biot"], **stats(biot)}
 
@@ -681,13 +703,17 @@ def run_ladder(
         axis_xy = estimate_cervical_axis_xy(fem, src_pos)
         centres = build_sphere_centres(src_pos, axis_xy)
         sarvas = sarvas_predict_at_coils(
-            src_pos[s_idx], tangents[s_idx], Q_nAm, coilpos, coilori,
+            src_pos[s_idx],
+            tangents[s_idx],
+            Q_nAm,
+            coilpos,
+            coilori,
             sphere_centre_mm=centres[s_idx],
         )
         results["sarvas"] = {"label": _RUNG_LABEL["sarvas"], **stats(sarvas)}
 
     if "fem" in wanted:
-        lf = load_leadfield(cfg.outputs.forward_npz)   # raises if not solved yet
+        lf = load_leadfield(cfg.outputs.forward_npz)  # raises if not solved yet
         L = lf.L[radial]
         C, three_S = L.shape
         S = three_S // 3
@@ -702,19 +728,16 @@ def run_ladder(
 
     ratios: dict[str, float] = {}
     if "biot" in results and "sarvas" in results:
-        ratios["sarvas_to_biot"] = (
-            results["sarvas"]["peak_fT_per_nAm"]
-            / max(results["biot"]["peak_fT_per_nAm"], 1e-30)
+        ratios["sarvas_to_biot"] = results["sarvas"]["peak_fT_per_nAm"] / max(
+            results["biot"]["peak_fT_per_nAm"], 1e-30
         )
     if "biot" in results and "fem" in results:
-        ratios["fem_to_biot"] = (
-            results["fem"]["peak_fT_per_nAm"]
-            / max(results["biot"]["peak_fT_per_nAm"], 1e-30)
+        ratios["fem_to_biot"] = results["fem"]["peak_fT_per_nAm"] / max(
+            results["biot"]["peak_fT_per_nAm"], 1e-30
         )
     if "sarvas" in results and "fem" in results:
-        ratios["fem_to_sarvas"] = (
-            results["fem"]["peak_fT_per_nAm"]
-            / max(results["sarvas"]["peak_fT_per_nAm"], 1e-30)
+        ratios["fem_to_sarvas"] = results["fem"]["peak_fT_per_nAm"] / max(
+            results["sarvas"]["peak_fT_per_nAm"], 1e-30
         )
 
     return {

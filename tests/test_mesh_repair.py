@@ -1,4 +1,5 @@
 """Mesh-repair primitives."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -37,7 +38,7 @@ def test_cheap_repair_removes_duplicate_vertices() -> None:
     f_dup = np.vstack([m.faces, m.faces + len(m.vertices)])
     raw = trimesh.Trimesh(v_dup, f_dup, process=False)
     out = cheap_repair(raw)
-    assert len(out.vertices) <= len(m.vertices) + 1   # merged
+    assert len(out.vertices) <= len(m.vertices) + 1  # merged
 
 
 def test_boolean_union_two_overlapping_spheres() -> None:
@@ -55,7 +56,7 @@ def test_boolean_union_two_overlapping_spheres() -> None:
 def test_boolean_union_disjoint_kept_separate() -> None:
     a = trimesh.creation.icosphere(radius=5.0)
     b = trimesh.creation.icosphere(radius=5.0)
-    b.apply_translation([100.0, 0.0, 0.0])   # far away — bboxes disjoint
+    b.apply_translation([100.0, 0.0, 0.0])  # far away — bboxes disjoint
     merged = trimesh.util.concatenate([a, b])
     out = boolean_union_overlapping(merged)
     parts = out.split(only_watertight=False)

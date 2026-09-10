@@ -1,4 +1,5 @@
 """CLI: build a 4-tissue tetrahedral FEM mesh via iso2mesh + CGAL."""
+
 from __future__ import annotations
 
 import argparse

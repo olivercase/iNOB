@@ -11,6 +11,7 @@ Two failure modes, both silent:
 So every path in ``cfg.outputs`` is classified here exactly once, and the
 classification is asserted rather than assumed.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,19 +27,25 @@ from inob.config import SOURCE_TARGETS, tag_path
 # the point: they are what makes a second target cheap.
 SHARED = {
     "base",
-    "geometry_mat", "geometry_png",     # every compartment, incl. the cord
-    "fem_mat", "fem_png",               # every tissue label
-    "sensors_mat", "sensors_png",       # OPM array wraps the whole torso
-    "intermediate_bone_clean", "intermediate_bone_union",
-    "logs_dir",                         # timestamped per run, cannot collide
+    "geometry_mat",
+    "geometry_png",  # every compartment, incl. the cord
+    "fem_mat",
+    "fem_png",  # every tissue label
+    "sensors_mat",
+    "sensors_png",  # OPM array wraps the whole torso
+    "intermediate_bone_clean",
+    "intermediate_bone_union",
+    "logs_dir",  # timestamped per run, cannot collide
 }
 
 # Derived from one target's sources; must never share a path.
 PER_TARGET = {
-    "electrodes_mat", "electrodes_png",   # patch is sited over the target
-    "forward_npz", "forward_eeg_npz",     # the leadfields themselves
-    "forward_chunks_dir",                 # per-target solve intermediates
-    "sensitivity_dir",                    # re-solves this target's sources
+    "electrodes_mat",
+    "electrodes_png",  # patch is sited over the target
+    "forward_npz",
+    "forward_eeg_npz",  # the leadfields themselves
+    "forward_chunks_dir",  # per-target solve intermediates
+    "sensitivity_dir",  # re-solves this target's sources
 }
 
 
@@ -97,8 +104,7 @@ def test_shared_artefacts_are_not_named_after_one_target() -> None:
             continue
         for tissue in ("vagus", "spine", "spinal_cord", "muscle"):
             assert tissue not in path.name, (
-                f"{name} = {path.name} is shared by all targets but is named "
-                f"after {tissue!r}"
+                f"{name} = {path.name} is shared by all targets but is named after {tissue!r}"
             )
 
 
@@ -111,6 +117,7 @@ def test_untargeted_run_keeps_legacy_paths() -> None:
 
 
 # ── the tagging primitive ──────────────────────────────────────────────────
+
 
 def test_tag_path_handles_files_and_dirs() -> None:
     assert tag_path(Path("a/b.png"), "spine") == Path("a/b_spine.png")
@@ -142,12 +149,14 @@ FIGURE_RENDERERS = [
 def test_leadfield_figures_default_to_tagged_names(module: str, filename: str) -> None:
     """Figures derived from a leadfield must carry the target in their name."""
     from inob.config import target_output
+
     spine = target_output(_cfg_for("spine"), filename)
     vagus = target_output(_cfg_for("vagus"), filename)
     assert spine != vagus
     assert "spine" in spine.name
     # Sanity: the module really does route through the shared helper.
     import importlib
+
     src = importlib.import_module(module).__file__
     assert "target_output" in Path(src).read_text(), (
         f"{module} builds its default output path without target_output()"

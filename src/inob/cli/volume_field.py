@@ -10,6 +10,7 @@ Two modes, matching the two things DUNEuro's bindings actually expose:
                     used forwards — DUNEuro's own tDCS forward problem is the
                     EEG transfer matrix.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,40 +65,71 @@ see `inob --help` for the full list.""",
     add_common_args(p)
     mode = p.add_mutually_exclusive_group()
     mode.add_argument(
-        "--source", action="store_true",
-        help="Export one dipole's potential field over the whole mesh as VTK "
-             "(the default mode).",
+        "--source",
+        action="store_true",
+        help="Export one dipole's potential field over the whole mesh as VTK (the default mode).",
     )
     mode.add_argument(
-        "--stimulation", action="store_true",
+        "--stimulation",
+        action="store_true",
         help="Compute the field of a bipolar electrode montage instead. Needs "
-             "the HD electrode array (inob electrodes).",
+        "the HD electrode array (inob electrodes).",
     )
-    p.add_argument("--source-idx", type=int, default=0,
-                   help="Which sampled source to use for --source (default 0).")
-    p.add_argument("--moment", default="z", choices=("x", "y", "z"),
-                   help="Dipole moment direction for --source (default z, the "
-                        "longitudinal direction for a nerve).")
-    p.add_argument("--anode", type=int, default=0,
-                   help="--stimulation: electrode index current is driven into.")
-    p.add_argument("--cathode", type=int, default=1,
-                   help="--stimulation: electrode index current returns from.")
-    p.add_argument("--current-mA", type=float, default=1.0,
-                   help="--stimulation: injected current in mA (default 1).")
     p.add_argument(
-        "--evaluate", default="current", choices=list(EVALUATION_TYPES),
-        help="--stimulation: what to return per point. 'direct' = potential, "
-             "'gradient' = grad u (the E field up to sign), 'current' = "
-             "-sigma*grad u (current density, the default).",
+        "--source-idx",
+        type=int,
+        default=0,
+        help="Which sampled source to use for --source (default 0).",
     )
-    p.add_argument("--spacing-mm", type=float, default=5.0,
-                   help="--stimulation: thin the sample points to roughly one "
-                        "per cube of this size (0 = every tetrahedron).")
-    p.add_argument("--tissue", default=None,
-                   help="--stimulation: restrict sample points to these tissue "
-                        "labels (comma-separated). Default: the whole volume.")
-    p.add_argument("--out", type=Path, default=None,
-                   help="Output path. Default: outputs/volume_field/<mode>.")
+    p.add_argument(
+        "--moment",
+        default="z",
+        choices=("x", "y", "z"),
+        help="Dipole moment direction for --source (default z, the "
+        "longitudinal direction for a nerve).",
+    )
+    p.add_argument(
+        "--anode",
+        type=int,
+        default=0,
+        help="--stimulation: electrode index current is driven into.",
+    )
+    p.add_argument(
+        "--cathode",
+        type=int,
+        default=1,
+        help="--stimulation: electrode index current returns from.",
+    )
+    p.add_argument(
+        "--current-mA",
+        type=float,
+        default=1.0,
+        help="--stimulation: injected current in mA (default 1).",
+    )
+    p.add_argument(
+        "--evaluate",
+        default="current",
+        choices=list(EVALUATION_TYPES),
+        help="--stimulation: what to return per point. 'direct' = potential, "
+        "'gradient' = grad u (the E field up to sign), 'current' = "
+        "-sigma*grad u (current density, the default).",
+    )
+    p.add_argument(
+        "--spacing-mm",
+        type=float,
+        default=5.0,
+        help="--stimulation: thin the sample points to roughly one "
+        "per cube of this size (0 = every tetrahedron).",
+    )
+    p.add_argument(
+        "--tissue",
+        default=None,
+        help="--stimulation: restrict sample points to these tissue "
+        "labels (comma-separated). Default: the whole volume.",
+    )
+    p.add_argument(
+        "--out", type=Path, default=None, help="Output path. Default: outputs/volume_field/<mode>."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="volume_field")
 
@@ -107,11 +139,16 @@ see `inob --help` for the full list.""",
 
     if args.stimulation:
         electrodes = load_sensors(cfg.outputs.electrodes_mat)
-        tissues = (tuple(source_tissue_labels(args.tissue)) if args.tissue else ())
+        tissues = tuple(source_tissue_labels(args.tissue)) if args.tissue else ()
         field = stimulation_field(
-            cfg, fem, electrodes.coilpos,
-            anode=args.anode, cathode=args.cathode, current_mA=args.current_mA,
-            evaluation_type=args.evaluate, spacing_mm=args.spacing_mm,
+            cfg,
+            fem,
+            electrodes.coilpos,
+            anode=args.anode,
+            cathode=args.cathode,
+            current_mA=args.current_mA,
+            evaluation_type=args.evaluate,
+            spacing_mm=args.spacing_mm,
             tissues=tissues,
         )
         out = args.out or (out_dir / "stimulation_field.npz")
@@ -129,12 +166,14 @@ see `inob --help` for the full list.""",
 
     src_pos = resolve_source_positions(cfg, fem)
     if not 0 <= args.source_idx < len(src_pos):
-        raise SystemExit(
-            f"--source-idx {args.source_idx} out of range (have {len(src_pos)})")
+        raise SystemExit(f"--source-idx {args.source_idx} out of range (have {len(src_pos)})")
     moment = np.eye(3)["xyz".index(args.moment)]
     out = args.out or (out_dir / f"source_{args.source_idx}_{args.moment}")
     written = export_source_field_vtk(
-        cfg, fem, source_pos_mm=src_pos[args.source_idx], moment=moment,
+        cfg,
+        fem,
+        source_pos_mm=src_pos[args.source_idx],
+        moment=moment,
         out_path=out,
     )
     sys.stdout.write(

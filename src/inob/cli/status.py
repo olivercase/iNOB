@@ -3,6 +3,7 @@
 Read-only: it never loads meshes, never configures file logging, and never
 touches ``outputs/``. Safe to run at any time, including mid-solve.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,12 +32,9 @@ STAGE_COMMAND: dict[str, str] = {
 # complete run as incomplete, and point "what to run next" at a render nobody
 # asked for. Each entry names one or more config fields — `viz` writes two.
 EXTRA_ARTIFACTS: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
-    ("electrodes", ("electrodes_mat",), "inob electrodes",
-     "HD surface-electrode array"),
-    ("eeg", ("forward_eeg_npz",), "inob eeg",
-     "EEG leadfield via DUNEuro"),
-    ("figures", ("geometry_png", "fem_png"), "inob run --with-viz",
-     "geometry + FEM overview PNGs"),
+    ("electrodes", ("electrodes_mat",), "inob electrodes", "HD surface-electrode array"),
+    ("eeg", ("forward_eeg_npz",), "inob eeg", "EEG leadfield via DUNEuro"),
+    ("figures", ("geometry_png", "fem_png"), "inob run --with-viz", "geometry + FEM overview PNGs"),
 )
 
 
@@ -66,22 +64,30 @@ def collect(cfg: Config) -> tuple[list[Artifact], list[Artifact]]:
     for name in DEFAULT_STAGES:
         stage = STAGES[name]
         paths = tuple(getattr(cfg.outputs, f) for f in stage.output_paths)
-        stages.append(Artifact(
-            name=name,
-            description=stage.description,
-            command=STAGE_COMMAND.get(name, f"inob {name}"),
-            paths=paths,
-            built=all(p.exists() for p in paths),
-            failed=_failed_marker(paths, name).exists(),
-        ))
+        stages.append(
+            Artifact(
+                name=name,
+                description=stage.description,
+                command=STAGE_COMMAND.get(name, f"inob {name}"),
+                paths=paths,
+                built=all(p.exists() for p in paths),
+                failed=_failed_marker(paths, name).exists(),
+            )
+        )
 
     extras: list[Artifact] = []
     for name, fields, command, description in EXTRA_ARTIFACTS:
         paths = tuple(getattr(cfg.outputs, f) for f in fields)
-        extras.append(Artifact(
-            name=name, description=description, command=command,
-            paths=paths, built=all(p.exists() for p in paths), failed=False,
-        ))
+        extras.append(
+            Artifact(
+                name=name,
+                description=description,
+                command=command,
+                paths=paths,
+                built=all(p.exists() for p in paths),
+                failed=False,
+            )
+        )
     return stages, extras
 
 
@@ -102,9 +108,7 @@ def forward_physics(cfg: Config) -> list[tuple[str, str]]:
     aniso = cfg.forward.muscle_anisotropy
     active = aniso.active_for(cfg.forward.source_tissue)
     ratio = aniso.sigma_long_sm / max(aniso.sigma_trans_sm, 1e-12)
-    aniso_detail = (
-        f"{aniso.mode} — {'on' if active else 'off'} for {cfg.forward.source_tissue}"
-    )
+    aniso_detail = f"{aniso.mode} — {'on' if active else 'off'} for {cfg.forward.source_tissue}"
     if active:
         aniso_detail += f", {ratio:.1f}:1"
 
@@ -139,8 +143,14 @@ def _describe(path: Path, root: Path) -> str:
     return f"{shown}  {_ui.paint(detail, 'dim')}"
 
 
-def _render(cfg: Config, config_path: Path, stages: list[Artifact],
-            extras: list[Artifact], out, notes: list[str] | None = None) -> None:
+def _render(
+    cfg: Config,
+    config_path: Path,
+    stages: list[Artifact],
+    extras: list[Artifact],
+    out,
+    notes: list[str] | None = None,
+) -> None:
     root = cfg.project_root
     # One column width across both tables so the two line up.
     pad = max(len(a.name) for a in (*stages, *extras)) + 2
@@ -151,10 +161,8 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
 
     print(_ui.heading("Pipeline"), file=out)
     for stage in stages:
-        glyph = _ui.mark(
-            "fail" if stage.failed else "ok" if stage.built else "miss")
-        print(f"  {glyph} {stage.name:<{pad}}"
-              f"{_describe(stage.paths[0], root)}", file=out)
+        glyph = _ui.mark("fail" if stage.failed else "ok" if stage.built else "miss")
+        print(f"  {glyph} {stage.name:<{pad}}{_describe(stage.paths[0], root)}", file=out)
         for extra_path in stage.paths[1:]:
             print(f"{indent}{_describe(extra_path, root)}", file=out)
         if stage.failed:
@@ -163,8 +171,11 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
     print(f"\n{_ui.heading('Optional')}", file=out)
     for extra in extras:
         glyph = _ui.mark("ok" if extra.built else "miss")
-        detail = (_describe(extra.paths[0], root) if extra.built
-                  else _ui.paint(f"not built — {extra.command}", "dim"))
+        detail = (
+            _describe(extra.paths[0], root)
+            if extra.built
+            else _ui.paint(f"not built — {extra.command}", "dim")
+        )
         print(f"  {glyph} {extra.name:<{pad}}{detail}", file=out)
         if extra.built:
             for extra_path in extra.paths[1:]:
@@ -183,16 +194,24 @@ def _render(cfg: Config, config_path: Path, stages: list[Artifact],
 
     step = next_step(stages)
     if step is None:
-        print(f"\nEverything is built. Analyse it with "
-              f"{_ui.paint('inob detect', 'cyan')} or "
-              f"{_ui.paint('inob topoplot', 'cyan')}.", file=out)
+        print(
+            f"\nEverything is built. Analyse it with "
+            f"{_ui.paint('inob detect', 'cyan')} or "
+            f"{_ui.paint('inob topoplot', 'cyan')}.",
+            file=out,
+        )
     else:
         print(f"\n{_ui.heading('Next')}", file=out)
         print(_ui.hint(step), file=out)
 
 
-def _as_json(cfg: Config, config_path: Path, stages: list[Artifact],
-             extras: list[Artifact], notes: list[str] | None = None) -> dict:
+def _as_json(
+    cfg: Config,
+    config_path: Path,
+    stages: list[Artifact],
+    extras: list[Artifact],
+    notes: list[str] | None = None,
+) -> dict:
     def encode(a: Artifact) -> dict:
         return {
             "name": a.name,
@@ -201,6 +220,7 @@ def _as_json(cfg: Config, config_path: Path, stages: list[Artifact],
             "command": a.command,
             "paths": [str(p) for p in a.paths],
         }
+
     return {
         "project_root": str(cfg.project_root),
         "config": str(config_path),
@@ -226,20 +246,33 @@ Figures are listed but never demanded: a run does not draw them unless asked
 (`inob run --with-viz`), so a missing PNG is not a missing stage.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--config", type=Path, default=Path(DEFAULT_CONFIG),
-                   help=f"Path to YAML config (default {DEFAULT_CONFIG}).")
-    p.add_argument("--project-root", type=Path, default=None,
-                   help="Override the project root used to resolve paths.")
-    p.add_argument("--source-target", default=None, metavar="TAG",
-                   choices=list(SOURCE_TARGETS),
-                   help="Report the outputs of one target's run rather than "
-                        "the config's defaults. A targeted solve writes tagged "
-                        "files (duneuro_leadfield_<TAG>.npz and friends), so "
-                        "without this a spine run reads as unbuilt. Same flag, "
-                        f"same meaning as on every other command. One of: "
-                        f"{', '.join(SOURCE_TARGETS)}.")
-    p.add_argument("--json", action="store_true",
-                   help="Emit machine-readable JSON instead of a table.")
+    p.add_argument(
+        "--config",
+        type=Path,
+        default=Path(DEFAULT_CONFIG),
+        help=f"Path to YAML config (default {DEFAULT_CONFIG}).",
+    )
+    p.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help="Override the project root used to resolve paths.",
+    )
+    p.add_argument(
+        "--source-target",
+        default=None,
+        metavar="TAG",
+        choices=list(SOURCE_TARGETS),
+        help="Report the outputs of one target's run rather than "
+        "the config's defaults. A targeted solve writes tagged "
+        "files (duneuro_leadfield_<TAG>.npz and friends), so "
+        "without this a spine run reads as unbuilt. Same flag, "
+        f"same meaning as on every other command. One of: "
+        f"{', '.join(SOURCE_TARGETS)}.",
+    )
+    p.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON instead of a table."
+    )
     args = p.parse_args(argv)
 
     # Same reason as doctor: a warning logged while the config loads belongs
@@ -251,8 +284,7 @@ Figures are listed but never demanded: a run does not draw them unless asked
     stages, extras = collect(cfg)
 
     if args.json:
-        json.dump(_as_json(cfg, args.config, stages, extras, notes),
-                  sys.stdout, indent=2)
+        json.dump(_as_json(cfg, args.config, stages, extras, notes), sys.stdout, indent=2)
         sys.stdout.write("\n")
     else:
         _render(cfg, args.config, stages, extras, sys.stdout, notes)

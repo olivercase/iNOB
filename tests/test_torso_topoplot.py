@@ -6,6 +6,7 @@ silently wrong and invisible in a finished PNG: which channels are used, where
 the interpolation refuses to paint, and whether the source marker is drawn
 through the body.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -21,11 +22,16 @@ class _Leadfield:
         # Rows 0,1 are the radial component of positions 0,1; rows 2-5 are the
         # other two axes, which the figure must ignore.
         self.L_fT_per_nAm = np.arange(6 * 6, dtype=float).reshape(6, 6)
-        self.coil_pos = np.array([
-            [0.0, 0.0, 0.0], [10.0, 0.0, 0.0],      # radial
-            [0.0, 0.0, 0.0], [10.0, 0.0, 0.0],      # axis 2
-            [0.0, 0.0, 0.0], [10.0, 0.0, 0.0],      # axis 3
-        ])
+        self.coil_pos = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],  # radial
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],  # axis 2
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],  # axis 3
+            ]
+        )
 
 
 def test_only_the_radial_third_of_a_triaxial_array_is_used() -> None:
@@ -69,8 +75,7 @@ def test_crop_to_band_reindexes_faces_consistently() -> None:
 
 
 def test_crop_near_keeps_a_cap_not_a_ring() -> None:
-    verts = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
-                      [200.0, 0.0, 0.0]])
+    verts = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [200.0, 0.0, 0.0]])
     faces = np.array([[0, 1, 2], [1, 2, 3]], dtype=np.int64)
     v, f = tt._crop_near(verts, faces, np.zeros(3), 10.0)
     assert len(v) == 3

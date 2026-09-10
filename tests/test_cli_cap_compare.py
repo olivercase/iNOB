@@ -1,4 +1,5 @@
 """CLI: cap_compare argparse defaults + wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +13,8 @@ TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 def test_main_defaults(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "render_cap_compare",
+        cli_mod,
+        "render_cap_compare",
         lambda cfg, **kwargs: calls.update(kwargs),
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
@@ -29,15 +31,29 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
 def test_main_custom_args(tmp_path, monkeypatch) -> None:
     calls = {}
     monkeypatch.setattr(
-        cli_mod, "render_cap_compare",
+        cli_mod,
+        "render_cap_compare",
         lambda cfg, **kwargs: calls.update(kwargs),
     )
     out = tmp_path / "fig.png"
-    rc = cli_mod.main([
-        "--config", str(TINY_CFG), "--project-root", str(tmp_path),
-        "--ap-width-ms", "1.0", "--fs-hz", "1000", "--duration-ms", "10",
-        "--out", str(out), "--dpi", "72",
-    ])
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--ap-width-ms",
+            "1.0",
+            "--fs-hz",
+            "1000",
+            "--duration-ms",
+            "10",
+            "--out",
+            str(out),
+            "--dpi",
+            "72",
+        ]
+    )
     assert rc == 0
     assert calls["ap_width_ms"] == 1.0
     assert calls["fs_hz"] == 1000.0

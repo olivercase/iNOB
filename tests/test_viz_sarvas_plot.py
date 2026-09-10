@@ -1,4 +1,5 @@
 """Tests for inob.viz.sarvas_plot (Sarvas-vs-FEM comparison figure)."""
+
 from __future__ import annotations
 
 import matplotlib
@@ -19,7 +20,8 @@ def _make_result(*, C: int = 12, S: int = 5, Q_nAm: float = 1.0) -> SarvasVsFemR
     source_pos = np.stack([np.zeros(S), np.zeros(S), z], axis=1)
     sphere_centres = np.stack([np.zeros(S), np.zeros(S), z], axis=1)
     geometry = SarvasGeometry(
-        sphere_centres_mm=sphere_centres, axis_xy_mm=np.array([0.0, 0.0]),
+        sphere_centres_mm=sphere_centres,
+        axis_xy_mm=np.array([0.0, 0.0]),
     )
     sarvas_T = rng.standard_normal((C, S)) * 1e-12
     fem_T = sarvas_T * 1.1 + rng.standard_normal((C, S)) * 1e-14
@@ -27,9 +29,14 @@ def _make_result(*, C: int = 12, S: int = 5, Q_nAm: float = 1.0) -> SarvasVsFemR
     coil_orient = np.tile(np.array([1.0, 0.0, 0.0]), (C, 1))
     distance = np.abs(rng.standard_normal((C, S))) * 58.5
     return SarvasVsFemResult(
-        geometry=geometry, Q_nAm=Q_nAm, source_pos_mm=source_pos,
-        sarvas_T=sarvas_T, fem_T=fem_T, coil_pos_mm=coil_pos,
-        coil_orient=coil_orient, distance_to_axis_mm=distance,
+        geometry=geometry,
+        Q_nAm=Q_nAm,
+        source_pos_mm=source_pos,
+        sarvas_T=sarvas_T,
+        fem_T=fem_T,
+        coil_pos_mm=coil_pos,
+        coil_orient=coil_orient,
+        distance_to_axis_mm=distance,
     )
 
 

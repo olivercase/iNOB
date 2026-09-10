@@ -86,6 +86,7 @@ References
 * Kawabata S *et al.* 2002 *Clin Neurophysiol* 113:1874 — magnetospinography of
   the ascending cord volley.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -106,6 +107,7 @@ class CapEvent:
     ``n_fibres`` × the per-fibre Hämäläinen dipole moment derived from
     ``fibres`` and ``ap_amplitude_mV``.
     """
+
     t_start_s: float
     n_fibres: int
     fibres: FibreDistribution
@@ -116,13 +118,14 @@ class CapEvent:
 @dataclass(frozen=True)
 class Scenario:
     """A named, plottable event train."""
+
     name: str
     description: str
     duration_s: float
     events: list[CapEvent] = field(default_factory=list)
     rate_hz: float = 0.0
-    physiology_trace_label: str = ""    # "ECG (a.u.)" or "Lung volume (a.u.)"
-    physiology_trace: np.ndarray | None = None    # (T,) optional context plot
+    physiology_trace_label: str = ""  # "ECG (a.u.)" or "Lung volume (a.u.)"
+    physiology_trace: np.ndarray | None = None  # (T,) optional context plot
     generator_z_mm: float | None = None
     """Axial position of the generator, mm in the atlas frame.
 
@@ -138,40 +141,58 @@ class Scenario:
 
 # ── A-fibre and mixed-fibre helpers ────────────────────────────────────────
 
+
 def a_fibre_population(
-    *, mean_um: float = 8.0, sigma_log: float = 0.30, n_bins: int = 20,
+    *,
+    mean_um: float = 8.0,
+    sigma_log: float = 0.30,
+    n_bins: int = 20,
 ) -> FibreDistribution:
     """Lognormal fibre-diameter distribution centred on the A-myelinated
     range (mean diameter ~8 µm). Conduction velocity ~k·d ≈ 50 m/s mean."""
     return lognormal_fibre_distribution(
-        mean_um=mean_um, sigma_log=sigma_log,
-        n_bins=n_bins, lo_um=2.0, hi_um=15.0,
+        mean_um=mean_um,
+        sigma_log=sigma_log,
+        n_bins=n_bins,
+        lo_um=2.0,
+        hi_um=15.0,
     )
 
 
 def dorsal_column_population(
-    *, mean_um: float = 10.0, sigma_log: float = 0.25, n_bins: int = 20,
+    *,
+    mean_um: float = 10.0,
+    sigma_log: float = 0.25,
+    n_bins: int = 20,
 ) -> FibreDistribution:
     """Dorsal-column ascending afferents — see
     :func:`inob.physiology.profiles.dorsal_column_population`."""
     from inob.physiology.profiles import (
         dorsal_column_population as _dc,
     )
+
     return _dc(mean_um=mean_um, sigma_log=sigma_log, n_bins=n_bins)
 
 
 def mixed_pulmonary_population(
-    *, mean_um: float = 5.0, sigma_log: float = 0.45, n_bins: int = 25,
+    *,
+    mean_um: float = 5.0,
+    sigma_log: float = 0.45,
+    n_bins: int = 25,
 ) -> FibreDistribution:
     """Mixed Aδ + small-A diameter distribution typical of pulmonary
     afferents. Slower mean CV than baroreceptor A-fibres."""
     return lognormal_fibre_distribution(
-        mean_um=mean_um, sigma_log=sigma_log,
-        n_bins=n_bins, lo_um=1.0, hi_um=12.0,
+        mean_um=mean_um,
+        sigma_log=sigma_log,
+        n_bins=n_bins,
+        lo_um=1.0,
+        hi_um=12.0,
     )
 
 
 # ── scenario constructors ──────────────────────────────────────────────────
+
 
 def baroreceptor_scenario(
     *,
@@ -198,10 +219,15 @@ def baroreceptor_scenario(
         # baroreceptor latency ≈ 150 ms after R-wave
         t_burst = t_R + 0.15 + float(rng.normal(0.0, jitter_ms * 1e-3))
         n = int(n_fibres_per_burst + rng.integers(-20, 21))
-        events.append(CapEvent(
-            t_start_s=float(t_burst), n_fibres=max(n, 1), fibres=fibres,
-            ap_amplitude_mV=70.0, label=f"baro_beat_{k:02d}",
-        ))
+        events.append(
+            CapEvent(
+                t_start_s=float(t_burst),
+                n_fibres=max(n, 1),
+                fibres=fibres,
+                ap_amplitude_mV=70.0,
+                label=f"baro_beat_{k:02d}",
+            )
+        )
 
     # Synthetic ECG-like trace: gaussian-derivative R-waves at hr_hz
     fs = 1000
@@ -211,7 +237,7 @@ def baroreceptor_scenario(
     for k in range(n_beats):
         t_R = k / hr_hz
         sigma = 0.02
-        ecg += -((t - t_R) / sigma) * np.exp(-((t - t_R) ** 2) / (2 * sigma ** 2))
+        ecg += -((t - t_R) / sigma) * np.exp(-((t - t_R) ** 2) / (2 * sigma**2))
     if np.abs(ecg).max() > 0:
         ecg /= np.abs(ecg).max()
 
@@ -257,22 +283,29 @@ def respiratory_scenario(
     for k in range(n_breaths):
         t0 = k * period_s
         # RAR phasic burst right at inspiration onset
-        events.append(CapEvent(
-            t_start_s=float(t0), n_fibres=n_phasic_fibres_RAR,
-            fibres=fibres, ap_amplitude_mV=80.0,
-            label=f"resp_RAR_{k:02d}",
-        ))
+        events.append(
+            CapEvent(
+                t_start_s=float(t0),
+                n_fibres=n_phasic_fibres_RAR,
+                fibres=fibres,
+                ap_amplitude_mV=80.0,
+                label=f"resp_RAR_{k:02d}",
+            )
+        )
         # SAR tonic: events evenly spaced through inspiration
         n_sar = int(insp_dur_s * sar_rate_hz)
         for j in range(n_sar):
             t_event = t0 + (j + 0.5) / sar_rate_hz
             jitter = rng.normal(0.0, 1e-3)
-            events.append(CapEvent(
-                t_start_s=float(t_event + jitter),
-                n_fibres=n_tonic_fibres_SAR + int(rng.integers(-10, 11)),
-                fibres=fibres, ap_amplitude_mV=80.0,
-                label=f"resp_SAR_{k:02d}_{j:03d}",
-            ))
+            events.append(
+                CapEvent(
+                    t_start_s=float(t_event + jitter),
+                    n_fibres=n_tonic_fibres_SAR + int(rng.integers(-10, 11)),
+                    fibres=fibres,
+                    ap_amplitude_mV=80.0,
+                    label=f"resp_SAR_{k:02d}_{j:03d}",
+                )
+            )
 
     # Lung-volume trace: rising during inspiration, falling during expiration
     fs = 1000
@@ -317,12 +350,15 @@ def respiratory_scenario(
 #
 # Entry-segment Z values are for the BodyParts3D cord (z = 1031..1482 mm, most
 # rostral at the top). They are defaults, not constants — override per subject.
-MEDIAN_NERVE_ENTRY_Z_MM: float = 1390.0   # C6-T1, cervical enlargement
-TIBIAL_NERVE_ENTRY_Z_MM: float = 1060.0   # L4-S1, lumbosacral enlargement / conus
+MEDIAN_NERVE_ENTRY_Z_MM: float = 1390.0  # C6-T1, cervical enlargement
+TIBIAL_NERVE_ENTRY_Z_MM: float = 1060.0  # L4-S1, lumbosacral enlargement / conus
 
 
 def _stimulus_marker_trace(
-    duration_s: float, rate_hz: float, n_stim: int, fs: int = 1000,
+    duration_s: float,
+    rate_hz: float,
+    n_stim: int,
+    fs: int = 1000,
 ) -> np.ndarray:
     """Unit impulse at each stimulus time, for the context panel."""
     n_samples = int(duration_s * fs)
@@ -335,9 +371,18 @@ def _stimulus_marker_trace(
 
 
 def _ssep_scenario(
-    *, name: str, nerve: str, entry_z_mm: float, segment: str,
-    duration_s: float, rate_hz: float, n_fibres: int,
-    ap_amplitude_mV: float, ap_width_ms: float, jitter_ms: float, seed: int,
+    *,
+    name: str,
+    nerve: str,
+    entry_z_mm: float,
+    segment: str,
+    duration_s: float,
+    rate_hz: float,
+    n_fibres: int,
+    ap_amplitude_mV: float,
+    ap_width_ms: float,
+    jitter_ms: float,
+    seed: int,
 ) -> Scenario:
     """Shared builder for peripheral-nerve SSEP volleys."""
     rng = np.random.default_rng(seed)
@@ -351,13 +396,15 @@ def _ssep_scenario(
         # into the event time; what matters downstream is the spacing and the
         # trial-to-trial jitter, not the absolute latency.
         t_entry = t_stim + float(rng.normal(0.0, jitter_ms * 1e-3))
-        events.append(CapEvent(
-            t_start_s=float(t_entry),
-            n_fibres=n_fibres,
-            fibres=fibres,
-            ap_amplitude_mV=ap_amplitude_mV,
-            label=f"{name}_stim_{k:03d}",
-        ))
+        events.append(
+            CapEvent(
+                t_start_s=float(t_entry),
+                n_fibres=n_fibres,
+                fibres=fibres,
+                ap_amplitude_mV=ap_amplitude_mV,
+                label=f"{name}_stim_{k:03d}",
+            )
+        )
 
     return Scenario(
         name=name,
@@ -397,10 +444,17 @@ def median_nerve_ssep_scenario(
     response that dominates cervical magnetospinography.
     """
     return _ssep_scenario(
-        name="ssep_median", nerve="Median nerve", entry_z_mm=entry_z_mm,
-        segment="C6-T1", duration_s=duration_s, rate_hz=rate_hz,
-        n_fibres=n_fibres, ap_amplitude_mV=ap_amplitude_mV,
-        ap_width_ms=ap_width_ms, jitter_ms=jitter_ms, seed=seed,
+        name="ssep_median",
+        nerve="Median nerve",
+        entry_z_mm=entry_z_mm,
+        segment="C6-T1",
+        duration_s=duration_s,
+        rate_hz=rate_hz,
+        n_fibres=n_fibres,
+        ap_amplitude_mV=ap_amplitude_mV,
+        ap_width_ms=ap_width_ms,
+        jitter_ms=jitter_ms,
+        seed=seed,
     )
 
 
@@ -426,8 +480,15 @@ def tibial_nerve_ssep_scenario(
     a slower rate and more averages.
     """
     return _ssep_scenario(
-        name="ssep_tibial", nerve="Tibial nerve", entry_z_mm=entry_z_mm,
-        segment="L4-S1", duration_s=duration_s, rate_hz=rate_hz,
-        n_fibres=n_fibres, ap_amplitude_mV=ap_amplitude_mV,
-        ap_width_ms=ap_width_ms, jitter_ms=jitter_ms, seed=seed,
+        name="ssep_tibial",
+        nerve="Tibial nerve",
+        entry_z_mm=entry_z_mm,
+        segment="L4-S1",
+        duration_s=duration_s,
+        rate_hz=rate_hz,
+        n_fibres=n_fibres,
+        ap_amplitude_mV=ap_amplitude_mV,
+        ap_width_ms=ap_width_ms,
+        jitter_ms=jitter_ms,
+        seed=seed,
     )

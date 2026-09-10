@@ -1,4 +1,5 @@
 """Propagating vs stationary source models, and the correction they imply."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -28,14 +29,18 @@ def _straight_line_leadfield(*, n_src: int = 40, n_chan: int = 12, seed: int = 0
     centres = np.linspace(z[0], z[-1], n_chan)
     L3 = np.zeros((n_chan, n_src, 3))
     for c, z0 in enumerate(centres):
-        L3[c, :, 2] = np.exp(-((z - z0) ** 2) / (2 * 40.0 ** 2))
+        L3[c, :, 2] = np.exp(-((z - z0) ** 2) / (2 * 40.0**2))
     L = L3.reshape(n_chan, 3 * n_src)
     return Leadfield(
-        L=L, L_fT_per_nAm=L * 1e6, source_pos=source_pos,
+        L=L,
+        L_fT_per_nAm=L * 1e6,
+        source_pos=source_pos,
         coil_pos=rng.normal(size=(n_chan, 3)),
         coil_orient=np.tile([0.0, 0.0, 1.0], (n_chan, 1)),
         channel_names=tuple(f"mag-{i:03d}" for i in range(n_chan)),
-        conductivities=np.array([0.4]), tissue_labels=("skin",), seed=0,
+        conductivities=np.array([0.4]),
+        tissue_labels=("skin",),
+        seed=0,
     )
 
 
@@ -96,7 +101,7 @@ def test_bipolar_reduction_is_reference_invariant() -> None:
     corrects (:func:`inob.analysis.snr.per_source_best_bipolar`)."""
     lf = _straight_line_leadfield()
     sig = compute_propagation_signals(lf, SPINE_PROFILE)
-    shifted = sig.segment + 3.7            # a common-mode offset on every channel
+    shifted = sig.segment + 3.7  # a common-mode offset on every channel
     assert np.isclose(peak_bipolar(sig.segment), peak_bipolar(shifted))
 
 
@@ -109,7 +114,8 @@ def test_vagus_profile_is_close_to_stationary() -> None:
     # smears — far closer to the lump than the spine's sweeping volley.
     ratio_vagus = propagation_ratio(sig, peak_over_channels)
     ratio_spine = propagation_ratio(
-        compute_propagation_signals(lf, SPINE_PROFILE), peak_over_channels)
+        compute_propagation_signals(lf, SPINE_PROFILE), peak_over_channels
+    )
     assert ratio_vagus > ratio_spine
 
 

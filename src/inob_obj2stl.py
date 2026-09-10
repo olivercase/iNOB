@@ -14,8 +14,7 @@ try:
     import trimesh
 except ImportError:
     sys.stderr.write(
-        "Error: 'trimesh' is not installed. "
-        "Install it with 'pip install trimesh' and try again.\n"
+        "Error: 'trimesh' is not installed. Install it with 'pip install trimesh' and try again.\n"
     )
     sys.exit(1)
 
@@ -61,9 +60,7 @@ def convert_obj_to_stl(obj_path: Path, stl_path: Path) -> Path:
 
 
 def _parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Convert a Wavefront OBJ mesh to STL format."
-    )
+    parser = argparse.ArgumentParser(description="Convert a Wavefront OBJ mesh to STL format.")
     parser.add_argument("obj_path", nargs="?", type=Path, help="Input OBJ file.")
     parser.add_argument("stl_path", nargs="?", type=Path, help="Output STL file.")
     return parser.parse_args(argv)

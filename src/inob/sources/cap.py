@@ -30,6 +30,7 @@ where x is arc length along the nerve, CV(d) the diameter-dependent
 velocity, w(d) the fibre-diameter histogram, and ``L_long`` the
 longitudinal-component leadfield.
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,13 +43,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class FibreDistribution:
-    diameters_um: np.ndarray   # (D,) sample points
-    weights: np.ndarray        # (D,) normalised weights, sum to 1
+    diameters_um: np.ndarray  # (D,) sample points
+    weights: np.ndarray  # (D,) normalised weights, sum to 1
 
 
 def lognormal_fibre_distribution(
-    *, mean_um: float = 4.0, sigma_log: float = 0.5,
-    n_bins: int = 30, lo_um: float = 0.5, hi_um: float = 15.0,
+    *,
+    mean_um: float = 4.0,
+    sigma_log: float = 0.5,
+    n_bins: int = 30,
+    lo_um: float = 0.5,
+    hi_um: float = 15.0,
 ) -> FibreDistribution:
     """A lognormal PDF over fibre diameter [µm].
 
@@ -58,16 +63,18 @@ def lognormal_fibre_distribution(
     """
     edges = np.linspace(lo_um, hi_um, n_bins + 1)
     centres = 0.5 * (edges[:-1] + edges[1:])
-    mu = np.log(mean_um) - 0.5 * sigma_log ** 2
-    pdf = (1.0 / (centres * sigma_log * np.sqrt(2.0 * np.pi))) \
-        * np.exp(-((np.log(centres) - mu) ** 2) / (2.0 * sigma_log ** 2))
+    mu = np.log(mean_um) - 0.5 * sigma_log**2
+    pdf = (1.0 / (centres * sigma_log * np.sqrt(2.0 * np.pi))) * np.exp(
+        -((np.log(centres) - mu) ** 2) / (2.0 * sigma_log**2)
+    )
     weights = pdf * np.diff(edges)
     weights = weights / weights.sum()
     return FibreDistribution(diameters_um=centres, weights=weights)
 
 
 def hamalainen_per_fibre_nAm(
-    fibres: FibreDistribution, *,
+    fibres: FibreDistribution,
+    *,
     action_potential_mV: float = 70.0,
     sigma_intracellular_S_per_m: float = 1.0,
 ) -> float:
@@ -96,27 +103,32 @@ def hamalainen_per_fibre_nAm(
     """
     d_m = np.asarray(fibres.diameters_um) * 1e-6
     Q_per_diameter_Am = (
-        np.pi * d_m ** 2 * sigma_intracellular_S_per_m * (action_potential_mV * 1e-3) / 4.0
+        np.pi * d_m**2 * sigma_intracellular_S_per_m * (action_potential_mV * 1e-3) / 4.0
     )
     Q_mean_Am = float(np.sum(Q_per_diameter_Am * fibres.weights))
-    return Q_mean_Am * 1e9     # → nA·m
+    return Q_mean_Am * 1e9  # → nA·m
 
 
 def conduction_velocity_m_per_s(
-    diameters_um: np.ndarray, *, k_m_per_s_per_um: float = 6.0,
-    myelinated_threshold_um: float = 1.5, c_unmyelinated: float = 0.5,
+    diameters_um: np.ndarray,
+    *,
+    k_m_per_s_per_um: float = 6.0,
+    myelinated_threshold_um: float = 1.5,
+    c_unmyelinated: float = 0.5,
 ) -> np.ndarray:
     """Diameter → CV. Myelinated: CV ≈ k·D.  Unmyelinated (D < threshold):
     constant ``c_unmyelinated`` m/s (~C-fibre baseline)."""
     D = np.asarray(diameters_um, dtype=np.float64)
-    cv = np.where(D >= myelinated_threshold_um,
-                  k_m_per_s_per_um * D,
-                  np.full_like(D, c_unmyelinated))
+    cv = np.where(
+        D >= myelinated_threshold_um, k_m_per_s_per_um * D, np.full_like(D, c_unmyelinated)
+    )
     return cv
 
 
 def biphasic_waveform(
-    t_ms: np.ndarray, *, ap_width_ms: float = 0.5,
+    t_ms: np.ndarray,
+    *,
+    ap_width_ms: float = 0.5,
 ) -> np.ndarray:
     """Biphasic (1st derivative of Gaussian) action-potential shape.
 
@@ -124,14 +136,15 @@ def biphasic_waveform(
     of the underlying Gaussian.
     """
     t = np.asarray(t_ms, dtype=np.float64)
-    g = np.exp(-(t ** 2) / (2.0 * ap_width_ms ** 2))
+    g = np.exp(-(t**2) / (2.0 * ap_width_ms**2))
     out = -t / ap_width_ms * g
     out /= max(np.abs(out).max(), 1e-30)
     return out
 
 
 def longitudinal_leadfield(
-    L: np.ndarray, source_pos_mm: np.ndarray,
+    L: np.ndarray,
+    source_pos_mm: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Project a per-moment leadfield to the polyline-tangent direction.
 
@@ -147,9 +160,7 @@ def longitudinal_leadfield(
     C, three_S = L.shape
     S = three_S // 3
     if 3 * S != three_S or len(source_pos_mm) != S:
-        raise ValueError(
-            f"L second dim {three_S} not 3 * len(source_pos) ({len(source_pos_mm)})"
-        )
+        raise ValueError(f"L second dim {three_S} not 3 * len(source_pos) ({len(source_pos_mm)})")
     L3 = L.reshape(C, S, 3)
 
     diff = np.diff(source_pos_mm, axis=0)
@@ -189,7 +200,7 @@ def cap_signal(
     n = round(duration_ms * fs_hz / 1000.0)
     t_ms = np.arange(n) / fs_hz * 1000.0
     signal = np.zeros((L_long.shape[0], n), dtype=np.float64)
-    centre_ms = duration_ms * 0.4   # peak AP arrival in centre of window
+    centre_ms = duration_ms * 0.4  # peak AP arrival in centre of window
     for d, w in zip(fibres.diameters_um, fibres.weights, strict=True):
         v = float(conduction_velocity_m_per_s(np.array([d]), **(cv_kwargs or {}))[0])
         for s, x_m in enumerate(arc_m):

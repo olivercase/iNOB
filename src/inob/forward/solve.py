@@ -5,6 +5,7 @@ transfer matrix, applies it to three orthogonal dipole moments per source,
 and writes ``cfg.outputs.forward_npz`` with a schema validated by
 :mod:`inob.io.npz`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,18 +39,21 @@ def run_forward(cfg: Config) -> Path:
     """
     fem = load_fem(cfg.outputs.fem_mat)
     validate_fem(fem)
-    logger.info("FEM: %d nodes, %d tets, labels=%s",
-                len(fem.nodes), len(fem.tets), list(fem.tissue_labels))
+    logger.info(
+        "FEM: %d nodes, %d tets, labels=%s", len(fem.nodes), len(fem.tets), list(fem.tissue_labels)
+    )
 
     sensors = load_sensors(cfg.outputs.sensors_mat)
     validate_sensors(sensors)
-    logger.info("Sensors: %d channels (%d positions × 3 axes)",
-                len(sensors.coilpos), len(sensors.coilpos) // 3)
+    logger.info(
+        "Sensors: %d channels (%d positions × 3 axes)",
+        len(sensors.coilpos),
+        len(sensors.coilpos) // 3,
+    )
 
     src_pos_mm = resolve_source_positions(cfg, fem)
     n_src = len(src_pos_mm)
-    logger.info("%d sources; Z=[%.0f, %.0f]",
-                n_src, src_pos_mm[:, 2].min(), src_pos_mm[:, 2].max())
+    logger.info("%d sources; Z=[%.0f, %.0f]", n_src, src_pos_mm[:, 2].min(), src_pos_mm[:, 2].max())
 
     dp = import_duneuro(cfg)
     driver, driver_cfg, cond = build_driver(cfg, fem)
@@ -74,9 +78,12 @@ def run_forward(cfg: Config) -> Path:
     logger.info("  L: %s (%.0f s)", L.shape, time.time() - t0)
 
     L_fT_per_nAm = L * 1e6
-    logger.info("fT/nAm: min=%.3e max=%.3e rms=%.3e",
-                L_fT_per_nAm.min(), L_fT_per_nAm.max(),
-                np.sqrt(np.mean(L_fT_per_nAm ** 2)))
+    logger.info(
+        "fT/nAm: min=%.3e max=%.3e rms=%.3e",
+        L_fT_per_nAm.min(),
+        L_fT_per_nAm.max(),
+        np.sqrt(np.mean(L_fT_per_nAm**2)),
+    )
 
     lf = Leadfield(
         L=L,

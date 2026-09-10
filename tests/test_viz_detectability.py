@@ -1,4 +1,5 @@
 """Tests for inob.viz.detectability: pure math + render/summary smoke tests."""
+
 from __future__ import annotations
 
 import math
@@ -99,11 +100,21 @@ def test_detectability_summary_structure(tmp_path: Path) -> None:
     cfg = build_pipeline_cfg(tmp_path)
     summary = detectability_summary(cfg)
     assert set(summary) == {
-        "source_idx", "source_z_mm", "noise_meg_fT", "noise_eeg_uV",
-        "bandwidth_hz", "band_label", "clinical_average_budget",
-        "propagation_factor_meg", "propagation_factor_eeg", "scenarios",
-        "opm_sensor", "opm_bandwidth_hz", "opm_noise_bandwidth_hz",
-        "opm_sensor_gain", "cap_signal_hz",
+        "source_idx",
+        "source_z_mm",
+        "noise_meg_fT",
+        "noise_eeg_uV",
+        "bandwidth_hz",
+        "band_label",
+        "clinical_average_budget",
+        "propagation_factor_meg",
+        "propagation_factor_eeg",
+        "scenarios",
+        "opm_sensor",
+        "opm_bandwidth_hz",
+        "opm_noise_bandwidth_hz",
+        "opm_sensor_gain",
+        "cap_signal_hz",
     }
     # The sensor's own bandwidth is part of the recorded answer, not a config
     # detail: a summary that quotes a noise floor without it invites exactly
@@ -116,9 +127,13 @@ def test_detectability_summary_structure(tmp_path: Path) -> None:
     assert len(summary["scenarios"]) == 4
     for row in summary["scenarios"].values():
         assert set(row) == {
-            "Q_nAm", "MEG_per_trial_fT", "EEG_per_trial_uV",
-            "MEG_single_trial_SNR", "EEG_single_trial_SNR",
-            "MEG_trials_for_SNR3", "EEG_trials_for_SNR3",
+            "Q_nAm",
+            "MEG_per_trial_fT",
+            "EEG_per_trial_uV",
+            "MEG_single_trial_SNR",
+            "EEG_single_trial_SNR",
+            "MEG_trials_for_SNR3",
+            "EEG_trials_for_SNR3",
         }
         assert row["MEG_trials_for_SNR3"] > 0
 
@@ -133,8 +148,9 @@ def test_clinical_average_budget_only_for_evoked_targets(tmp_path: Path) -> None
     fwd_dir = cfg.outputs.forward_npz.parent
 
     def retarget(tag: str):
-        return replace(cfg, outputs=replace(
-            cfg.outputs, forward_npz=fwd_dir / f"duneuro_leadfield_{tag}.npz"))
+        return replace(
+            cfg, outputs=replace(cfg.outputs, forward_npz=fwd_dir / f"duneuro_leadfield_{tag}.npz")
+        )
 
     assert clinical_average_budget(retarget("spine")) == (500, 2000)
     assert clinical_average_budget(retarget("spine_muscle")) == (500, 2000)
@@ -159,14 +175,13 @@ def test_propagation_correction_skipped_where_lumping_is_valid(tmp_path: Path) -
     fwd_dir = cfg.outputs.forward_npz.parent
 
     def retarget(tag: str):
-        return replace(cfg, outputs=replace(
-            cfg.outputs, forward_npz=fwd_dir / f"duneuro_leadfield_{tag}.npz"))
+        return replace(
+            cfg, outputs=replace(cfg.outputs, forward_npz=fwd_dir / f"duneuro_leadfield_{tag}.npz")
+        )
 
-    assert propagation_correction(
-        retarget("vagus"), meg_lf, eeg_lf, source_idx=0) is None
+    assert propagation_correction(retarget("vagus"), meg_lf, eeg_lf, source_idx=0) is None
 
-    spine = propagation_correction(
-        retarget("spine"), meg_lf, eeg_lf, source_idx=0)
+    spine = propagation_correction(retarget("spine"), meg_lf, eeg_lf, source_idx=0)
     assert spine is not None
     assert spine.profile_name == "spine"
     # Both modalities measured, both a genuine attenuation.

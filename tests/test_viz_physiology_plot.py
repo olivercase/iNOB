@@ -1,4 +1,5 @@
 """Tests for inob.viz.physiology_plot: unit-conversion helper + render smoke."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,12 +35,14 @@ def test_to_human_units_unknown_modality_raises() -> None:
 def _tiny_scenario(duration_s: float = 0.2, n_events: int = 2) -> Scenario:
     fibres = a_fibre_population(n_bins=4)
     events = [
-        CapEvent(t_start_s=0.02 + 0.05 * k, n_fibres=10, fibres=fibres)
-        for k in range(n_events)
+        CapEvent(t_start_s=0.02 + 0.05 * k, n_fibres=10, fibres=fibres) for k in range(n_events)
     ]
     return Scenario(
-        name="tiny", description="unit-test scenario", duration_s=duration_s,
-        events=events, rate_hz=5.0,
+        name="tiny",
+        description="unit-test scenario",
+        duration_s=duration_s,
+        events=events,
+        rate_hz=5.0,
         physiology_trace_label="trace (a.u.)",
         physiology_trace=np.zeros(50),
     )
@@ -48,7 +51,10 @@ def _tiny_scenario(duration_s: float = 0.2, n_events: int = 2) -> Scenario:
 def test_render_physiology_smoke(tmp_path: Path) -> None:
     cfg = build_pipeline_cfg(tmp_path)
     out = render_physiology(
-        cfg, scenarios=(_tiny_scenario(),), fs_hz=2000.0, out_path=tmp_path / "phys.png",
+        cfg,
+        scenarios=(_tiny_scenario(),),
+        fs_hz=2000.0,
+        out_path=tmp_path / "phys.png",
     )
     assert out.exists()
     assert out.stat().st_size > 0

@@ -4,6 +4,7 @@ The parallel path itself spawns processes and needs duneuropy, so it is covered
 by the real-DUNEuro tests / manual runs; here we test the dispatch logic that
 decides serial-vs-parallel and how many workers to use.
 """
+
 from __future__ import annotations
 
 import os
@@ -43,6 +44,7 @@ def test_run_forward_local_serial_when_one_worker(monkeypatch, tmp_path) -> None
     def _fake_serial(cfg):
         called["serial"] = True
         return "npz"
+
     monkeypatch.setattr(solve_mod, "run_forward", _fake_serial)
 
     cfg = SimpleNamespace(
@@ -57,16 +59,16 @@ def test_run_forward_local_serial_when_one_worker(monkeypatch, tmp_path) -> None
 def test_run_forward_local_serial_when_more_workers_than_channels(monkeypatch, tmp_path) -> None:
     """A single-channel array can't be split, so it falls back to serial."""
     called = {}
-    monkeypatch.setattr(local_mod, "load_sensors",
-                        lambda p: SimpleNamespace(coilpos=[0]))
+    monkeypatch.setattr(local_mod, "load_sensors", lambda p: SimpleNamespace(coilpos=[0]))
     import inob.forward.solve as solve_mod
 
     def _fake_serial(cfg):
         called["serial"] = True
         return "npz"
+
     monkeypatch.setattr(solve_mod, "run_forward", _fake_serial)
     cfg = SimpleNamespace(
-        forward=SimpleNamespace(local_workers=0),   # all cores, but 1 channel
+        forward=SimpleNamespace(local_workers=0),  # all cores, but 1 channel
         outputs=SimpleNamespace(sensors_mat=tmp_path / "s.mat"),
     )
     assert local_mod.run_forward_local(cfg) == "npz"

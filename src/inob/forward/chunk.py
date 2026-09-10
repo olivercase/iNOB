@@ -45,6 +45,7 @@ single leadfield NPZ identical in schema to the local
 #   - Wrap in a new CLI entry point ``inob-forward-source`` alongside the
 #     existing ``inob-forward``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -100,8 +101,9 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
     chunk_idx = np.array_split(np.arange(n_chan_total), n_chunks)[chunk_id]
     coilpos = sensors.coilpos[chunk_idx]
     coilori = sensors.coilori[chunk_idx]
-    logger.info("chunk %d channels (global %d..%d)",
-                len(chunk_idx), int(chunk_idx[0]), int(chunk_idx[-1]))
+    logger.info(
+        "chunk %d channels (global %d..%d)", len(chunk_idx), int(chunk_idx[0]), int(chunk_idx[-1])
+    )
 
     dp = import_duneuro(cfg)
     # limit_threads: this worker is one of `n_chunks` processes, so it must not
@@ -130,8 +132,13 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
     out_idx = chunks_dir / f"coil_idx_{chunk_id:03d}.npy"
     np.save(out_L, L.astype(np.float64))
     np.save(out_idx, chunk_idx.astype(np.int64))
-    logger.info("[chunk %d] saved %s (%.1f MB) total %.0fs",
-                chunk_id, out_L.name, out_L.stat().st_size / 1e6, time.time() - t0)
+    logger.info(
+        "[chunk %d] saved %s (%.1f MB) total %.0fs",
+        chunk_id,
+        out_L.name,
+        out_L.stat().st_size / 1e6,
+        time.time() - t0,
+    )
     return out_L, out_idx
 
 
@@ -144,8 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=run_chunk.__doc__)
     add_common_args(p)
     p.add_argument("--chunk-id", type=int, required=True)
-    p.add_argument("--n-chunks", type=int, default=None,
-                   help="Defaults to cluster.n_chunks from the config.")
+    p.add_argument(
+        "--n-chunks", type=int, default=None, help="Defaults to cluster.n_chunks from the config."
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix=f"chunk_{args.chunk_id:03d}")
     n_chunks = args.n_chunks if args.n_chunks is not None else cfg.cluster.n_chunks
@@ -155,4 +163,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

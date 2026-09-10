@@ -3,6 +3,7 @@
 Produces an output identical in schema to the local
 :mod:`inob.forward.solve` (``source_pos`` included).
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,16 +45,12 @@ def reduce_chunks(cfg: Config) -> Path:
         Lc = np.load(L_path)
         idx = np.load(idx_path)
         if Lc.shape != (len(idx), n_cols):
-            raise ValueError(
-                f"chunk {cid}: shape {Lc.shape} != expected {(len(idx), n_cols)}"
-            )
+            raise ValueError(f"chunk {cid}: shape {Lc.shape} != expected {(len(idx), n_cols)}")
         L[idx] = Lc
 
     if np.isnan(L).any():
         missing = np.where(np.isnan(L).any(axis=1))[0]
-        raise RuntimeError(
-            f"missing rows: {len(missing)} channels (e.g. {missing[:5].tolist()})"
-        )
+        raise RuntimeError(f"missing rows: {len(missing)} channels (e.g. {missing[:5].tolist()})")
 
     # Must resolve sources exactly as the chunk workers did, or the stitched
     # leadfield's columns get labelled with the wrong positions. Both sides use
@@ -63,7 +60,8 @@ def reduce_chunks(cfg: Config) -> Path:
         raise RuntimeError(
             f"source count mismatch: 3 * {len(src_pos)} != {n_cols} (chunks contain "
             f"a different source set than the FEM/cfg implies). Re-run chunks "
-            f"with the same config.")
+            f"with the same config."
+        )
 
     cond = build_conductivity_vector(cfg, fem)
 
@@ -85,8 +83,7 @@ def reduce_chunks(cfg: Config) -> Path:
     )
     out = cfg.outputs.forward_npz
     save_leadfield(out, lf)
-    logger.info("[reduce] saved %s (%.1f MB); L shape %s",
-                out, out.stat().st_size / 1e6, L.shape)
+    logger.info("[reduce] saved %s (%.1f MB); L shape %s", out, out.stat().st_size / 1e6, L.shape)
     return out
 
 
@@ -106,4 +103,5 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())
