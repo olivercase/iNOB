@@ -4,14 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inob"
-description = "Forward modelling pipeline for vagus nerve OPM-MEG (geometry → FEM → sensors → DUNEuro leadfield)"
+description = "Whole-body FEM forward modelling and sensor planning for OPM-MEG / EEG of peripheral and autonomic nerves"
 readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["version"]
 authors = [{ name = "Oliver Case", email = "oliver@fizzymilk.com" }]
 license = { text = "MIT" }
+keywords = ["MEG", "OPM", "EEG", "forward model", "FEM", "vagus nerve", "spinal cord", "DUNEuro"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: MIT License",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -35,6 +37,12 @@ dependencies = [
     "pyyaml>=6.0",
     "rtree>=1.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/olivercase/iNOB"
+Repository = "https://github.com/olivercase/iNOB"
+Issues = "https://github.com/olivercase/iNOB/issues"
+Changelog = "https://github.com/olivercase/iNOB/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

@@ -57,3 +57,6 @@ internal_meshes/
 
 # Research-poster working folder (figures + analysis; not version-controlled)
 poster_vagus_opmeg/
+
+# Manuscript drafts live outside version control
+docs/*.docx

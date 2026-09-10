@@ -1,4 +1,7 @@
-# Quickstart — the config `inob quickstart` runs on a fresh clone.
+# Quickstart — the config to run first on a fresh clone:
+#
+#     inob run --config configs/quickstart.yaml --stages geom,fem,sensors
+#     inob run --config configs/quickstart.yaml            # + DUNEuro solve
 #
 # The job of this file is to prove, in minutes rather than hours, that this
 # machine can actually run iNOB: real anatomy, the real geometry/FEM/sensor

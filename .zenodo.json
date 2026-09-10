@@ -1,0 +1,17 @@
+{
+  "title": "iNOB — imaging neuroscience outside the brain: whole-body forward modelling and sensor planning for non-invasive recording of peripheral and autonomic nerves",
+  "upload_type": "software",
+  "creators": [
+    {"name": "Case, Oliver", "affiliation": "University College London"}
+  ],
+  "description": "A whole-body forward-modelling and sensor-planning package for non-invasive OPM-MEG and surface-EEG recording of peripheral and autonomic nerves. Atlas meshes to a multi-tissue tetrahedral FEM to calibrated MEG and EEG leadfields via DUNEuro, with noise, SNR, trials-to-detect and sensor-placement analyses, a CLI and a browser GUI.",
+  "license": "MIT",
+  "access_right": "open",
+  "keywords": ["magnetoencephalography", "OPM", "EEG", "vagus nerve", "spinal cord", "finite-element method", "forward modelling", "sensor planning"],
+  "related_identifiers": [
+    {"identifier": "https://github.com/olivercase/iNOB", "relation": "isSupplementTo", "scheme": "url"},
+    {"identifier": "10.17605/OSF.IO/U4MDS", "relation": "isPartOf", "scheme": "doi"},
+    {"identifier": "10.1093/nar/gkn613", "relation": "isDerivedFrom", "scheme": "doi", "resource_type": "dataset"}
+  ],
+  "notes": "Anatomical meshes under data/ are BodyParts3D derivatives, CC BY-SA 2.1 JP (see LICENSE-DATA); the MIT licence covers the code only."
+}
