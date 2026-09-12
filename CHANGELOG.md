@@ -26,6 +26,21 @@ versioning. Dates in ISO-8601.
   `electrodes.contact_pitch_mm`, which describes only the paddle.
 
 ### Added
+- **A labelled exploded view of the anatomy the model has to represent**
+  (`scripts/exploded_anatomy.py` → `outputs/anatomy/exploded_anatomy.png`):
+  brain, vertebral column, spinal cord, vagus nerve, gastrointestinal tract,
+  great vessels and lower-limb muscle, each drawn in place inside a
+  translucent body and again pulled out to its own column with a leader line
+  back. Columns are packed from the meshes' own widths and labels are lifted
+  apart where they collide, so the layout holds if the cast list changes.
+- **Selective BodyParts3D fetch** (`scripts/fetch_bodyparts3d_subset.py`).
+  The existing downloader takes the whole 3,210-mesh 4.3 object set; this one
+  takes the same manifest and endpoint and asks only for named groups — 201
+  meshes and ~100 MB for the figure above. `--list` prints exactly which
+  concepts a group's patterns select before anything is downloaded, and the
+  written `MANIFEST.csv` records what actually arrived rather than what was
+  requested. Same provenance as the rest: BodyParts3D/Anatomography 4.3,
+  CC BY-SA 2.1 JP.
 - **Engineering hygiene, measured against a sibling project.** Pre-commit
   hooks (`.pre-commit-config.yaml`, `make hooks`): whitespace, YAML/TOML/JSON,
   large files, private keys, ruff, gitleaks, and a guard against new
