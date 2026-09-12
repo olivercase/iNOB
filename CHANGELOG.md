@@ -28,15 +28,20 @@ versioning. Dates in ISO-8601.
 ### Added
 - **A labelled exploded view of the anatomy the model has to represent**
   (`scripts/exploded_anatomy.py` → `outputs/anatomy/exploded_anatomy.png`):
-  brain, vertebral column, spinal cord, vagus nerve, gastrointestinal tract,
-  great vessels and lower-limb muscle, each drawn in place inside a
-  translucent body and again pulled out to its own column with a leader line
-  back. Columns are packed from the meshes' own widths and labels are lifted
-  apart where they collide, so the layout holds if the cast list changes.
+  brain, vertebral column, spinal cord, vagus nerve, heart, lungs,
+  gastrointestinal tract, great vessels and lower-limb muscle, each drawn in
+  place inside a translucent body and again pulled out to its own column with
+  a leader line back. Nothing is hand-placed: systems are packed into columns
+  by height (two may share one only if they do not overlap vertically),
+  columns are dealt outward narrowest-first to whichever side has room, and
+  labels that would collide are lifted apart — so adding a system re-flows
+  the figure instead of breaking it. Three-point lighting and per-tissue
+  gloss, because one specular setting for all nine makes them look moulded
+  from the same plastic.
 - **Selective BodyParts3D fetch** (`scripts/fetch_bodyparts3d_subset.py`).
   The existing downloader takes the whole 3,210-mesh 4.3 object set; this one
-  takes the same manifest and endpoint and asks only for named groups — 201
-  meshes and ~100 MB for the figure above. `--list` prints exactly which
+  takes the same manifest and endpoint and asks only for named groups — 222
+  meshes and ~110 MB for the figure above. `--list` prints exactly which
   concepts a group's patterns select before anything is downloaded, and the
   written `MANIFEST.csv` records what actually arrived rather than what was
   requested. Same provenance as the rest: BodyParts3D/Anatomography 4.3,

@@ -72,6 +72,14 @@ GROUPS: dict[str, list[str]] = {
         r"^sigmoid colon$",
         r"^rectum$",
     ],
+    # 4.3 has no single "heart" mesh: the organ is supplied as its chamber
+    # walls, which together give the outer form.
+    "heart": [
+        r"^wall of ventricle$",
+        r"^wall of (left|right) atrium$",
+    ],
+    # Nor a single lung — the parenchyma comes per bronchopulmonary segment.
+    "lungs": [r"^parenchyma of .*bronchopulmonary segment$"],
     "blood_vessel": [
         r"^(ascending aorta|arch of aorta|descending aorta)$",
         r"^(superior|inferior) vena cava$",
