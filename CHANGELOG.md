@@ -6,6 +6,25 @@ versioning. Dates in ISO-8601.
 
 ## [Unreleased]
 
+### Changed
+- **`inob torso` is two panels, not four.** The unrolled θ–z map and the
+  patch-frame ESG topography are gone; what is left is MEG and ESG on the
+  body, side by side. Both are painted on the same mesh, in the same camera,
+  under the same orthographic projection, the same scale bar and the same
+  symmetric colour rule, so the quarter-turn between the magnetic and
+  electric pattern of one dipole reads straight off the figure. The two
+  colour bars stay separate — the units differ by four orders of magnitude —
+  but the rule that sets them is shared.
+- **The ESG panel can be painted from a whole-torso electrode array.**
+  `inob torso --esg-npz LF.npz` takes an electrode leadfield other than the
+  target's HD patch, which is what makes panel b cover the body panel a
+  covers; solve one with `inob electrodes --set electrodes.shape=whole_body`
+  followed by `inob eeg`. The default source is still chosen from the
+  configured patch, so pointing this elsewhere changes what is drawn, not
+  which source the figure is about. The interpolation kernel and the
+  "measured" mask now come from the array's own contact spacing rather than
+  `electrodes.contact_pitch_mm`, which describes only the paddle.
+
 ### Added
 - **Engineering hygiene, measured against a sibling project.** Pre-commit
   hooks (`.pre-commit-config.yaml`, `make hooks`): whitespace, YAML/TOML/JSON,
@@ -23,6 +42,10 @@ versioning. Dates in ISO-8601.
   `.git-blame-ignore-revs` so `git blame` looks through it.
 
 ### Fixed
+- **The torso scale bar could be drawn off the panel.** It is laid along the
+  screen-horizontal axis, which reverses as the camera swings past ±90°, but
+  it always started from the same corner — so on the spine views the bar and
+  its label ran out of the frame and were clipped.
 - **The physics validation could not fetch its sources.** Since 2026-08-24
   `gitlab.dune-project.org` has answered GitHub's runners with 403, so every
   scheduled `duneuro-validation` run failed before compiling anything and the

@@ -74,14 +74,6 @@ def test_crop_to_band_reindexes_faces_consistently() -> None:
     np.testing.assert_allclose(v[f][0, :, 2], [0.0, 5.0, 10.0])
 
 
-def test_crop_near_keeps_a_cap_not_a_ring() -> None:
-    verts = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [200.0, 0.0, 0.0]])
-    faces = np.array([[0, 1, 2], [1, 2, 3]], dtype=np.int64)
-    v, f = tt._crop_near(verts, faces, np.zeros(3), 10.0)
-    assert len(v) == 3
-    np.testing.assert_array_equal(f, [[0, 1, 2]])
-
-
 def test_shading_darkens_without_changing_hue() -> None:
     verts = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     faces = np.array([[0, 1, 2]], dtype=np.int64)
@@ -102,3 +94,119 @@ def test_source_behind_the_body_is_not_marked() -> None:
     assert tt._source_is_visible(back, axis, -90.0) is False
     # And the reverse from the other side.
     assert tt._source_is_visible(back, axis, 90.0) is True
+
+
+def _unit_body() -> tuple[np.ndarray, np.ndarray]:
+    """A four-vertex scrap of "skin" spanning 100 mm, enough to frame."""
+    verts = np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0], [0.0, 100.0, 0.0], [0.0, 0.0, 100.0]])
+    faces = np.array([[0, 1, 2], [0, 1, 3], [0, 2, 3]], dtype=np.int64)
+    return verts, faces
+
+
+def _panel(ax: object, sensor_val: np.ndarray, **kw: object) -> float:
+    verts, faces = _unit_body()
+    sensors = np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]])
+    return tt._body_panel(
+        ax,
+        verts,
+        faces,
+        sensors,
+        sensor_val,
+        np.array([10.0, 10.0, 10.0]),
+        sigma_mm=30.0,
+        k_nearest=2,
+        max_extrap_mm=1e9,
+        elev=10.0,
+        azim=-35.0,
+        axis_xy=np.zeros(2),
+        cmap=tt.divergent_cmap(),
+        rng=np.random.default_rng(0),
+        title="",
+        **kw,
+    )
+
+
+def test_both_panels_get_the_same_camera() -> None:
+    """The figure's whole claim is that only the physics differs between a and b."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    axa = fig.add_subplot(1, 2, 1, projection="3d")
+    axb = fig.add_subplot(1, 2, 2, projection="3d")
+    # Fields four orders of magnitude apart, as MEG and ESG actually are here.
+    _panel(axa, np.array([1.0, -1.0]))
+    _panel(axb, np.array([1e-4, -1e-4]))
+    assert axa.get_xlim() == axb.get_xlim()
+    assert axa.get_ylim() == axb.get_ylim()
+    assert axa.get_zlim() == axb.get_zlim()
+    assert (axa.elev, axa.azim) == (axb.elev, axb.azim)
+    plt.close(fig)
+
+
+def test_the_colour_limit_ignores_skin_the_array_never_reached() -> None:
+    """Otherwise one distant, strong sensor sets the scale for the skin in frame."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    verts = np.array([[0.0, 0.0, 0.0], [0.0, 10.0, 0.0], [900.0, 0.0, 20.0]])
+    faces = np.array([[0, 1, 2]], dtype=np.int64)
+    # A weak sensor on the two near vertices and a 100x stronger one 1 m away,
+    # whose only vertex is beyond max_extrap_mm and so must not be painted.
+    sensors = np.array([[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0]])
+    vals = np.array([1.0, 100.0])
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    vlim = tt._body_panel(
+        ax,
+        verts,
+        faces,
+        sensors,
+        vals,
+        np.array([0.0, 0.0, 0.0]),
+        sigma_mm=30.0,
+        k_nearest=2,
+        max_extrap_mm=50.0,
+        elev=10.0,
+        azim=0.0,
+        axis_xy=np.zeros(2),
+        cmap=tt.divergent_cmap(),
+        rng=np.random.default_rng(0),
+        title="",
+    )
+    plt.close(fig)
+    assert vlim == pytest.approx(1.0, abs=0.05), "the unmeasured vertex set the scale"
+
+
+def test_array_pitch_is_the_arrays_own_spacing_not_a_config_number() -> None:
+    """Panel b may be fed a 5 mm paddle or a ~40 mm whole-torso array."""
+    grid = np.array([[x, y, 0.0] for x in range(0, 100, 20) for y in range(0, 100, 20)])
+    assert tt._array_pitch_mm(grid) == pytest.approx(20.0)
+    assert tt._array_pitch_mm(grid * 0.25) == pytest.approx(5.0)
+    # One contact carries no spacing; it must not divide by zero downstream.
+    assert tt._array_pitch_mm(np.zeros((1, 3))) > 0.0
+
+
+def test_the_scale_bar_stays_inside_the_panel_at_every_azimuth() -> None:
+    """It is drawn along the screen axis, which reverses as the camera swings."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    for azim in (-135.0, -45.0, 45.0, 135.0):
+        fig = plt.figure()
+        ax = fig.add_subplot(projection="3d")
+        ax.set_xlim(0, 400)
+        ax.set_ylim(0, 400)
+        ax.set_zlim(0, 400)
+        tt._scale_bar(ax, azim, mm=50.0)
+        (xs, ys, _) = ax.lines[-1].get_data_3d()
+        assert 0.0 <= min(xs) and max(xs) <= 400.0, f"bar left the panel in x at {azim}"
+        assert 0.0 <= min(ys) and max(ys) <= 400.0, f"bar left the panel in y at {azim}"
+        plt.close(fig)

@@ -1,29 +1,36 @@
-"""Four-panel field map painted on the body surface itself.
+"""Two-panel field map painted on the body surface itself.
 
-One figure per source target, laid out as modality by column so the two are
-read against each other rather than in sequence:
+One figure per source target, the two modalities side by side:
 
-    a  MEG  — the magnetic field on the skin of the whole upper body
-    b  ESG  — the electric potential on the skin, where the patch sits
-    c  MEG  — the same field with the skin unrolled to a flat θ–z map
-    d  ESG  — the patch's own topography, in the patch's own frame
+    a  MEG  — the magnetic field on the skin
+    b  ESG  — the electric potential on the skin
 
-Left column magnetic, right column electric; top row on the body, bottom row
-flattened. The coverage difference between the two modalities is the point of
-the layout: a asks the whole torso, b can only ask a postage stamp of it.
+Same mesh, same crop, same camera, same orthographic projection, same scale
+bar, same colour rule. The only thing that differs between the panels is the
+physics, which is the whole point of the layout: the magnetic and electric
+patterns of one current dipole are rotated roughly a quarter turn from each
+other, and that is only legible if neither panel has been re-aimed or
+re-scaled to flatter itself. The coverage difference falls out of the same
+choice — a asks the whole torso, b can only ask the postage stamp of skin the
+patch sits on, and at a shared scale you see how small that stamp is.
 
-The colour is a signed field with a neutral midpoint (blue negative, white
-zero, red positive), so the two lobes of a dipolar pattern read immediately.
-Two rules keep it honest:
+Three rules keep it honest:
 
   * **Nothing is painted where nothing was measured.** A vertex further than
     ``max_extrap_mm`` from the nearest sensor is drawn in neutral skin, not in
     an interpolated colour. Otherwise a Gaussian interpolation happily paints a
     confident-looking field across the whole torso from a neck array.
-  * **The scale is symmetric and shared** between the front and back views, so
-    the two panels can be compared. It is clipped to a high percentile rather
-    than the raw maximum, because one sensor sitting a millimetre from the
-    source otherwise sets the scale for the entire body.
+  * **The colour scale is symmetric about zero** and clipped to a high
+    percentile of the skin that was actually measured, rather than the raw
+    maximum, because one sensor sitting a millimetre from the source otherwise
+    sets the scale for the entire body.
+  * **The same rule sets both scales.** The two colour bars carry different
+    units and differ by four orders of magnitude, so they cannot be shared;
+    what is shared is the rule that produces them, so neither pattern is
+    flattened or saturated relative to the other.
+
+The colour is a signed field with a neutral midpoint (blue negative, white
+zero, red positive), so the two lobes of a dipolar pattern read immediately.
 
 Surfaces are Lambert-shaded so the torso reads as a body rather than a
 silhouette; the shading multiplies the colour rather than replacing it, so it
@@ -43,7 +50,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import cKDTree
 
 from inob.config import Config, source_region_label, target_output
-from inob.io.hdf5 import load_geometry, load_sensors
+from inob.io.hdf5 import load_geometry
 from inob.io.npz import load_leadfield
 from inob.viz.detectability import default_source_idx
 from inob.viz.style import (
@@ -123,25 +130,6 @@ def _interpolate_to_surface(
     # finite.
     safe = np.where(wsum > 1e-12, wsum, 1.0)
     return (w * sensor_val[idx]).sum(axis=1) / safe, dist[:, 0]
-
-
-def _crop_near(
-    verts: np.ndarray,
-    faces: np.ndarray,
-    centre: np.ndarray,
-    radius_mm: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Keep the cap of a mesh within ``radius_mm`` of a point, re-indexing faces.
-
-    A Z-slab alone leaves a full ring of body around a patch that only sits on
-    one side of the neck, which renders as a dome with the interesting part
-    hidden on its far face.
-    """
-    keep = np.linalg.norm(verts - centre, axis=1) <= radius_mm
-    remap = -np.ones(len(verts), dtype=np.int64)
-    remap[keep] = np.arange(int(keep.sum()))
-    face_keep = keep[faces].all(axis=1)
-    return verts[keep], remap[faces[face_keep]]
 
 
 def _crop_to_band(
@@ -254,12 +242,16 @@ def _scale_bar(ax: Any, azim: float, mm: float = 50.0) -> None:
     :func:`_frame_3d` it is exactly ``mm`` long on the page. A bar along the x
     axis instead foreshortens by cos θ, and at the oblique angles these panels
     use that turned a 25 mm bar into a 6 mm tick.
+
+    The anchor corner follows that direction: starting the bar at the same
+    corner regardless of azimuth sends it out of the panel whenever the screen
+    axis runs the other way, and the label is then clipped at the frame edge.
     """
     (x0, x1), (y0, y1), (z0, z1) = ax.get_xlim(), ax.get_ylim(), ax.get_zlim()
     th = np.radians(azim)
     dx, dy = -np.sin(th) * mm, np.cos(th) * mm
-    bx = x0 + 0.10 * (x1 - x0)
-    by = y0 + 0.10 * (y1 - y0)
+    bx = x0 + 0.10 * (x1 - x0) if dx >= 0 else x1 - 0.10 * (x1 - x0)
+    by = y0 + 0.10 * (y1 - y0) if dy >= 0 else y1 - 0.10 * (y1 - y0)
     bz = z0 + 0.06 * (z1 - z0)
     ax.plot(
         [bx, bx + dx],
@@ -316,76 +308,68 @@ def _mark_source(ax: Any, pos: np.ndarray) -> None:
     )
 
 
-# ── the flat map ───────────────────────────────────────────────────────────
+def _array_pitch_mm(pos: np.ndarray) -> float:
+    """Median nearest-neighbour spacing of a sensor array, in mm.
 
-
-def _unroll(pos: np.ndarray, axis_xy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Cylindrical unroll about a vertical axis: (θ°, z)."""
-    d = pos[:, :2] - axis_xy
-    return np.degrees(np.arctan2(d[:, 1], d[:, 0])), pos[:, 2]
-
-
-def _panel_unrolled(
-    ax: Any,
-    sensor_pos: np.ndarray,
-    vals: np.ndarray,
-    src_pos: np.ndarray,
-    *,
-    axis_xy: np.ndarray,
-    vlim: float,
-    cmap: Any,
-    unit: str,
-) -> Any:
-    """The field with the viewpoint taken out of it: θ around the body vs height.
-
-    Gridded rather than scattered — a scatter of 4,740 dots reads as noise,
-    while the same data as a filled contour reads as the dipolar pattern it is.
+    The interpolation kernel and the reach of the "measured" mask both have to
+    be the array's own resolution, and only the array knows it: the ESG panel
+    may be fed a 32-contact paddle at 5 mm pitch or a whole-torso array at
+    ~40 mm, and ``electrodes.contact_pitch_mm`` describes only the first.
     """
-    th, z = _unroll(sensor_pos, axis_xy)
-    ti = np.linspace(-180, 180, 240)
-    zi = np.linspace(z.min(), z.max(), 260)
-    TI, ZI = np.meshgrid(ti, zi)
+    if len(pos) < 2:
+        return 1.0
+    d, _ = cKDTree(pos).query(pos, k=2)
+    # The 90th percentile, not the median: a whole-torso array is sampled from
+    # the skin rather than gridded, so its spacing has a long tail, and a
+    # median-sized mask leaves the sparse patches speckled with unpainted
+    # holes that read as structure in the field.
+    return float(np.percentile(d[:, 1], 90.0))
 
-    # Interpolate on the unrolled plane, wrapping θ so the seam at ±180° is not
-    # a discontinuity in a quantity that is continuous around the body.
-    # Work in millimetres of arc, not degrees: a degree near the neck is ~1 mm
-    # and the kernel has to be the same physical size in both directions or the
-    # map comes out tiled along whichever axis was implicitly compressed.
-    radius_mm = float(np.median(np.linalg.norm(sensor_pos[:, :2] - axis_xy, axis=1)))
-    deg2mm = np.pi * radius_mm / 180.0
-    pts = np.column_stack([np.concatenate([th - 360, th, th + 360]) * deg2mm, np.tile(z, 3)])
-    vv = np.tile(vals, 3)
-    tree = cKDTree(pts)
-    q = np.column_stack([TI.ravel() * deg2mm, ZI.ravel()])
-    dist, idx = tree.query(q, k=min(14, len(pts)))
-    w = np.exp(-0.5 * (dist / 34.0) ** 2)
-    grid = (w * vv[idx]).sum(axis=1) / np.maximum(w.sum(axis=1), 1e-12)
-    grid = grid.reshape(TI.shape)
-    grid[dist.min(axis=1).reshape(TI.shape) > 55.0] = np.nan
 
-    im = ax.contourf(TI, ZI, grid, levels=np.linspace(-vlim, vlim, 25), cmap=cmap, extend="both")
-    im.set_edgecolor("face")  # kill the hairline seams in vector output
-    # No zero contour: through the near-zero majority of the map it traces
-    # interpolation noise and reads as structure that is not there.
+def _body_panel(
+    ax: Any,
+    verts: np.ndarray,
+    faces: np.ndarray,
+    sensor_pos: np.ndarray,
+    sensor_val: np.ndarray,
+    src: np.ndarray,
+    *,
+    sigma_mm: float,
+    k_nearest: int,
+    max_extrap_mm: float,
+    elev: float,
+    azim: float,
+    axis_xy: np.ndarray,
+    cmap: Any,
+    rng: np.random.Generator,
+    title: str,
+) -> float:
+    """Paint one modality on the body band in the shared camera; return its vlim.
 
-    s_th, s_z = _unroll(src_pos[None, :], axis_xy)
-    ax.scatter(
-        s_th,
-        s_z,
-        s=70,
-        marker="*",
-        color=NATURE_PALETTE["glow"],
-        edgecolor=NATURE_PALETTE["axis"],
-        linewidth=0.6,
-        zorder=6,
+    Both panels go through here, so the framing cannot drift between them: the
+    mesh, the view angles, the projection and the scale bar are arguments the
+    caller passes once rather than decisions taken twice. Only the
+    interpolation kernel and the reach of the array differ, because a 5 mm
+    contact pitch and a 25 mm sensor pitch do not see the skin at the same
+    resolution.
+    """
+    vals_v, near_v = _interpolate_to_surface(
+        sensor_pos, sensor_val, verts, sigma_mm=sigma_mm, k_nearest=k_nearest
     )
-    ax.set_xlabel("Angle around the body  (°)")
-    ax.set_ylabel("Height  z (mm)")
-    ax.set_xlim(-180, 180)
-    ax.set_xticks([-180, -90, 0, 90, 180])
-    ax.set_xticklabels(["back", "left", "front", "right", "back"])
-    ax.set_title(f"Field unrolled  ·  {unit}", pad=6)
-    return im
+    # Scale to the skin this panel actually measured. Taking the percentile
+    # over every channel instead sets the range from sensors on the far side of
+    # the torso, and the part in frame comes out uniformly pale.
+    measured = np.abs(vals_v[near_v <= max_extrap_mm])
+    vlim = float(np.percentile(measured, 98.0)) if measured.size else 1.0
+    _draw_surface(
+        ax, verts, faces, vals_v, near_v, vlim=vlim, max_extrap_mm=max_extrap_mm, cmap=cmap, rng=rng
+    )
+    if _source_is_visible(src, axis_xy, azim):
+        _mark_source(ax, src)
+    _frame_3d(ax, verts, elev=elev, azim=azim)
+    _scale_bar(ax, azim, mm=50.0)
+    ax.set_title(title, pad=-2)
+    return vlim
 
 
 # ── figure ─────────────────────────────────────────────────────────────────
@@ -396,21 +380,34 @@ def render_torso_topoplot(
     *,
     source_idx: int = -1,
     moment: str = "z",
+    eeg_npz: Path | None = None,
     out_path: Path | None = None,
     dpi: int = 300,
 ) -> Path:
-    """Render the four-panel body-surface field map for the configured target."""
+    """Render the two-panel body-surface field map for the configured target."""
     apply_nature_style()
     rng = np.random.default_rng(0)
     cmap = divergent_cmap()
 
     lf = load_leadfield(cfg.outputs.forward_npz)
-    eeg_lf = None
-    if cfg.outputs.forward_eeg_npz.exists():
-        eeg_lf = load_leadfield(cfg.outputs.forward_eeg_npz)
+    # The default source is still the one the target's own HD patch was sited
+    # over, whatever panel b is painted from: `--esg-npz` changes which
+    # electrodes are drawn, not which source the figure is about.
+    patch_lf = (
+        load_leadfield(cfg.outputs.forward_eeg_npz)
+        if cfg.outputs.forward_eeg_npz.exists()
+        else None
+    )
     if source_idx < 0:
-        source_idx = default_source_idx(lf, eeg_lf)
+        source_idx = default_source_idx(lf, patch_lf)
+    # Panel b wants the electrode array that covers the same body panel a does.
+    # The configured one is the target's HD paddle — right for detectability,
+    # a postage stamp here — so the caller may point at a whole-torso array
+    # instead; `inob eeg` writes one given `electrodes.shape=whole_body`.
+    eeg_path = eeg_npz or cfg.outputs.forward_eeg_npz
+    eeg_lf = load_leadfield(eeg_path) if eeg_path != cfg.outputs.forward_eeg_npz else patch_lf
 
+    k = {"x": 0, "y": 1, "z": 2}[moment]
     src = np.asarray(lf.source_pos, dtype=float)[source_idx]
     vals, sensors = _signed_radial_field(lf, source_idx, moment)
 
@@ -423,154 +420,98 @@ def render_torso_topoplot(
     half = 190.0
     sv_b, sf_b = _crop_to_band(sv, sf, src[2] - half, src[2] + half)
     pitch = float(cfg.sensors.resolution_mm)
-    vals_v, near_v = _interpolate_to_surface(
-        sensors, vals, sv_b, sigma_mm=1.1 * pitch, k_nearest=20
-    )
-    # Scale to what the panels actually show. Taking the percentile over all
-    # 4,740 channels instead sets the range from sensors on the far side of the
-    # torso, and the neck — the only part in frame — comes out uniformly pale.
-    measured = np.abs(vals_v[near_v <= 1.6 * pitch])
-    vlim = float(np.percentile(measured, 98.0)) if measured.size else 1.0
+
+    # The one camera both panels use: the source's own side of the body, so the
+    # strong lobe is in frame rather than round the back.
     axis_xy = sv_b[:, :2].mean(axis=0)
+    elev = 10.0
+    azim = float(np.degrees(np.arctan2(src[1] - axis_xy[1], src[0] - axis_xy[0])))
 
-    fig = plt.figure(figsize=(11.4, 8.4))
-    gs = fig.add_gridspec(
-        2,
-        2,
-        width_ratios=[1.0, 1.0],
-        height_ratios=[1.0, 0.92],
-        left=0.03,
-        right=0.97,
-        top=0.90,
-        bottom=0.09,
-        wspace=0.10,
-        hspace=0.20,
-    )
+    fig = plt.figure(figsize=(10.6, 7.2))
+    gs = fig.add_gridspec(1, 2, left=0.045, right=0.955, top=0.90, bottom=0.13, wspace=0.02)
 
-    # a — the whole upper body for context, viewed from the front.
-    # b — a close-up from the side the source is on. The back view that used to
-    #     sit here is nearly blank: this is a neck source, and the far side of
-    #     the torso genuinely sees almost nothing, so the panel spent its space
-    #     proving that rather than showing the pattern.
-    axis_xy_body = sv_b[:, :2].mean(axis=0)
-    src_azim = float(np.degrees(np.arctan2(src[1] - axis_xy_body[1], src[0] - axis_xy_body[0])))
-    # a — MEG on the whole upper body, from the source's own side, so the
-    #     strong lobe is in frame rather than round the back.
+    # a — MEG on the body band.
     axa = fig.add_subplot(gs[0, 0], projection="3d", computed_zorder=False)
-    _draw_surface(
-        axa, sv_b, sf_b, vals_v, near_v, vlim=vlim, max_extrap_mm=1.6 * pitch, cmap=cmap, rng=rng
-    )
-    if _source_is_visible(src, axis_xy_body, src_azim):
-        _mark_source(axa, src)
-    _frame_3d(axa, sv_b, elev=10.0, azim=src_azim)
-    _scale_bar(axa, src_azim, mm=50.0)
-    axa.set_title("MEG  ·  magnetic field on the skin", pad=-2)
-    add_panel_label(axa, "a", x=0.02, y=0.97)
-
-    # c — the same magnetic field, unrolled.
-    axc = fig.add_subplot(gs[1, 0])
-    band = (sensors[:, 2] >= src[2] - half) & (sensors[:, 2] <= src[2] + half)
-    im = _panel_unrolled(
-        axc,
-        sensors[band],
-        vals[band],
+    vlim = _body_panel(
+        axa,
+        sv_b,
+        sf_b,
+        sensors,
+        vals,
         src,
+        sigma_mm=1.1 * pitch,
+        k_nearest=20,
+        max_extrap_mm=1.6 * pitch,
+        elev=elev,
+        azim=azim,
         axis_xy=axis_xy,
-        vlim=vlim,
         cmap=cmap,
-        unit="fT per nA·m",
+        rng=rng,
+        title="MEG  ·  magnetic field on the skin",
     )
-    add_panel_label(axc, "c")
+    add_panel_label(axa, "a", x=0.02, y=0.97)
+    cb = fig.colorbar(
+        plt.cm.ScalarMappable(Normalize(-vlim, vlim), cmap),
+        ax=[axa],
+        orientation="horizontal",
+        fraction=0.04,
+        pad=0.02,
+        shrink=0.62,
+    )
+    cb.set_label("Magnetic field, fT per nA·m", fontsize=7)
+    cb.ax.tick_params(labelsize=6.5)
 
-    # b — the electric potential on the skin the patch sits on.
-    axd = fig.add_subplot(gs[0, 1], projection="3d", computed_zorder=False)
+    # b — ESG on the same band, same camera, same colour rule. Different units,
+    #     so its own bar; everything else about the panel is identical to a.
+    axb = fig.add_subplot(gs[0, 1], projection="3d", computed_zorder=False)
     if eeg_lf is not None:
         # Electrodes are scalar contacts, one channel each — no radial subset.
         e_pos = np.asarray(eeg_lf.coil_pos, dtype=float)
-        e_val = np.asarray(eeg_lf.L_fT_per_nAm, float)[
-            :, 3 * source_idx + {"x": 0, "y": 1, "z": 2}[moment]
-        ]
-        # 32 contacts, no outlier tail to guard against — use the true peak so
-        # the colour bar and the quoted peak in the title are the same number.
-        e_lim = float(np.abs(e_val).max()) or 1.0
-        centre = e_pos.mean(axis=0)
-        radius = float(np.linalg.norm(e_pos - centre, axis=1).max()) + 10.0
-        sv_p, sf_p = _crop_near(sv, sf, centre, radius)
-        e_vals_v, e_near_v = _interpolate_to_surface(
-            e_pos, e_val, sv_p, sigma_mm=1.8 * float(cfg.electrodes.contact_pitch_mm), k_nearest=10
+        e_val = np.asarray(eeg_lf.L_fT_per_nAm, float)[:, 3 * source_idx + k]
+        # The same interpolation rule as panel a, at the electrode array's own
+        # resolution — so what is painted, and what is left neutral, is decided
+        # the same way for both modalities.
+        e_pitch = _array_pitch_mm(e_pos)
+        e_lim = _body_panel(
+            axb,
+            sv_b,
+            sf_b,
+            e_pos,
+            e_val,
+            src,
+            sigma_mm=1.1 * e_pitch,
+            k_nearest=20,
+            max_extrap_mm=1.6 * e_pitch,
+            elev=elev,
+            azim=azim,
+            axis_xy=axis_xy,
+            cmap=cmap,
+            rng=rng,
+            title="ESG  ·  electric potential on the skin",
         )
-        _draw_surface(
-            axd, sv_p, sf_p, e_vals_v, e_near_v, vlim=e_lim, max_extrap_mm=14.0, cmap=cmap, rng=rng
+        cb_e = fig.colorbar(
+            plt.cm.ScalarMappable(Normalize(-e_lim, e_lim), cmap),
+            ax=[axb],
+            orientation="horizontal",
+            fraction=0.04,
+            pad=0.02,
+            shrink=0.62,
         )
-        axd.scatter(
-            e_pos[:, 0],
-            e_pos[:, 1],
-            e_pos[:, 2],
-            s=24,
-            facecolor="none",
-            edgecolor=NATURE_PALETTE["axis"],
-            linewidth=0.6,
-            depthshade=False,
-        )
-        _mark_source(axd, src)
-        # Look along the patch normal — straight at the contacts, from outside
-        # the body — so the panel shows the patch rather than the neck it is on.
-        out_xy = centre[:2] - axis_xy_body
-        azim = float(np.degrees(np.arctan2(out_xy[1], out_xy[0])))
-        # No extra zoom here: the patch panel is already framed to the patch,
-        # and zooming again pushes the contacts off the edge of the panel.
-        _frame_3d(axd, sv_p, elev=6, azim=azim, centre=centre, half_mm=radius * 0.95, zoom=1.0)
-        _scale_bar(axd, azim, mm=25.0)
-        axd.set_title("ESG  ·  electric potential on the skin", pad=-2)
-
+        cb_e.set_label("Electric potential, µV per nA·m", fontsize=7)
+        cb_e.ax.tick_params(labelsize=6.5)
     else:
-        axd.set_axis_off()
-        axd.text2D(
+        axb.set_axis_off()
+        axb.text2D(
             0.5,
             0.5,
             "no electrode leadfield for this target",
-            transform=axd.transAxes,
+            transform=axb.transAxes,
             ha="center",
             va="center",
             fontsize=8,
             color=NATURE_PALETTE["grey"],
         )
-    add_panel_label(axd, "b", x=0.02, y=0.97)
-
-    # d — the patch's own topography, in the patch's own frame. The paddle
-    #     renderer is shared with inob.viz.topoplot so the layout (5x6 body grid
-    #     plus head and foot contacts) is drawn one way everywhere.
-    axdd = fig.add_subplot(gs[1, 1])
-    if eeg_lf is not None:
-        from inob.viz.topoplot import _draw_eeg_2d_topoplot
-
-        electrodes = load_sensors(cfg.outputs.electrodes_mat)
-        # colorbar=False: this figure supplies one horizontal bar per column,
-        # and the helper's own vertical bar would make two for the same data.
-        _draw_eeg_2d_topoplot(axdd, electrodes, e_val, cfg, vmin=-e_lim, vmax=e_lim, colorbar=False)
-        axdd.set_title(
-            f"ESG  ·  {len(e_val)} contacts  ·  peak {np.abs(e_val).max():.2f} µV per nA·m", pad=6
-        )
-    else:
-        axdd.set_axis_off()
-    add_panel_label(axdd, "d", x=-0.16, y=1.10)
-    if eeg_lf is not None:
-        cb_e = fig.colorbar(
-            plt.cm.ScalarMappable(Normalize(-e_lim, e_lim), cmap),
-            ax=[axdd],
-            orientation="horizontal",
-            fraction=0.045,
-            pad=0.16,
-            shrink=0.72,
-        )
-        cb_e.set_label("Electric potential, µV per nA·m", fontsize=7)
-        cb_e.ax.tick_params(labelsize=6.5)
-
-    # One colour bar per column: the two modalities have different units and
-    # differ by four orders of magnitude, so a shared bar would be meaningless.
-    cb = fig.colorbar(im, ax=[axc], orientation="horizontal", fraction=0.045, pad=0.16, shrink=0.72)
-    cb.set_label("Magnetic field, fT per nA·m", fontsize=7)
-    cb.ax.tick_params(labelsize=6.5)
+    add_panel_label(axb, "b", x=0.02, y=0.97)
 
     region = source_region_label(cfg)
     fig.suptitle(
