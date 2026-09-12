@@ -356,9 +356,9 @@ def render(groups: dict[str, pv.PolyData], out: Path, *, height: int) -> Path:
 
     aspect = (x_hi - x_lo) / (z_hi - z_lo)
     pl = pv.Plotter(off_screen=True, window_size=(round(height * aspect), height))
-    # A barely-there vertical gradient: on flat white the pale skin shell has
-    # no edge at all, and the figure reads as objects floating in nothing.
-    pl.set_background("#ffffff", top="#eef1f6")
+    # Flat white: the figure is for print, where a gradient becomes a banded
+    # grey wash. The skin shell is instead given its edge by the rim light.
+    pl.set_background("white")
 
     for group, mesh in groups.items():
         add_system(pl, group, mesh, dx=dx[group], label_z=label_z.get(group, 0.0))
