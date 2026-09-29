@@ -11,6 +11,9 @@ data:
   muscle_dir: data/muscle      # neck muscles around the carotid sheath
   vessel_dir: data/vessel      # carotid-sheath vessels (carotid, jugular)
   spinal_cord_dir: data/spinal_cord
+  heart_dir: data/heart          # myocardial chamber walls
+  brain_dir: data/brain          # cerebral gyri + cerebellum + brainstem
+  lung_dir: data/lung            # inflated parenchyma, flanks the heart
 
 outputs:
   base: outputs
@@ -43,6 +46,11 @@ geometry:
     # shrinkwrap intermittently degenerates (1 seed in 8). 600k is clean on
     # 8/8 seeds and reconstructs 35 cm^3 vs ~31 cm^3 true volume.
     mesh_spinal_cord: {pitch: 0.8, n_samples: 600000, close_iter: 1, decimate_target: 12000, smooth_iter: 4}
+    # Heart and lungs are compact blobs; the brain is 64 separate gyral meshes
+    # that only become one object after the union, so it needs the samples.
+    mesh_heart:       {pitch: 1.5, n_samples: 200000, close_iter: 2, decimate_target: 15000, smooth_iter: 6}
+    mesh_brain:       {pitch: 2.0, n_samples: 400000, close_iter: 2, decimate_target: 25000, smooth_iter: 8}
+    mesh_lung:        {pitch: 2.0, n_samples: 250000, close_iter: 2, decimate_target: 20000, smooth_iter: 6}
   validate:
     require_watertight: true
     require_winding_consistent: true
@@ -55,7 +63,7 @@ fem:
   maxvol: 20.0
   vagus_dilate_voxels: 1
   bone_closing_mm: 30.0
-  tissues: ["vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "muscle", "bone", "skin"]
+  tissues: ["vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "heart", "brain", "lung", "muscle", "bone", "skin"]
   validate:
     min_mesh_quality: 0.05
     require_contiguous_tissue_ids: true
@@ -67,6 +75,9 @@ sensors:
   angular_margin_deg: 90.0
   cylinder_radius_factor: 0.75
   z_crop_low_factor: 0.55     # crop_lo = z_lo + factor * (z_hi - z_lo)
+  # global_up: T1 horizontal, T2 head-foot, about +Z. local_svd is the
+  # pre-v1.2.0 per-sensor null space, kept only for reproducibility.
+  tangent_basis: global_up
 
 forward:
   conductivities_sm:           # SINGLE source of truth — used locally + on cluster
@@ -74,6 +85,11 @@ forward:
     vagus_right:  0.30
     blood_vessel: 0.70         # blood ≈ 0.7 S/m (carotid/jugular lumen)
     spinal_cord:  0.23         # grey/white matter mix (Haueisen et al. 2002)
+    heart:        0.20         # myocardium, isotropic mean (Gabriel et al. 1996)
+    brain:        0.33         # homogeneous brain (Haueisen et al. 2002); no
+                               # grey/white split and no CSF compartment, the
+                               # standard single-shell brain of MEG head models
+    lung:         0.10         # inflated parenchyma (Gabriel et al. 1996)
     muscle:       0.35         # skeletal muscle (isotropic mean)
     bone:         0.0042
     skin:         0.43
@@ -171,6 +187,12 @@ noise:
   # than dry Ag/AgCl (≥ 100 kΩ). Use 10 kΩ as the typical operating value.
   eeg_amplifier_uV_sqrtHz: 0.1
   eeg_electrode_skin_kohm: 10.0
+  # Temperature of that contact resistance for the Johnson term. 310.15 K is
+  # core temperature; skin is nearer 305 K, which lowers the Johnson voltage
+  # by 0.8% and the total electrode floor by 0.014% (the 0.1 µV/√Hz amplifier
+  # dominates the 0.013 µV/√Hz Johnson term). Kept at 310.15 K so published
+  # numbers reproduce.
+  eeg_contact_temperature_K: 310.15
   # Recording passband. Noise integrates over (band_hi - band_lo), so the
   # filter settings are part of the detectability answer. 30-500 Hz is the
   # evoked-potential / CAP band used clinically (Cruccu et al. 2008); the

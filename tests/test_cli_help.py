@@ -167,3 +167,14 @@ def test_readme_files_each_command_under_its_own_group(cmd) -> None:
         f"README files {cmd.name} under {row.split('|')[1].strip()!r}, "
         f"but `inob --help` groups it under {cmd.group!r}"
     )
+
+
+def test_torso_summary_matches_the_two_panel_figure() -> None:
+    """`inob torso` lost its unrolled and patch-frame panels; the list said four.
+
+    A summary that counts panels goes stale the moment the figure changes, so
+    this holds the one line to what the figure is now: MEG beside ESG.
+    """
+    summary = BY_NAME["torso"].summary
+    assert "four" not in summary.lower()
+    assert "MEG" in summary and "ESG" in summary

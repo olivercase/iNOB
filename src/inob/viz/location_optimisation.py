@@ -24,6 +24,7 @@ from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from inob.analysis.snr import compute_noise_floors
+from inob.anatomy import level_suffix
 from inob.config import Config, source_region_label, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
@@ -410,7 +411,8 @@ def render_location_optimisation(
     headline = (
         "Question: is the cervical paddle in the wrong place,\n"
         "or is EEG fundamentally limited by bone shielding?\n\n"
-        f"At highlighted source:  {region} #{source_idx}  z = {src[2]:.0f} mm\n"
+        f"At highlighted source:  {region} #{source_idx}  z = {src[2]:.0f} mm"
+        f"{level_suffix(cfg.data.bone_dir, src[2])}\n"
         f"Q = {Q_ref:g} nA·m, σ_EEG = {sigma:.1f} µV (1 kHz BW)\n"
         + (
             f"Propagating-volley correction: paddle ×{paddle_prop_factor:.2f}, "
@@ -482,7 +484,7 @@ def render_location_optimisation(
 
     fig.suptitle(
         f"Is location the problem?  Whole-body EEG vs cervical paddle  "
-        f"·  highlighted source z = {src[2]:.0f} mm",
+        f"·  highlighted source z = {src[2]:.0f} mm{level_suffix(cfg.data.bone_dir, src[2])}",
         fontsize=12,
         fontweight="bold",
         y=0.985,

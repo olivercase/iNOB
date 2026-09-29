@@ -9,6 +9,8 @@ through the body.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -32,6 +34,7 @@ class _Leadfield:
                 [10.0, 0.0, 0.0],  # axis 3
             ]
         )
+        self.channel_names = [f"mag-{i:04d}-{ax}" for ax in ("R", "T1", "T2") for i in (1, 2)]
 
 
 def test_only_the_radial_third_of_a_triaxial_array_is_used() -> None:
@@ -40,6 +43,14 @@ def test_only_the_radial_third_of_a_triaxial_array_is_used() -> None:
     assert vals.shape == (2,) and pos.shape == (2, 3)
     # Source 1, z moment -> column 3*1 + 2 = 5, rows 0 and 1.
     np.testing.assert_allclose(vals, [5.0, 11.0])
+
+
+def test_a_single_axis_array_maps_every_channel() -> None:
+    lf = _Leadfield()
+    lf.channel_names = [f"mag-{i:04d}-R" for i in range(6)]
+    vals, pos = tt._signed_radial_field(lf, source_idx=1, moment="z")
+    # Not the first third: every channel of a radial-only array is a position.
+    assert vals.shape == (6,) and pos.shape == (6, 3)
 
 
 def test_the_field_keeps_its_sign() -> None:
@@ -210,3 +221,123 @@ def test_the_scale_bar_stays_inside_the_panel_at_every_azimuth() -> None:
         assert 0.0 <= min(xs) and max(xs) <= 400.0, f"bar left the panel in x at {azim}"
         assert 0.0 <= min(ys) and max(ys) <= 400.0, f"bar left the panel in y at {azim}"
         plt.close(fig)
+
+
+def test_mark_sensors_draws_only_the_front_of_the_visible_band() -> None:
+    """The markers exist to show the sampling; off-surface ones mislead.
+
+    A sensor behind the body, or outside the z band the panel crops to, has
+    no visible surface under it and would be drawn against the background —
+    which is how they first came out, trailing round the silhouette.
+    """
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    pos = np.array(
+        [
+            [100.0, 0.0, 500.0],  # facing the camera, inside the band
+            [-100.0, 0.0, 500.0],  # round the back
+            [100.0, 0.0, 5000.0],  # facing, but far above the band
+            [0.0, 100.0, 500.0],  # on the silhouette edge
+        ]
+    )
+    drawn = tt._mark_sensors(ax, pos, np.array([0.0, 0.0]), azim=0.0, z_range=(400.0, 600.0))
+    plt.close(fig)
+    assert drawn == 1
+
+
+def test_mark_sensors_handles_an_array_with_nothing_in_view() -> None:
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    drawn = tt._mark_sensors(
+        ax,
+        np.array([[-100.0, 0.0, 500.0]]),
+        np.array([0.0, 0.0]),
+        azim=0.0,
+        z_range=(0.0, 1e4),
+    )
+    plt.close(fig)
+    assert drawn == 0
+
+
+def test_triad_projects_like_the_camera() -> None:
+    """z is up on the page at any azimuth; x runs right from the front."""
+    front = tt._screen_axes(elev=0.0, azim=-90.0)  # camera at -y: anterior view
+    np.testing.assert_allclose(front["z"], [0.0, 1.0], atol=1e-12)
+    np.testing.assert_allclose(front["x"], [1.0, 0.0], atol=1e-12)
+    # y is the line of sight, so it vanishes and has to be labelled in words.
+    np.testing.assert_allclose(front["y"], [0.0, 0.0], atol=1e-12)
+    back = tt._screen_axes(elev=0.0, azim=90.0)
+    np.testing.assert_allclose(back["x"], [-1.0, 0.0], atol=1e-12)
+
+
+def test_triad_says_which_way_a_foreshortened_axis_points() -> None:
+    # Anterior view: +y (posterior) points away from the reader.
+    assert tt._axis_label("y", 0.0, -90.0) == "y  posterior (into page)"
+    assert tt._axis_label("y", 0.0, 90.0) == "y  posterior (out of page)"
+    # An axis in the picture plane needs no hint.
+    assert tt._axis_label("z", 0.0, 90.0) == "z  superior"
+
+
+def test_dipole_arrow_points_along_the_moment_and_shows_its_head() -> None:
+    pos = np.array([0.0, 0.0, 100.0])
+    for azim in (0.0, 45.0, 90.0, -90.0):
+        shaft, h1, h2 = tt._dipole_arrow(pos, "z", azim)
+        # Centred on the source, pointing +z.
+        np.testing.assert_allclose(shaft.mean(axis=0), pos)
+        assert shaft[1, 2] > shaft[0, 2]
+        # The two head strokes open across the screen, so neither collapses
+        # onto the shaft whatever the viewing azimuth.
+        spread = [(h[0] - h[1])[:2] for h in (h1, h2)]
+        th = np.radians(azim)
+        side = np.array([-np.sin(th), np.cos(th)])
+        assert abs(spread[0] @ side) > 1.0 and abs(spread[1] @ side) > 1.0
+
+
+def test_target_is_drawn_only_on_the_cameras_side_and_band() -> None:
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    pos = np.array(
+        [
+            [10.0, 0.0, 500.0],  # camera side, in band
+            [10.0, 0.0, 550.0],  # camera side, in band
+            [-10.0, 0.0, 500.0],  # behind
+            [10.0, 0.0, 9000.0],  # out of band
+        ]
+    )
+    n = tt._mark_target(ax, pos, np.zeros(2), azim=0.0, z_range=(400.0, 600.0))
+    plt.close(fig)
+    assert n == 2
+
+
+def test_title_carries_the_vertebral_level_when_known() -> None:
+    t = tt.torso_title("spine", 77, 1419.4, "z", " (C4/C5)")
+    assert "source #77, z = 1419 mm (C4/C5), z-oriented" in t
+    # And reads cleanly without one, on a checkout with no bone meshes.
+    assert "z = 1419 mm, z-oriented" in tt.torso_title("spine", 77, 1419.4, "z")
+
+
+def test_target_structure_names_the_tissue(tmp_path) -> None:
+    from dataclasses import replace
+
+    from inob.config import load_config
+
+    cfg = load_config(Path(__file__).resolve().parents[1] / "configs" / "tiny_test.yaml")
+    for stem, want in (
+        ("duneuro_leadfield_spine", "spinal cord"),
+        ("duneuro_leadfield_vagus", "left vagus"),
+        ("duneuro_leadfield_spine_vagus", "spinal cord + left vagus"),
+    ):
+        out = replace(cfg.outputs, forward_npz=tmp_path / f"{stem}.npz")
+        assert tt.target_structure_label(replace(cfg, outputs=out)) == want

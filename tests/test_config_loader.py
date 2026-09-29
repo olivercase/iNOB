@@ -31,10 +31,17 @@ def test_load_default() -> None:
         "vagus_right",
         "blood_vessel",
         "spinal_cord",
+        "heart",
+        "brain",
+        "lung",
         "muscle",
         "bone",
         "skin",
     )
+    assert cfg.forward.conductivities_sm["heart"] == 0.20
+    assert cfg.forward.conductivities_sm["brain"] == 0.33
+    assert cfg.forward.conductivities_sm["lung"] == 0.10
+    assert cfg.data.heart_dir is not None and cfg.data.heart_dir.name == "heart"
 
 
 def test_load_tiny() -> None:

@@ -66,7 +66,9 @@ run $INOB topoplot    --source-target "${TARGET}"
 run $INOB detect      --source-target "${TARGET}"
 run $INOB cap-compare --source-target "${TARGET}"
 run $INOB cross       --source-target "${TARGET}"
-run $INOB physiology  --source-target "${TARGET}"
+# Muscle has no event-train scenarios (a single evoked volley; see
+# inob.physiology.profiles), so the command refuses it by design.
+[[ "${TARGET}" == muscle* ]] || run $INOB physiology  --source-target "${TARGET}"
 run python -m inob.cli.sensor_field --source-target "${TARGET}"
 run python -m inob.cli.sensor_field --source-target "${TARGET}" --aggregate coherent
 run python -m inob.cli.sensor_field --source-target "${TARGET}" --aggregate rms

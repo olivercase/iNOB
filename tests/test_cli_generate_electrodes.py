@@ -21,7 +21,13 @@ def test_main_defaults_pass_none_overrides(tmp_path, monkeypatch) -> None:
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
-    assert calls == {"rows": None, "cols": None, "contact_pitch_mm": None, "target_level": None}
+    assert calls == {
+        "rows": None,
+        "cols": None,
+        "contact_pitch_mm": None,
+        "target_level": None,
+        "from_file": None,
+    }
 
 
 def test_main_overrides_forwarded(tmp_path, monkeypatch) -> None:
@@ -48,7 +54,13 @@ def test_main_overrides_forwarded(tmp_path, monkeypatch) -> None:
         ]
     )
     assert rc == 0
-    assert calls == {"rows": 4, "cols": 8, "contact_pitch_mm": 2.5, "target_level": "c7"}
+    assert calls == {
+        "rows": 4,
+        "cols": 8,
+        "contact_pitch_mm": 2.5,
+        "target_level": "c7",
+        "from_file": None,
+    }
 
 
 def test_main_full_spine_forces_slab(tmp_path, monkeypatch) -> None:
@@ -85,3 +97,17 @@ def test_main_full_spine_and_level_conflict(tmp_path) -> None:
                 "c7",
             ]
         )
+
+
+def test_main_from_file_forwarded(tmp_path, monkeypatch) -> None:
+    calls = {}
+    monkeypatch.setattr(
+        cli_mod,
+        "generate_electrode_array",
+        lambda cfg, **kw: calls.update(kw),
+    )
+    rc = cli_mod.main(
+        ["--config", str(TINY_CFG), "--project-root", str(tmp_path), "--from", "cap.csv"]
+    )
+    assert rc == 0
+    assert calls["from_file"] == "cap.csv"

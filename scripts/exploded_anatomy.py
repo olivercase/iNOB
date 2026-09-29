@@ -91,13 +91,39 @@ STACK_GAP_MM = 60.0
 LABEL_RISE_MM = 80.0
 MARGIN_MM = 80.0
 
-#: Label type size, in points of the render's own font. Width per character is
-#: about 0.55 em for this face, which is what :func:`stack_labels` uses to know
-#: whether two labels overlap.
-LABEL_FONT_SIZE = 32
+#: Label type size as a fraction of the render height, not a pixel count.
+#: VTK sizes text in render pixels, so a fixed value silently shrinks the
+#: type whenever ``--height`` goes up — the labels were set for a 2600 px
+#: render and would have come out half-size at 5200. Expressed this way the
+#: apparent size is whatever ``--height`` you ask for. 0.018 puts the caps
+#: at roughly 8 pt when the figure is placed at a 180 mm column width.
+LABEL_HEIGHT_FRACTION = 0.018
+
+#: Reference height the absolute sizes below were chosen against.
+_REFERENCE_HEIGHT = 2600
+
+#: Leader lines, in render pixels at :data:`_REFERENCE_HEIGHT`. Thin pale
+#: rules vanish in print — these carry the "this came from there" reading and
+#: have to survive being reduced to a column width.
+LEADER_WIDTH_PX = 3.2
+LEADER_COLOUR = (0.42, 0.42, 0.46)
+SCALE_BAR_WIDTH_PX = 9.0
+
 LABEL_FONT = "arial"
+#: Width per character, in em, for this face — :func:`stack_labels` uses it
+#: to know whether two labels overlap.
 _EM_PER_CHAR = 0.55
 _LINE_HEIGHT = 1.7
+
+
+def label_font_px(height: int) -> int:
+    """Label size in render pixels for a render ``height`` pixels tall."""
+    return max(8, round(LABEL_HEIGHT_FRACTION * height))
+
+
+def _px(value: float, height: int) -> float:
+    """Scale a line width chosen at the reference height to this render."""
+    return value * height / _REFERENCE_HEIGHT
 
 
 # ── geometry ───────────────────────────────────────────────────────────────
@@ -136,7 +162,7 @@ def load_groups(base: Path) -> dict[str, pv.PolyData]:
     return groups
 
 
-def pack_columns(groups: dict[str, pv.PolyData]) -> dict[str, float]:
+def pack_columns(groups: dict[str, pv.PolyData], *, label_headroom_mm: float) -> dict[str, float]:
     """Lateral displacement per system, derived from the meshes themselves.
 
     Two things have to be true and neither should be hand-maintained: no two
@@ -147,9 +173,21 @@ def pack_columns(groups: dict[str, pv.PolyData]) -> dict[str, float]:
     then dealt outward from the body silhouette, narrowest first, each to
     whichever side is currently narrower. Adding a system re-flows the figure
     rather than colliding with a neighbour.
+
+    A system's height for this purpose includes the headroom its label needs
+    above it, not just its mesh. Without that, two systems that merely stack
+    (the lower-limb muscle under the spinal cord) share a column and the
+    lower one's caption is drawn across the upper one's mesh — which is what
+    happened as soon as the type was set large enough to read.
     """
     named = [g for g in groups if g != "skin"]
-    z = {g: (float(groups[g].bounds[4]), float(groups[g].bounds[5])) for g in named}
+    z = {
+        g: (
+            float(groups[g].bounds[4]),
+            float(groups[g].bounds[5]) + label_headroom_mm,
+        )
+        for g in named
+    }
     width = {g: float(groups[g].bounds[1] - groups[g].bounds[0]) for g in named}
 
     # Pack by height, tallest first: a system spanning the whole trunk can
@@ -188,6 +226,7 @@ def stack_labels(
     texts: dict[str, str],
     *,
     mm_per_pt: float,
+    font_px: float,
 ) -> dict[str, float]:
     """Raise labels until no two of them overlap. Returns the new heights.
 
@@ -201,14 +240,12 @@ def stack_labels(
     Deterministic: labels are considered left to right and only ever move up,
     so the result does not depend on dict order and cannot oscillate.
     """
-    line = LABEL_FONT_SIZE * _LINE_HEIGHT * mm_per_pt
+    line = font_px * _LINE_HEIGHT * mm_per_pt
     order = sorted(placed, key=lambda g: placed[g][0])
     out = {g: placed[g][1] for g in placed}
     for i, g in enumerate(order):
         for h in order[:i]:
-            half_span = (
-                (len(texts[g]) + len(texts[h])) / 2 * _EM_PER_CHAR * LABEL_FONT_SIZE * mm_per_pt
-            )
+            half_span = (len(texts[g]) + len(texts[h])) / 2 * _EM_PER_CHAR * font_px * mm_per_pt
             if abs(placed[g][0] - placed[h][0]) >= half_span:
                 continue
             if abs(out[g] - out[h]) < line:
@@ -226,6 +263,7 @@ def add_system(
     *,
     dx: float,
     label_z: float,
+    height: int,
 ) -> None:
     """Draw one system in place, again displaced, and the leader between them."""
     colour, opacity, roughness = STYLE[group]
@@ -270,10 +308,10 @@ def add_system(
     c = np.asarray(mesh.center, float)
     pl.add_mesh(
         pv.Line((c[0], c[1], c[2]), (c[0] + dx, c[1], c[2])),
-        color=(0.55, 0.55, 0.58),
-        line_width=1.4,
+        color=LEADER_COLOUR,
+        line_width=_px(LEADER_WIDTH_PX, height),
     )
-    _label(pl, (c[0] + dx, c[1], label_z), LABEL[group], size=LABEL_FONT_SIZE)
+    _label(pl, (c[0] + dx, c[1], label_z), LABEL[group], size=label_font_px(height))
 
 
 def _label(pl: pv.Plotter, at: tuple[float, float, float], text: str, *, size: int) -> None:
@@ -296,10 +334,21 @@ def _label(pl: pv.Plotter, at: tuple[float, float, float], text: str, *, size: i
     )
 
 
-def scale_bar(pl: pv.Plotter, *, x0: float, z0: float, y: float, mm: float = 500.0) -> None:
+def scale_bar(
+    pl: pv.Plotter, *, x0: float, z0: float, y: float, height: int, mm: float = 500.0
+) -> None:
     """A bar of known length: the axes are off and the body is not a unit."""
-    pl.add_mesh(pv.Line((x0, y, z0), (x0 + mm, y, z0)), color=(0.10, 0.10, 0.12), line_width=6)
-    _label(pl, (x0 + mm / 2, y, z0 - 95.0), f"{mm:.0f} mm", size=LABEL_FONT_SIZE - 6)
+    pl.add_mesh(
+        pv.Line((x0, y, z0), (x0 + mm, y, z0)),
+        color=(0.10, 0.10, 0.12),
+        line_width=_px(SCALE_BAR_WIDTH_PX, height),
+    )
+    _label(
+        pl,
+        (x0 + mm / 2, y, z0 - 95.0),
+        f"{mm:.0f} mm",
+        size=round(label_font_px(height) * 0.85),
+    )
 
 
 def light_the_scene(pl: pv.Plotter) -> None:
@@ -323,13 +372,16 @@ def light_the_scene(pl: pv.Plotter) -> None:
 
 
 def render(groups: dict[str, pv.PolyData], out: Path, *, height: int) -> Path:
-    dx = pack_columns(groups)
+    mm_per_pt = (groups["skin"].bounds[5] - groups["skin"].bounds[4]) / height
+    font_px = label_font_px(height)
+    # A label occupies its rise above the mesh plus its own line.
+    headroom = LABEL_RISE_MM + font_px * _LINE_HEIGHT * mm_per_pt
+    dx = pack_columns(groups, label_headroom_mm=headroom)
 
     # Labels sit above each system's own top, not on a shared line: the
     # systems occupy different heights and a shared line would float far from
     # most of them. Overlapping ones are then lifted apart.
     named = {g: m for g, m in groups.items() if g != "skin"}
-    mm_per_pt = (groups["skin"].bounds[5] - groups["skin"].bounds[4]) / height
     label_z = stack_labels(
         {
             g: (float(m.center[0]) + dx[g], float(m.bounds[5]) + LABEL_RISE_MM)
@@ -337,6 +389,7 @@ def render(groups: dict[str, pv.PolyData], out: Path, *, height: int) -> Path:
         },
         {g: LABEL[g] for g in named},
         mm_per_pt=mm_per_pt,
+        font_px=font_px,
     )
 
     # Fit the frame to what is actually drawn — every displaced mesh, plus the
@@ -361,8 +414,14 @@ def render(groups: dict[str, pv.PolyData], out: Path, *, height: int) -> Path:
     pl.set_background("white")
 
     for group, mesh in groups.items():
-        add_system(pl, group, mesh, dx=dx[group], label_z=label_z.get(group, 0.0))
-    scale_bar(pl, x0=x_lo + MARGIN_MM, z0=bar_z, y=float(groups["skin"].center[1]))
+        add_system(pl, group, mesh, dx=dx[group], label_z=label_z.get(group, 0.0), height=height)
+    scale_bar(
+        pl,
+        x0=x_lo + MARGIN_MM,
+        z0=bar_z,
+        y=float(groups["skin"].center[1]),
+        height=height,
+    )
 
     # Anterior view, orthographic: an exploded diagram is read by comparing
     # sizes across the frame, and perspective would make the near columns

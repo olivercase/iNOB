@@ -111,8 +111,15 @@ inob__source_target() {
         spine_muscle) TISSUES="spinal_cord,muscle";    TARGET_TAG="spine_muscle"
                      SOURCE_SPACING="${SOURCE_SPACING:-15}"
                      MUSCLE_ANISOTROPY="${MUSCLE_ANISOTROPY:-1}" ;;
+        # Heart and brain are volume-filled like muscle, and far bulkier: at
+        # 5 mm the brain alone is ~7000 dipoles. 10 mm keeps both tractable
+        # (~450 heart, ~900 brain) at a resolution well inside either organ.
+        heart)       TISSUES="heart";                  TARGET_TAG="heart"
+                     SOURCE_SPACING="${SOURCE_SPACING:-10}" ;;
+        brain)       TISSUES="brain";                  TARGET_TAG="brain"
+                     SOURCE_SPACING="${SOURCE_SPACING:-10}" ;;
         *)
-            echo "[lib.sh] unknown SOURCE_TARGET '${t}'. Use: vagus | spine | spine_vagus | muscle | spine_muscle" >&2
+            echo "[lib.sh] unknown SOURCE_TARGET '${t}'. Use: vagus | spine | spine_vagus | muscle | spine_muscle | heart | brain" >&2
             return 2 ;;
     esac
     # Honour a caller-provided SOURCE_SPACING override for any target.

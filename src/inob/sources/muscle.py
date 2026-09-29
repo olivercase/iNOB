@@ -71,8 +71,9 @@ def muscle_sources(
         picked.append(group[np.argmin(np.sum((group - vc) ** 2, axis=1))])
     pos = np.asarray(picked, dtype=np.float64)
     logger.info(
-        "%d muscle dipole positions (volume-fill, spacing %g mm, X=%g..%g Y=%g..%g Z=%g..%g)",
+        "%d %s dipole positions (volume-fill, spacing %g mm, X=%g..%g Y=%g..%g Z=%g..%g)",
         len(pos),
+        tissue_label,
         spacing_mm,
         pos[:, 0].min(),
         pos[:, 0].max(),

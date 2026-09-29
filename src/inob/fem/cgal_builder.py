@@ -34,6 +34,7 @@ from inob.mesh.quality import (
     assert_mesh_ok,
     assert_units_mm,
     compute_quality,
+    quality_by_tissue,
 )
 from inob.mesh.voxelize import (
     fill_internal_cavities,
@@ -70,7 +71,30 @@ VOXELISATION: dict[str, dict] = {
     "blood_vessel": {"method": "solid", "dilate_voxels": 1},
     # One long mesh following the cervical lordosis / thoracic kyphosis.
     "spinal_cord": {"method": "surface"},
+    # The atlas supplies the heart as three chamber *walls*, not a solid. The
+    # surface fill closes each wall and floods its lumen, so the compartment
+    # is one myocardial blob at sigma_heart — the chamber blood is not modelled
+    # separately, which is the usual simplification for an MCG forward model.
+    "heart": {"method": "surface"},
+    # 64 gyral meshes that abut without overlapping; a hull per gyrus would
+    # chord across every sulcus and inflate the brain into the skull.
+    "brain": {"method": "surface"},
+    # Lobes are large and concave around the hila.
+    "lung": {"method": "surface"},
 }
+
+# Tissues voxelised from a directory of per-structure STLs, in the order they
+# are loaded and reported. Extending this tuple plus VOXELISATION and the paint
+# order below is all a new group tissue needs.
+_GROUP_TISSUES: tuple[tuple[str, str], ...] = (
+    ("bone", "bone_dir"),
+    ("muscle", "muscle_dir"),
+    ("blood_vessel", "vessel_dir"),
+    ("spinal_cord", "spinal_cord_dir"),
+    ("heart", "heart_dir"),
+    ("brain", "brain_dir"),
+    ("lung", "lung_dir"),
+)
 
 
 def _build_grid(
@@ -91,7 +115,11 @@ def _build_grid(
 
 
 def _load_tissue_surfaces(cfg: Config):
-    """Return ``(m_skin, m_vagus_left, m_vagus_right, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths)``."""
+    """Return ``(m_skin, m_vagus_left, m_vagus_right, group_paths)``.
+
+    ``group_paths`` maps each directory-sourced tissue in :data:`_GROUP_TISSUES`
+    to its STLs; a tissue whose directory is unset gets an empty list.
+    """
     m_skin = load_stl(cfg.data.torso_skin)
     vl_paths = load_stl_glob(cfg.data.vagus_left_glob)
     vr_paths = load_stl_glob(cfg.data.vagus_right_glob)
@@ -110,13 +138,18 @@ def _load_tissue_surfaces(cfg: Config):
 
         raise STLLoadError(f"no bone STLs in {bone_clean} or {cfg.data.bone_dir}")
 
-    muscle_paths = sorted(Path(cfg.data.muscle_dir).glob("*.stl"))
-    vessel_paths = sorted(Path(cfg.data.vessel_dir).glob("*.stl"))
-    spinal_cord_paths = sorted(Path(cfg.data.spinal_cord_dir).glob("*.stl"))
-    logger.info("muscle: %d STLs from %s", len(muscle_paths), cfg.data.muscle_dir)
-    logger.info("blood_vessel: %d STLs from %s", len(vessel_paths), cfg.data.vessel_dir)
-    logger.info("spinal_cord: %d STLs from %s", len(spinal_cord_paths), cfg.data.spinal_cord_dir)
-    return m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths
+    group_paths: dict[str, list[Path]] = {"bone": bone_paths}
+    for tissue, attr in _GROUP_TISSUES:
+        if tissue == "bone":
+            continue
+        directory = getattr(cfg.data, attr)
+        if directory is None:
+            group_paths[tissue] = []
+            continue
+        paths = sorted(Path(directory).glob("*.stl"))
+        logger.info("%s: %d STLs from %s", tissue, len(paths), directory)
+        group_paths[tissue] = paths
+    return m_skin, m_vl, m_vr, group_paths
 
 
 def _voxelise_skin(m_skin, X, *, pitch, mn, closing_mm: float) -> np.ndarray:
@@ -192,12 +225,9 @@ def _assemble_label_volume(
     cfg: Config,
     *,
     skin_occ,
-    bone_occ,
     vl_occ,
     vr_occ,
-    muscle_occ=None,
-    vessel_occ=None,
-    spinal_cord_occ=None,
+    group_occ: dict[str, np.ndarray],
 ) -> tuple[np.ndarray, list[str], list[str]]:
     """Compose a labelled image; tissue order matches ``cfg.fem.tissues``.
 
@@ -211,23 +241,28 @@ def _assemble_label_volume(
     zero = np.zeros_like(skin_occ)
     tissue_to_occ = {
         "skin": skin_occ,
-        "bone": bone_occ,
-        "muscle": muscle_occ if muscle_occ is not None else zero,
-        "blood_vessel": vessel_occ if vessel_occ is not None else zero,
-        "spinal_cord": spinal_cord_occ if spinal_cord_occ is not None else zero,
         "vagus_left": vl_occ,
         "vagus_right": vr_occ,
+        **{t: group_occ.get(t, zero) for t, _ in _GROUP_TISSUES},
     }
     # Paint outermost → innermost so the target (vagus) and the conductive
     # vessel survive over the surrounding muscle/bone at voxel interfaces.
     # Spinal cord sits inside the vertebral canal (inside bone), so it is
     # painted after bone.
+    # Lung is painted early: it is a large low-conductivity volume that the
+    # heart sits against, and where the two overlap at 3 mm the myocardium must
+    # win. Brain follows bone for the same reason the cord does — it lies
+    # inside its bony envelope, so it has to overwrite the skull it is drawn
+    # within.
     paint_order = [
         t
         for t in (
             "skin",
+            "lung",
             "muscle",
             "bone",
+            "brain",
+            "heart",
             "spinal_cord",
             "blood_vessel",
             "vagus_right",
@@ -359,20 +394,16 @@ def build_fem(cfg: Config) -> Path:
     pitch = fcfg.pitch_mm
     pad = max(fcfg.pad_mm, 4 * pitch)
 
-    m_skin, m_vl, m_vr, bone_paths, muscle_paths, vessel_paths, spinal_cord_paths = (
-        _load_tissue_surfaces(cfg)
-    )
+    m_skin, m_vl, m_vr, group_paths = _load_tissue_surfaces(cfg)
     logger.info("  skin       : %d V / %d F", len(m_skin.vertices), len(m_skin.faces))
     logger.info("  vagus_L    : %d V / %d F", len(m_vl.vertices), len(m_vl.faces))
     logger.info("  vagus_R    : %d V / %d F", len(m_vr.vertices), len(m_vr.faces))
-    logger.info("  bones      : %d STLs", len(bone_paths))
-    logger.info("  muscles    : %d STLs", len(muscle_paths))
-    logger.info("  vessels    : %d STLs", len(vessel_paths))
-    logger.info("  spinal cord: %d STLs", len(spinal_cord_paths))
+    for tissue, _ in _GROUP_TISSUES:
+        logger.info("  %-11s: %d STLs", tissue, len(group_paths[tissue]))
 
     # Assemble bbox over all tissues
     all_v = [m_skin.vertices, m_vl.vertices, m_vr.vertices]
-    for bp in (*bone_paths, *muscle_paths, *vessel_paths, *spinal_cord_paths):
+    for bp in (p for tissue, _ in _GROUP_TISSUES for p in group_paths[tissue]):
         all_v.append(np.asarray(load_stl(bp, check_units_mm=False).vertices))
     all_v = np.vstack(all_v)
     mn, _mx, shape, X, Y, Z = _build_grid(all_v, pitch=pitch, pad=pad)
@@ -388,10 +419,7 @@ def build_fem(cfg: Config) -> Path:
             paths, X, Y, Z, pitch=pitch, mn=mn, skin_occ=skin_occ, label=label, **opts
         )
 
-    bone_occ = _voxelise("bone", bone_paths)
-    muscle_occ = _voxelise("muscle", muscle_paths)
-    vessel_occ = _voxelise("blood_vessel", vessel_paths)
-    spinal_cord_occ = _voxelise("spinal_cord", spinal_cord_paths)
+    group_occ = {t: _voxelise(t, group_paths[t]) for t, _ in _GROUP_TISSUES}
     vl_occ = (
         _voxelise_vagus(
             m_vl, X, pitch=pitch, mn=mn, dilate_voxels=fcfg.vagus_dilate_voxels, skin_occ=skin_occ
@@ -410,12 +438,9 @@ def build_fem(cfg: Config) -> Path:
     label_vol, declared, painted = _assemble_label_volume(
         cfg,
         skin_occ=skin_occ,
-        bone_occ=bone_occ,
         vl_occ=vl_occ,
         vr_occ=vr_occ,
-        muscle_occ=muscle_occ,
-        vessel_occ=vessel_occ,
-        spinal_cord_occ=spinal_cord_occ,
+        group_occ=group_occ,
     )
 
     logger.info("Running iso2mesh.cgalv2m (radbound=%g, maxvol=%g)", fcfg.radbound, fcfg.maxvol)
@@ -459,6 +484,17 @@ def build_fem(cfg: Config) -> Path:
         quality.mean,
         quality.max,
     )
+    for label, stats in quality_by_tissue(
+        mesh.nodes, mesh.tets, mesh.tissue, mesh.tissue_labels
+    ).items():
+        logger.info(
+            "  %-14s n=%7d min=%.4f p5=%.4f mean=%.4f",
+            label,
+            stats.n_tets,
+            stats.min,
+            stats.p5,
+            stats.mean,
+        )
     assert_mesh_ok(quality, min_quality=fcfg.validate.min_mesh_quality)
     validate_fem(
         mesh,

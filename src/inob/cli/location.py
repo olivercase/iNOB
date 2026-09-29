@@ -53,8 +53,9 @@ see `inob --help` for the full list.""",
     p.add_argument(
         "--wholebody-mat",
         type=Path,
-        default=Path("outputs/sensors/electrode_array_wholebody.mat"),
-        help="Whole-body electrode positions (target-independent net).",
+        default=None,
+        help="Whole-body electrode positions (default: "
+        "electrode_array_wholebody.mat tagged with the source target).",
     )
     p.add_argument(
         "--wholebody-npz",
@@ -70,11 +71,15 @@ see `inob --help` for the full list.""",
     cfg = setup(args, log_prefix="location")
     # The paddle leadfield/electrodes follow --source-target (setup() has already
     # repointed forward_eeg_npz / electrodes_mat). The wholebody leadfield shares
-    # the same sources, so it is tagged with the same slug; only its electrode
-    # net (positions) is source-independent and stays untagged.
+    # the same sources, so it is tagged with the same slug. So is its electrode
+    # net: `inob electrodes --set electrodes.shape=whole_body` writes one per
+    # target, beside that target's patch.
     tag = source_target_tag(cfg)
     paddle_npz = args.paddle_npz or cfg.outputs.forward_eeg_npz
     paddle_mat = args.paddle_mat or cfg.outputs.electrodes_mat
+    wholebody_mat = args.wholebody_mat or tag_path(
+        Path("outputs/sensors/electrode_array_wholebody.mat"), tag
+    )
     wholebody_npz = args.wholebody_npz or tag_path(
         Path("outputs/forward/duneuro_eeg_leadfield_wholebody.npz"), tag
     )
@@ -82,7 +87,7 @@ see `inob --help` for the full list.""",
         cfg,
         paddle_mat=paddle_mat,
         paddle_npz=paddle_npz,
-        wholebody_mat=args.wholebody_mat,
+        wholebody_mat=wholebody_mat,
         wholebody_npz=wholebody_npz,
         source_idx=args.source_idx,
         out_path=args.out,

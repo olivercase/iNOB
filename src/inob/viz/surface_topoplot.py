@@ -25,10 +25,12 @@ import trimesh
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
+from inob.anatomy import level_suffix
 from inob.config import Config, source_region_label, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
-from inob.viz.detectability import default_source_idx
+from inob.sensors.layout import radial_channels
+from inob.viz.detectability import default_source_idx, matching_eeg_source_idx
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -176,8 +178,7 @@ def render_surface_topoplots(
     src = meg_lf.source_pos[source_idx]
 
     # ── MEG: longitudinal-moment leadfield at radial OPMs ──────────────────
-    n_meg = meg_lf.coil_pos.shape[0]
-    radial_idx = np.arange(n_meg // 3)  # first third = R coils
+    radial_idx = radial_channels(meg_lf.channel_names)
     meg_pos = meg_lf.coil_pos[radial_idx]
     meg_val_full = meg_lf.L_fT_per_nAm[:, 3 * source_idx + 2]  # z-moment
     # Each radial coil has an outward-skin orientation; project the field by
@@ -185,7 +186,8 @@ def render_surface_topoplots(
     meg_val = meg_val_full[radial_idx]
 
     # ── EEG: longitudinal-moment leadfield at the patch ────────────────────
-    eeg_val = eeg_lf.L_fT_per_nAm[:, 3 * source_idx + 2]
+    e_idx = matching_eeg_source_idx(meg_lf, eeg_lf, source_idx)
+    eeg_val = eeg_lf.L_fT_per_nAm[:, 3 * e_idx + 2]
 
     # ── Crop skin to the cervical band for the headline view ───────────────
     z_lo, z_hi = src[2] - z_band_mm, src[2] + z_band_mm
@@ -414,7 +416,8 @@ def render_surface_topoplots(
 
     fig.suptitle(
         f"Surface topoplots — {source_region_label(cfg)} source #{source_idx} "
-        f"@ z = {src[2]:.0f} mm  (longitudinal moment, 1 nA·m)",
+        f"@ z = {src[2]:.0f} mm{level_suffix(cfg.data.bone_dir, src[2])}  "
+        "(longitudinal moment, 1 nA·m)",
         fontsize=12,
         fontweight="bold",
         y=0.985,

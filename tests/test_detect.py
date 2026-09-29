@@ -9,9 +9,14 @@ import numpy as np
 import pytest
 
 from inob.analysis.detect import compute_detectability
-from inob.analysis.snr import compute_noise_floors, per_source_peak
+from inob.analysis.snr import (
+    compute_noise_floors,
+    per_source_peak,
+    per_source_triaxial_peak,
+)
 from inob.config import load_config
 from inob.io.npz import Leadfield, save_leadfield
+from inob.sensors.triaxial import tangent_frame
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CFG = REPO_ROOT / "configs" / "default.yaml"
@@ -153,3 +158,100 @@ def test_detectability_scenarios_follow_source_target() -> None:
     # up throughout and tops out an order of magnitude higher.
     assert min(s.Q_nAm for s in MUSCLE_SCENARIOS) > min(s.Q_nAm for s in DEFAULT_SCENARIOS)
     assert max(s.Q_nAm for s in MUSCLE_SCENARIOS) >= 10 * max(s.Q_nAm for s in DEFAULT_SCENARIOS)
+
+
+def _triaxial_leadfield(field: np.ndarray, radial: np.ndarray, basis: str) -> np.ndarray:
+    """Project a per-position field onto a triaxial frame — (3N, 3S).
+
+    ``field`` is (N, 3, 3S): the field vector at each position for each
+    source/moment column. Block order matches the arrays this package writes.
+    """
+    t1, t2 = tangent_frame(radial, basis=basis)
+    return np.vstack([np.einsum("ijs,ij->is", field, ax) for ax in (radial, t1, t2)])
+
+
+def test_per_source_triaxial_peak_is_invariant_to_the_tangent_frame() -> None:
+    """The reason the measure exists: no dependence on a convention.
+
+    Rotating T1/T2 within the tangent plane leaves the field untouched, so a
+    signal measure for a triaxial array must not move either. per_source_peak
+    does move, which is what motivates having this alongside it.
+    """
+    rng = np.random.default_rng(5)
+    n, n_src = 40, 6
+    radial = rng.standard_normal((n, 3))
+    radial /= np.linalg.norm(radial, axis=1, keepdims=True)
+    field = rng.standard_normal((n, 3, 3 * n_src))
+
+    lf = {b: _triaxial_leadfield(field, radial, b) for b in ("global_up", "local_svd")}
+
+    np.testing.assert_allclose(
+        per_source_triaxial_peak(lf["global_up"]),
+        per_source_triaxial_peak(lf["local_svd"]),
+        rtol=1e-12,
+    )
+    # The single-axis peak is not invariant — hence the need for the above.
+    assert not np.allclose(per_source_peak(lf["global_up"]), per_source_peak(lf["local_svd"]))
+
+
+def test_per_source_triaxial_peak_brackets_per_source_peak() -> None:
+    """Bounded below by the best single axis and above by sqrt(3) times it."""
+    rng = np.random.default_rng(7)
+    lf = rng.standard_normal((3 * 12, 3 * 5))
+    tri = per_source_triaxial_peak(lf)
+    single = per_source_peak(lf)
+    assert np.all(tri >= single - 1e-12)
+    assert np.all(tri <= math.sqrt(3.0) * single + 1e-12)
+
+
+def test_per_source_triaxial_peak_rejects_a_non_triaxial_array() -> None:
+    with pytest.raises(ValueError, match="not divisible by 3"):
+        per_source_triaxial_peak(np.zeros((5, 9)))
+
+
+def _synthetic_eeg(path: Path) -> np.ndarray:
+    """Two contacts, one source: raw potentials [1, 5] on x, [2, -2] on y."""
+    raw = np.array([[1.0, 2.0, 0.0], [5.0, -2.0, 0.0]])
+    L = raw - raw.mean(axis=0, keepdims=True)
+    lf = Leadfield(
+        L=L,
+        L_fT_per_nAm=L,
+        source_pos=np.array([[0.0, 0.0, 0.0]]),
+        coil_pos=np.array([[10.0, 0.0, 0.0], [200.0, 0.0, 0.0]]),
+        coil_orient=np.tile([0.0, 0.0, 1.0], (2, 1)),
+        channel_names=("e0", "e1"),
+        conductivities=np.array([0.3, 0.43]),
+        tissue_labels=("spinal_cord", "skin"),
+    )
+    save_leadfield(path, lf)
+    return raw
+
+
+def test_compute_detectability_reference_and_orientation(tmp_path: Path) -> None:
+    npz = tmp_path / "eeg.npz"
+    _synthetic_eeg(npz)
+    cfg = load_config(DEFAULT_CFG, overrides=[f"outputs.forward_eeg_npz={npz}"])
+    sigma = compute_noise_floors(cfg).eeg_per_channel_uV
+
+    def snr(**kw):
+        return compute_detectability(cfg, strengths_nAm=[1.0], modality="eeg", **kw)["per_source"][
+            0
+        ]["snr"]
+
+    # Average reference: x column [-2, 2], y column [2, -2] → peak 2.
+    assert snr() == pytest.approx(2.0 / sigma, rel=1e-3)
+    # Farthest contact from the source is e1: x column becomes [-4, 0] → 4.
+    assert snr(eeg_reference="farthest") == pytest.approx(4.0 / sigma, rel=1e-3)
+    # Nearest to (10, 0, 0) is e0: same span, other sign → 4.
+    assert snr(eeg_reference="nearest:10,0,0") == pytest.approx(4.0 / sigma, rel=1e-3)
+    # Fixed along y: [2, -2] under the average → 2; fixed along z → 0.
+    assert snr(orientation="y") == pytest.approx(2.0 / sigma, rel=1e-3)
+    assert snr(orientation="z") == 0.0
+
+
+def test_compute_detectability_reference_rejected_for_meg(tmp_path: Path) -> None:
+    npz = tmp_path / "meg.npz"
+    _synthetic_leadfield(npz, peaks=[10.0])
+    cfg = load_config(DEFAULT_CFG, overrides=[f"outputs.forward_npz={npz}"])
+    with pytest.raises(ValueError, match="eeg"):
+        compute_detectability(cfg, modality="meg", eeg_reference="farthest")

@@ -58,12 +58,18 @@ def vagus_sources(
     return pos
 
 
+# Bulky, non-midline tissues: the Z-slab average that suits a thin longitudinal
+# nerve would put their dipole on the body midline, outside the tissue. These
+# are volume-filled instead.
+_VOLUME_FILL_TISSUES = frozenset({"muscle", "heart", "brain", "lung"})
+
+
 def _sample_one(fem: FemMesh, label: str, *, spacing_mm: float) -> np.ndarray:
-    """Sample one tissue, dispatching muscle to its volume-fill sampler."""
-    if label == "muscle":
+    """Sample one tissue, dispatching bulky tissues to the volume-fill sampler."""
+    if label in _VOLUME_FILL_TISSUES:
         from inob.sources.muscle import muscle_sources
 
-        return muscle_sources(fem, spacing_mm=spacing_mm)
+        return muscle_sources(fem, spacing_mm=spacing_mm, tissue_label=label)
     return vagus_sources(fem, label, spacing_mm=spacing_mm)
 
 
@@ -79,10 +85,10 @@ def sample_source_tissues(
     (``"spinal_cord,vagus_left"``); positions from each are concatenated. This
     is what lets the cluster pipeline target vagus, spine, or both.
 
-    ``muscle`` is sampled differently: it is a bulky bilateral tissue, so the
-    Z-slab averaging used for thin midline nerves would place dipoles outside
-    the muscle. It is volume-filled inside the tissue instead (see
-    :func:`inob.sources.muscle.muscle_sources`).
+    ``muscle``, ``heart``, ``brain`` and ``lung`` are sampled differently: they
+    are bulky, non-midline tissues, so the Z-slab averaging used for thin
+    midline nerves would place dipoles outside them. They are volume-filled
+    inside the tissue instead (see :func:`inob.sources.muscle.muscle_sources`).
     """
     labels = source_tissue_labels(source_tissue)
     if not labels:

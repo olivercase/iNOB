@@ -58,6 +58,9 @@ sensors:
   angular_margin_deg: 90.0
   cylinder_radius_factor: 0.75
   z_crop_low_factor: 0.0
+  # global_up: T1 horizontal, T2 head-foot, about +Z. local_svd is the
+  # pre-v1.2.0 per-sensor null space, kept only for reproducibility.
+  tangent_basis: global_up
 
 forward:
   conductivities_sm:

@@ -217,3 +217,19 @@ def test_later_set_override_wins_over_the_flag(tmp_path: Path) -> None:
     cfg = setup(args, log_prefix="unittest")
     assert cfg.forward.source_model.type == "venant"
     assert cfg.forward.source_model.number_of_moments == 4
+
+
+def test_whole_body_electrodes_get_their_own_files() -> None:
+    """A whole-body solve must not overwrite the target's patch leadfield."""
+    from inob.cli._common import apply_source_target
+    from inob.config import load_config
+
+    cfg_path = Path(__file__).resolve().parent.parent / "configs" / "default.yaml"
+    patch = apply_source_target(load_config(cfg_path), "spine")
+    whole = apply_source_target(
+        load_config(cfg_path, overrides=["electrodes.shape=whole_body"]), "spine"
+    )
+    assert patch.outputs.forward_eeg_npz.name == "duneuro_eeg_leadfield_spine.npz"
+    assert whole.outputs.forward_eeg_npz.name == "duneuro_eeg_leadfield_wholebody_spine.npz"
+    assert whole.outputs.electrodes_mat.name == "electrode_array_wholebody_spine.mat"
+    assert whole.outputs.forward_npz == patch.outputs.forward_npz  # MEG is shared

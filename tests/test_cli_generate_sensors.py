@@ -19,7 +19,7 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
     )
     rc = cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path)])
     assert rc == 0
-    assert calls == {"z_min": None, "z_max": None}
+    assert calls == {"z_min": None, "z_max": None, "from_file": None}
 
 
 def test_main_zmin_zmax_forwarded(tmp_path, monkeypatch) -> None:
@@ -42,4 +42,18 @@ def test_main_zmin_zmax_forwarded(tmp_path, monkeypatch) -> None:
         ]
     )
     assert rc == 0
-    assert calls == {"z_min": -10.0, "z_max": 50.0}
+    assert calls == {"z_min": -10.0, "z_max": 50.0, "from_file": None}
+
+
+def test_main_from_file_forwarded(tmp_path, monkeypatch) -> None:
+    calls = {}
+    monkeypatch.setattr(
+        cli_mod,
+        "generate_sensor_array",
+        lambda cfg, **kw: calls.update(kw),
+    )
+    rc = cli_mod.main(
+        ["--config", str(TINY_CFG), "--project-root", str(tmp_path), "--from", "grad.mat"]
+    )
+    assert rc == 0
+    assert calls == {"z_min": None, "z_max": None, "from_file": "grad.mat"}

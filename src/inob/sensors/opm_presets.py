@@ -27,6 +27,11 @@ These are manufacturer figures, entered here so they can be cited and changed
 in one place. ``verified=False`` marks a preset whose numbers have not been
 checked against a current spec sheet by anyone on this project — usable for
 comparison, not for a published claim without re-checking.
+
+A system not listed here needs no preset: set ``noise.opm_intrinsic_fT_sqrtHz``
+and ``noise.opm_bandwidth_hz`` directly (in the YAML, or e.g.
+``--set noise.opm_intrinsic_fT_sqrtHz=3 --set noise.opm_bandwidth_hz=1000``),
+and either overrides whichever preset is named.
 """
 
 from __future__ import annotations
@@ -85,6 +90,29 @@ OPM_SENSORS: dict[str, OpmSensor] = {
         source=(
             "Helium-4 OPM class (e.g. Mag4Health): ~30-50 fT/√Hz with a "
             "kHz-scale bandwidth — the trade the alkali sensors do not offer."
+        ),
+        verified=False,
+    ),
+    # A SQUID magnetometer, for comparison on the same array geometry. The
+    # table is named for OPMs because they are the default, but nothing in a
+    # preset is OPM-specific: a sensor is a noise density and a bandwidth.
+    # What does differ is geometry, and that is not in the preset — a SQUID
+    # sits in a dewar a few centimetres off the skin (sensors.depth_mm) and
+    # measures one axis (sensors.axes: radial).
+    "megin_triux_mag": OpmSensor(
+        name="megin_triux_mag",
+        label="MEGIN (Elekta) TRIUX SQUID magnetometer",
+        noise_fT_sqrtHz=5.0,
+        bandwidth_hz=3300.0,
+        source=(
+            "Elekta Neuromag TRIUX Technical Manual NM24132A (2011), "
+            "section 1.1: magnetometer white noise (60-70 Hz) max. "
+            "5 fT/√Hz for 96% of channels, max. 10 fT/√Hz for all; "
+            "acquisition low-pass a 6th-order Butterworth, adjustable "
+            "330 Hz-3.3 kHz. A SQUID has no intrinsic roll-off in this "
+            "band, so the bandwidth is the highest filter setting; set "
+            "noise.opm_bandwidth_hz to the one you record with. MEGIN "
+            "quotes < 3 fT/√Hz for the current TRIUX neo."
         ),
         verified=False,
     ),

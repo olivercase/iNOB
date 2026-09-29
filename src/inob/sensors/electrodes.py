@@ -43,6 +43,13 @@ from inob.io.hdf5 import (
     validate_sensors,
 )
 from inob.io.stl import load_stl
+from inob.sensors.imported import (
+    FRAME_NOTE,
+    import_electrodes,
+    load_skin_if_present,
+    read_array_file,
+    resolve_array_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -309,6 +316,19 @@ def build_electrode_array(
     )
 
 
+def import_electrode_array(cfg: Config, path: Path, *, out_path: Path | None = None) -> Path:
+    """Read an electrode array from ``path`` and save it as placement would."""
+    logger.info("Importing electrode array: %s", path)
+    logger.info("  %s", FRAME_NOTE)
+    raw = read_array_file(path, kind="eeg")
+    array = import_electrodes(raw, skin=load_skin_if_present(cfg))
+    validate_sensors(array)
+    out = out_path or cfg.outputs.electrodes_mat
+    save_sensors(out, array)
+    logger.info("[saved] %s (%d imported contacts)", out, len(array.coilpos))
+    return out
+
+
 def generate_electrode_array(
     cfg: Config,
     *,
@@ -318,9 +338,19 @@ def generate_electrode_array(
     target_tissue: str | None = None,
     target_level: str | None = None,
     out_path: Path | None = None,
+    from_file: str | Path | None = None,
 ) -> Path:
-    """Generate the HD electrode array per ``cfg.electrodes`` and save it."""
+    """Generate the HD electrode array per ``cfg.electrodes`` and save it.
+
+    ``from_file`` (else ``electrodes.from_file``) imports an array instead of
+    placing one; see :mod:`inob.sensors.imported`.
+    """
     elec = cfg.electrodes
+    path = resolve_array_file(cfg, from_file) or resolve_array_file(
+        cfg, getattr(elec, "from_file", None)
+    )
+    if path is not None:
+        return import_electrode_array(cfg, path, out_path=out_path)
     # A vertebral level (CLI --level, else cfg.electrodes.target_level) centres
     # the patch on that vertebra's absolute Z band so it sits over the source of
     # interest; without one the fractional body-height slab is used as before.

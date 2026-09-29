@@ -81,7 +81,7 @@ def gather_inputs(cfg: Config) -> dict[str, list[Path]]:
     logger.info("muscle: %d STLs from %s", len(muscle_paths), cfg.data.muscle_dir)
     logger.info("blood_vessel: %d STLs from %s", len(vessel_paths), cfg.data.vessel_dir)
     logger.info("spinal_cord: %d STLs from %s", len(cord_paths), cfg.data.spinal_cord_dir)
-    return {
+    inputs = {
         "mesh_skin": torso_paths,
         "mesh_bone": bone_paths,
         "mesh_muscle": muscle_paths,
@@ -90,6 +90,20 @@ def gather_inputs(cfg: Config) -> dict[str, list[Path]]:
         "mesh_vagus_left": vl,
         "mesh_vagus_right": vr,
     }
+    # Thoracic/cranial compartments are optional: a config that models the
+    # neck alone (quickstart, tiny_test) leaves their directories unset and
+    # gets exactly the compartments it had before.
+    for label, directory in (
+        ("mesh_heart", cfg.data.heart_dir),
+        ("mesh_brain", cfg.data.brain_dir),
+        ("mesh_lung", cfg.data.lung_dir),
+    ):
+        if directory is None:
+            continue
+        paths = sorted(Path(directory).glob("*.stl"))
+        logger.info("%s: %d STLs from %s", label[len("mesh_") :], len(paths), directory)
+        inputs[label] = paths
+    return inputs
 
 
 def compartment_seed(label: str, base_seed: int) -> int:

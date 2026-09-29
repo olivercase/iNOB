@@ -38,6 +38,13 @@ References
   muscle fibre diameter (Type I/II, ~40–80 µm).
 * McComas AJ 1977 *Neuromuscular Function and Disorders* — muscle-fibre
   intracellular AP amplitude and duration.
+* Baule GM & McFee R 1963 *Am Heart J* 66:95; Wikswo JP 1980 *Biophys J* 29:407
+  — magnetocardiography, from which the ~2 µA·m peak-QRS equivalent current
+  dipole is taken.
+* Gerdes AM *et al.* 1992 *Circulation* 86:426 — ventricular myocyte diameter.
+* Murakami S & Okada Y 2006 *J Physiol* 575:925 — ~0.2 pA·m current dipole per
+  cortical pyramidal neuron, the per-neuron figure behind the 10 nA·m evoked
+  cortical ECD.
 * Farina D & Merletti R 2004 *IEEE Rev Biomed Eng* — single-fibre and MUAP
   conduction velocity (skeletal-muscle fibre CV ≈ 3–5 m/s, weakly diameter-
   dependent, unlike saltatory conduction in myelinated nerve).
@@ -190,6 +197,16 @@ class PhysiologyProfile:
         repr=False,
         compare=False,
     )
+    event_moment_nAm_override: float | None = None
+    """Literature event moment for a generator the fibre model cannot derive.
+
+    :attr:`event_moment_nAm` is normally ``n_fibres`` × the Hämäläinen
+    per-axon moment, which assumes the generator is a volley of myelinated
+    axons. Myocardium and cortex are not: their equivalent current dipoles are
+    measured quantities (MCG / MEG), not products of an axonal fibre model.
+    Setting this states the measured figure instead of deriving a wrong one.
+    """
+
     cv_kwargs: dict | None = None
     """Override for :func:`inob.sources.cap.conduction_velocity_m_per_s`.
 
@@ -229,6 +246,8 @@ class PhysiologyProfile:
         :attr:`default_strength_nAm`, which is a separate, independently
         sourced figure.
         """
+        if self.event_moment_nAm_override is not None:
+            return self.event_moment_nAm_override
         return self.per_fibre_nAm * self.n_fibres
 
     def transit_ms(self, span_mm: float) -> float:
@@ -254,7 +273,7 @@ class PhysiologyProfile:
         return (
             f"{self.label} physiology — {self.paradigm}\n"
             f"Generator: {self.generator}\n"
-            f"Fibres: n={self.n_fibres}, mean CV {self.mean_cv_m_per_s:.0f} m/s, "
+            f"Fibres: n={self.n_fibres}, mean CV {self.mean_cv_m_per_s:.3g} m/s, "
             f"AP width {self.ap_width_ms:.2f} ms\n"
             f"Propagation span: {span}\n"
             f"Event moment: {self.event_moment_nAm:.2f} nA·m"
@@ -446,6 +465,100 @@ MUSCLE_PROFILE = PhysiologyProfile(
 )
 
 
+HEART_PROFILE = PhysiologyProfile(
+    name="heart",
+    label="heart",
+    # PROVISIONAL like muscle: the static forward model is real (myocardium as
+    # its own compartment, lungs and blood as their own), but the generator is
+    # not modelled — no activation sequence, no propagating depolarisation
+    # wavefront, no repolarisation. Only the peak-QRS equivalent dipole is.
+    validated=False,
+    # Ventricular myocytes, ~15 um (Gerdes et al. 1992). Carried so the
+    # dataclass is complete; the event moment below does NOT come from them.
+    fibres=lognormal_fibre_distribution(
+        mean_um=15.0, sigma_log=0.20, n_bins=20, lo_um=8.0, hi_um=25.0
+    ),
+    # The observable is the QRS complex, ~80 ms wide — three orders of
+    # magnitude slower than a peripheral-nerve CAP. This is what puts the
+    # cardiac signal at ~2 Hz, inside any OPM's flat band and *below* the
+    # 30 Hz high-pass a CAP recording uses.
+    ap_width_ms=80.0,
+    ap_amplitude_mV=100.0,
+    sigma_in_Sm=1.0,
+    n_fibres=1,
+    # Peak-QRS equivalent current dipole, ~2 uA.m — the standard
+    # magnetocardiography figure (Baule & McFee 1963; Wikswo 1980). Measured,
+    # not derived: see event_moment_nAm_override.
+    default_strength_nAm=2000.0,
+    event_moment_nAm_override=2000.0,
+    # The depolarisation wavefront crosses the whole ventricular mass.
+    propagation_span_mm=100.0,
+    # 100 mm at ~0.5 m/s is a 200 ms transit against an 80 ms QRS: the
+    # wavefront sweep IS the signal, so a lumped stationary dipole is a
+    # planning approximation only.
+    stationary_ok=False,
+    # Myocardial conduction is via gap junctions, ~0.3-0.8 m/s, and does not
+    # follow the myelinated CV = k*D law (same override reasoning as muscle).
+    cv_kwargs={"myelinated_threshold_um": 1000.0, "c_unmyelinated": 0.5},
+    generator="ventricular myocardium, peak of the QRS complex",
+    paradigm="PROVISIONAL — peak-QRS equivalent dipole; no activation sequence "
+    "or repolarisation model",
+    notes=(
+        "Modelled as one lumped 2 uA.m dipole at the R peak. The heart "
+        "compartment is myocardium throughout (chamber blood is not a "
+        "separate tissue), and there is no activation-sequence model, so "
+        "this profile answers 'how large is the cardiac field here' and not "
+        "'what does the cardiac waveform look like'."
+    ),
+    scenario_builder=None,
+)
+
+
+BRAIN_PROFILE = PhysiologyProfile(
+    name="brain",
+    label="brain",
+    # PROVISIONAL for the same reason as heart: a real forward model over a
+    # real brain compartment, but no generator model beyond a single evoked
+    # equivalent dipole.
+    validated=False,
+    # Nominal pyramidal-axon calibre, carried for completeness only: the
+    # cortical dipole below is a dendritic, not axonal, quantity.
+    fibres=lognormal_fibre_distribution(
+        mean_um=1.0, sigma_log=0.30, n_bins=20, lo_um=0.2, hi_um=3.0
+    ),
+    # Half-width of an evoked cortical response (N20/N100 class), ~30 ms →
+    # ~5 Hz, well inside any OPM's flat band.
+    ap_width_ms=30.0,
+    ap_amplitude_mV=70.0,
+    sigma_in_Sm=1.0,
+    # ~5e4 synchronously active pyramidal neurons at the ~0.2 pA.m per-neuron
+    # current dipole of Murakami & Okada (2006) gives the 10 nA.m below.
+    n_fibres=50000,
+    # 10 nA.m — the conventional cortical evoked-response equivalent current
+    # dipole (Hamalainen et al. 1993).
+    default_strength_nAm=10.0,
+    event_moment_nAm_override=10.0,
+    # Cortical synchrony spreads over a patch, not along a tract.
+    propagation_span_mm=30.0,
+    # A 30 mm patch at ~0.3 m/s is 100 ms against a 30 ms response: as for
+    # heart, the lumped dipole is a planning approximation.
+    stationary_ok=False,
+    # Intracortical unmyelinated fibres, ~0.3 m/s; the myelinated law does not
+    # apply (same override reasoning as muscle and heart).
+    cv_kwargs={"myelinated_threshold_um": 1000.0, "c_unmyelinated": 0.3},
+    generator="synchronous cortical pyramidal population, apical dendrites",
+    paradigm="PROVISIONAL — single evoked equivalent current dipole; no "
+    "cortical-patch, orientation or laminar model",
+    notes=(
+        "10 nA.m is the conventional evoked cortical ECD; the brain "
+        "compartment is homogeneous (no grey/white split, no CSF), so this "
+        "profile supports a detectability magnitude and not a source-"
+        "localisation claim."
+    ),
+    scenario_builder=None,
+)
+
+
 PROFILES: dict[str, PhysiologyProfile] = {
     "vagus": VAGUS_PROFILE,
     "spine": SPINE_PROFILE,
@@ -457,6 +570,8 @@ PROFILES: dict[str, PhysiologyProfile] = {
     # this is a placeholder that keeps every SOURCE_TARGET resolvable rather
     # than silently falling back to vagus.
     "spine_muscle": SPINE_PROFILE,
+    "heart": HEART_PROFILE,
+    "brain": BRAIN_PROFILE,
 }
 
 

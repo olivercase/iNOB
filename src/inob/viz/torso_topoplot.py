@@ -49,10 +49,17 @@ from matplotlib.colors import Normalize
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import cKDTree
 
-from inob.config import Config, source_region_label, target_output
+from inob.anatomy import level_suffix
+from inob.config import (
+    SOURCE_TARGETS,
+    Config,
+    source_region_label,
+    source_target_tag,
+    target_output,
+)
 from inob.io.hdf5 import load_geometry
 from inob.io.npz import load_leadfield
-from inob.viz.detectability import default_source_idx
+from inob.viz.detectability import default_source_idx, matching_eeg_source_idx
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -98,10 +105,14 @@ def _signed_radial_field(
     documents). Interpolating all 4,740 puts three different values at each
     coordinate — which a distance-weighted scheme resolves as a nearest-position
     average, i.e. flat Voronoi tiles, and paints a smooth field as a mosaic.
+    The radial channels are found by label rather than as "the first third",
+    because a single-axis or imported array has no thirds.
     """
+    from inob.sensors.layout import radial_channels
+
     k = {"x": 0, "y": 1, "z": 2}[moment]
     L = np.asarray(lf.L_fT_per_nAm, dtype=float)
-    radial = np.arange(L.shape[0] // 3)
+    radial = radial_channels(lf.channel_names)
     return L[radial, 3 * source_idx + k], np.asarray(lf.coil_pos, float)[radial]
 
 
@@ -293,19 +304,181 @@ def _source_is_visible(
     return bool(n < 1e-9 or (outward / n) @ view > 0.0)
 
 
-def _mark_source(ax: Any, pos: np.ndarray) -> None:
+#: Length of the arrow drawn for the dipole moment. Long enough to read its
+#: direction at column width, short enough not to cover the lobes it explains.
+_DIPOLE_ARROW_MM = 45.0
+
+_MOMENT_VEC = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
+
+
+def _dipole_arrow(pos: np.ndarray, moment: str, azim: float) -> list[np.ndarray]:
+    """Shaft and two head strokes of the dipole arrow, as 2-point 3-D segments.
+
+    The head is spread along the screen-horizontal direction for the panels'
+    azimuth (see :func:`_scale_bar`), not along a fixed body axis: a z arrow
+    whose head opens in x shows no head at all when viewed along x, which is
+    how the vagus panel first came out. A moment pointing mostly along the
+    line of sight has no drawable direction and gets its head opened in z.
+    """
+    u = np.asarray(_MOMENT_VEC[moment], float)
+    tail, tip = pos - 0.5 * _DIPOLE_ARROW_MM * u, pos + 0.5 * _DIPOLE_ARROW_MM * u
+    th = np.radians(azim)
+    side = np.array([-np.sin(th), np.cos(th), 0.0])
+    side = side - (side @ u) * u
+    if np.linalg.norm(side) < 0.3:
+        side = np.array([0.0, 0.0, 1.0]) - u[2] * u
+    side /= np.linalg.norm(side)
+    base = tip - 0.3 * _DIPOLE_ARROW_MM * u
+    w = 0.14 * _DIPOLE_ARROW_MM
+    return [
+        np.array([tail, tip]),
+        np.array([base + w * side, tip]),
+        np.array([base - w * side, tip]),
+    ]
+
+
+def _mark_source(ax: Any, pos: np.ndarray, moment: str = "z", azim: float = -90.0) -> None:
+    """The mapped dipole: a dot at its position and an arrow along its moment.
+
+    A star alone says where but not which way, and the whole pattern on the
+    skin is set by which way. The arrow is centred on the source so it points
+    through it.
+    """
+    for seg in _dipole_arrow(pos, moment, azim):
+        ax.plot(
+            seg[:, 0],
+            seg[:, 1],
+            seg[:, 2],
+            color=NATURE_PALETTE["axis"],
+            lw=1.7,
+            solid_capstyle="round",
+            zorder=11,
+        )
     ax.scatter(
         [pos[0]],
         [pos[1]],
         [pos[2]],
-        s=52,
-        marker="*",
+        s=26,
+        marker="o",
         color=NATURE_PALETTE["glow"],
         edgecolor=NATURE_PALETTE["axis"],
-        linewidth=0.5,
+        linewidth=0.6,
+        depthshade=False,
+        zorder=12,
+    )
+
+
+def _mark_target(
+    ax: Any,
+    target_pos: np.ndarray,
+    axis_xy: np.ndarray,
+    azim: float,
+    z_range: tuple[float, float],
+) -> int:
+    """Draw the target structure — every source the leadfield was solved for.
+
+    Without it the panel reads as a dipole floating in a skin mesh: nothing
+    says it sits in the cord (or the vagus, or a muscle). The sampled sources
+    *are* the target compartment, so they trace it without a second mesh.
+    Drawn as an x-ray overlay, and only on the camera's side of the body, for
+    the depth-sorting reason in :func:`_source_is_visible`. Returns the count.
+    """
+    view = np.array([np.cos(np.radians(azim)), np.sin(np.radians(azim))])
+    outward = target_pos[:, :2] - axis_xy
+    facing = outward @ view > 0.0
+    in_band = (target_pos[:, 2] >= z_range[0]) & (target_pos[:, 2] <= z_range[1])
+    shown = target_pos[facing & in_band]
+    if not len(shown):
+        return 0
+    # A nerve is a line of a hundred sources; a muscle is a cloud of several
+    # hundred, which at full size buries the field it is meant to explain.
+    dense = len(shown) > 150
+    ax.scatter(
+        shown[:, 0],
+        shown[:, 1],
+        shown[:, 2],
+        s=2.0 if dense else 5.0,
+        marker="o",
+        color=NATURE_PALETTE["teal"],
+        edgecolor="none",
+        alpha=0.45 if dense else 0.9,
         depthshade=False,
         zorder=10,
     )
+    return len(shown)
+
+
+def _screen_axes(elev: float, azim: float) -> dict[str, np.ndarray]:
+    """Where +x, +y and +z point on the page under the panels' camera.
+
+    The orthographic camera at (elev, azim) has screen-right
+    (-sin a, cos a, 0) and screen-up (-sin e cos a, -sin e sin a, cos e);
+    each body axis is drawn as its projection onto those two.
+    """
+    a, e = np.radians(azim), np.radians(elev)
+    right = np.array([-np.sin(a), np.cos(a), 0.0])
+    up = np.array([-np.sin(e) * np.cos(a), -np.sin(e) * np.sin(a), np.cos(e)])
+    return {k: np.array([v @ right, v @ up]) for k, v in zip("xyz", np.eye(3), strict=True)}
+
+
+#: Axis names as a reader needs them (docs/COORDINATES.md): +Y is posterior,
+#: so anterior is -Y.
+_AXIS_WORDS = {"x": "x  subject's left", "y": "y  posterior", "z": "z  superior"}
+
+#: Below this projected length an axis is mostly along the line of sight, and
+#: its arrow alone cannot say whether it points at the reader or away.
+_FORESHORTENED = 0.35
+
+
+def _axis_label(axis: str, elev: float, azim: float) -> str:
+    """The triad label for one axis, saying so when it points in/out of the page."""
+    word = _AXIS_WORDS[axis]
+    if float(np.hypot(*_screen_axes(elev, azim)[axis])) >= _FORESHORTENED:
+        return word
+    a, e = np.radians(azim), np.radians(elev)
+    to_camera = np.array([np.cos(e) * np.cos(a), np.cos(e) * np.sin(a), np.sin(e)])
+    towards = float(np.eye(3)["xyz".index(axis)] @ to_camera) > 0.0
+    return f"{word} ({'out of' if towards else 'into'} page)"
+
+
+def _axis_triad(fig: Any, rect: tuple[float, float, float, float], elev: float, azim: float) -> Any:
+    """A labelled x/y/z triad for the shared camera, in its own small axes.
+
+    The figures quote heights as "z = 1393 mm" and the panels had no axes to
+    say what z is. One triad serves both panels because they share a camera.
+    An axis pointing mostly into the page is drawn short, as it projects.
+    """
+    ax = fig.add_axes(rect)
+    ax.set_xlim(-1.5, 1.5)
+    ax.set_ylim(-1.5, 1.5)
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+    for k, (dx, dy) in _screen_axes(elev, azim).items():
+        ax.annotate(
+            "",
+            xy=(dx, dy),
+            xytext=(0.0, 0.0),
+            arrowprops={"arrowstyle": "-|>", "lw": 0.9, "color": NATURE_PALETTE["axis"]},
+        )
+        n = float(np.hypot(dx, dy))
+        # Labels sit past the tip; a foreshortened axis gets its label pushed
+        # out to a fixed radius so it does not collide with the origin.
+        r = max(n, 0.45) + 0.18
+        lx, ly = (dx / n * r, dy / n * r) if n > 1e-6 else (0.25, -0.25)
+        ha = "left" if lx > 0.05 else "right" if lx < -0.05 else "center"
+        ax.text(lx, ly, _axis_label(k, elev, azim), fontsize=6.5, ha=ha, va="center")
+    ax.set_title("body axes", fontsize=6.5, fontweight="normal", pad=1)
+    return ax
+
+
+def target_structure_label(cfg: Config) -> str:
+    """What the sources sit in, in words: "spinal cord", "left vagus"."""
+    tag = source_target_tag(cfg)
+    tissues = SOURCE_TARGETS.get(tag, {}).get("tissues", "")
+    if not tissues:
+        return source_region_label(cfg)
+    words = {"spinal_cord": "spinal cord", "vagus_left": "left vagus", "vagus_right": "right vagus"}
+    return " + ".join(words.get(t, t.replace("_", " ")) for t in tissues.split(","))
 
 
 def _array_pitch_mm(pos: np.ndarray) -> float:
@@ -326,6 +499,58 @@ def _array_pitch_mm(pos: np.ndarray) -> float:
     return float(np.percentile(d[:, 1], 90.0))
 
 
+#: How far round the body a sensor may sit and still be drawn. A plain
+#: front/back test keeps everything out to the silhouette, where the markers
+#: stop lying on the visible surface and trail around the outline instead.
+_SENSOR_FACING_MIN = 0.35
+
+
+def _mark_sensors(
+    ax: Any,
+    pos: np.ndarray,
+    axis_xy: np.ndarray,
+    azim: float,
+    z_range: tuple[float, float],
+) -> int:
+    """Draw the front-facing sensor positions over the painted field.
+
+    Without these the map reads as a field measured continuously on the skin.
+    It is not: it is a Gaussian interpolation of discrete readings taken one
+    stand-off out from the surface, and the interpolation is wide enough to
+    smooth away the spacing it was built from. Marking the positions puts the
+    sampling back in the figure, so the reader can see the array's resolution
+    rather than take the smoothness at face value.
+
+    Only positions facing the camera, and within the band of body the panel
+    actually shows, are drawn — for the depth-sorting reason in
+    :func:`_source_is_visible`. Returns how many were drawn.
+    """
+    view = np.array([np.cos(np.radians(azim)), np.sin(np.radians(azim))])
+    outward = pos[:, :2] - axis_xy
+    norm = np.linalg.norm(outward, axis=1, keepdims=True)
+    facing = (outward / np.where(norm > 1e-9, norm, 1.0)) @ view > _SENSOR_FACING_MIN
+    # The mesh is cropped to a band; the array is not. Sensors outside it have
+    # no surface under them and would be drawn against the background.
+    in_band = (pos[:, 2] >= z_range[0]) & (pos[:, 2] <= z_range[1])
+    front = pos[facing & in_band]
+    if not len(front):
+        return 0
+    ax.scatter(
+        front[:, 0],
+        front[:, 1],
+        front[:, 2],
+        s=3.5,
+        marker="o",
+        facecolor="none",
+        edgecolor=NATURE_PALETTE["axis"],
+        linewidth=0.35,
+        alpha=0.55,
+        depthshade=False,
+        zorder=9,
+    )
+    return len(front)
+
+
 def _body_panel(
     ax: Any,
     verts: np.ndarray,
@@ -343,6 +568,9 @@ def _body_panel(
     cmap: Any,
     rng: np.random.Generator,
     title: str,
+    show_sensors: bool = True,
+    moment: str = "z",
+    target_pos: np.ndarray | None = None,
 ) -> float:
     """Paint one modality on the body band in the shared camera; return its vlim.
 
@@ -364,8 +592,13 @@ def _body_panel(
     _draw_surface(
         ax, verts, faces, vals_v, near_v, vlim=vlim, max_extrap_mm=max_extrap_mm, cmap=cmap, rng=rng
     )
+    z_range = (float(verts[:, 2].min()), float(verts[:, 2].max()))
+    if show_sensors:
+        _mark_sensors(ax, sensor_pos, axis_xy, azim, z_range)
+    if target_pos is not None:
+        _mark_target(ax, target_pos, axis_xy, azim, z_range)
     if _source_is_visible(src, axis_xy, azim):
-        _mark_source(ax, src)
+        _mark_source(ax, src, moment, azim)
     _frame_3d(ax, verts, elev=elev, azim=azim)
     _scale_bar(ax, azim, mm=50.0)
     ax.set_title(title, pad=-2)
@@ -373,6 +606,18 @@ def _body_panel(
 
 
 # ── figure ─────────────────────────────────────────────────────────────────
+
+
+def torso_title(region: str, source_idx: int, z_mm: float, moment: str, level: str = "") -> str:
+    """The figure title: which source, where, in words a reader can place.
+
+    ``level`` is the vertebral landmark suffix, e.g. " (C6/C7)", or "" when
+    the bone meshes are not available to name one.
+    """
+    return (
+        f"{region} — field on the body surface   ·   source #{source_idx}, "
+        f"z = {z_mm:.0f} mm{level}, {moment}-oriented, 1 nA·m"
+    )
 
 
 def render_torso_topoplot(
@@ -383,8 +628,15 @@ def render_torso_topoplot(
     eeg_npz: Path | None = None,
     out_path: Path | None = None,
     dpi: int = 300,
+    show_sensors: bool = True,
 ) -> Path:
-    """Render the two-panel body-surface field map for the configured target."""
+    """Render the two-panel body-surface field map for the configured target.
+
+    ``show_sensors`` overlays the array positions, so the painted field is
+    read as the interpolation of a discrete array that it is rather than as a
+    continuous skin measurement. Turn it off for a presentation slide where
+    the markers only add clutter.
+    """
     apply_nature_style()
     rng = np.random.default_rng(0)
     cmap = divergent_cmap()
@@ -427,8 +679,10 @@ def render_torso_topoplot(
     elev = 10.0
     azim = float(np.degrees(np.arctan2(src[1] - axis_xy[1], src[0] - axis_xy[0])))
 
-    fig = plt.figure(figsize=(10.6, 7.2))
-    gs = fig.add_gridspec(1, 2, left=0.045, right=0.955, top=0.90, bottom=0.13, wspace=0.02)
+    target_pos = np.asarray(lf.source_pos, dtype=float)
+
+    fig = plt.figure(figsize=(10.6, 7.4))
+    gs = fig.add_gridspec(1, 2, left=0.085, right=0.965, top=0.86, bottom=0.13, wspace=0.02)
 
     # a — MEG on the body band.
     axa = fig.add_subplot(gs[0, 0], projection="3d", computed_zorder=False)
@@ -442,12 +696,15 @@ def render_torso_topoplot(
         sigma_mm=1.1 * pitch,
         k_nearest=20,
         max_extrap_mm=1.6 * pitch,
+        show_sensors=show_sensors,
         elev=elev,
         azim=azim,
         axis_xy=axis_xy,
         cmap=cmap,
         rng=rng,
         title="MEG  ·  magnetic field on the skin",
+        moment=moment,
+        target_pos=target_pos,
     )
     add_panel_label(axa, "a", x=0.02, y=0.97)
     cb = fig.colorbar(
@@ -467,7 +724,8 @@ def render_torso_topoplot(
     if eeg_lf is not None:
         # Electrodes are scalar contacts, one channel each — no radial subset.
         e_pos = np.asarray(eeg_lf.coil_pos, dtype=float)
-        e_val = np.asarray(eeg_lf.L_fT_per_nAm, float)[:, 3 * source_idx + k]
+        e_idx = matching_eeg_source_idx(lf, eeg_lf, source_idx)
+        e_val = np.asarray(eeg_lf.L_fT_per_nAm, float)[:, 3 * e_idx + k]
         # The same interpolation rule as panel a, at the electrode array's own
         # resolution — so what is painted, and what is left neutral, is decided
         # the same way for both modalities.
@@ -482,12 +740,15 @@ def render_torso_topoplot(
             sigma_mm=1.1 * e_pitch,
             k_nearest=20,
             max_extrap_mm=1.6 * e_pitch,
+            show_sensors=show_sensors,
             elev=elev,
             azim=azim,
             axis_xy=axis_xy,
             cmap=cmap,
             rng=rng,
             title="ESG  ·  electric potential on the skin",
+            moment=moment,
+            target_pos=target_pos,
         )
         cb_e = fig.colorbar(
             plt.cm.ScalarMappable(Normalize(-e_lim, e_lim), cmap),
@@ -513,12 +774,70 @@ def render_torso_topoplot(
         )
     add_panel_label(axb, "b", x=0.02, y=0.97)
 
+    _axis_triad(fig, (0.0, 0.40, 0.085, 0.16), elev, azim)
+
     region = source_region_label(cfg)
+    structure = target_structure_label(cfg)
     fig.suptitle(
-        f"{region} — field on the body surface   ·   source #{source_idx} "
-        f"at z = {src[2]:.0f} mm, {moment}-oriented, 1 nA·m",
-        y=0.975,
+        torso_title(
+            region, source_idx, float(src[2]), moment, level_suffix(cfg.data.bone_dir, src[2])
+        ),
+        y=0.985,
         fontsize=11,
+    )
+    # Which forward model drew this: the text compares FEM against the sphere
+    # and Biot-Savart models, and a reader of this figure alone cannot tell.
+    fig.text(
+        0.5,
+        0.945,
+        "Both panels: full-body finite-element forward model (DUNEuro), "
+        "not the sphere or Biot–Savart approximation",
+        ha="center",
+        fontsize=8,
+        color=NATURE_PALETTE["grey"],
+    )
+    handles = [
+        plt.Line2D(
+            [],
+            [],
+            marker=r"$\uparrow$",
+            ls="none",
+            ms=9,
+            color=NATURE_PALETTE["axis"],
+            label=f"dipole #{source_idx} and its moment ({moment})",
+        ),
+        plt.Line2D(
+            [],
+            [],
+            marker="o",
+            ls="none",
+            ms=3,
+            color=NATURE_PALETTE["teal"],
+            label=f"target: {structure} (all modelled sources)",
+        ),
+    ]
+    if show_sensors:
+        handles.append(
+            plt.Line2D(
+                [],
+                [],
+                marker="o",
+                ls="none",
+                ms=3,
+                mfc="none",
+                mew=0.5,
+                color=NATURE_PALETTE["axis"],
+                label="sensor / electrode positions",
+            )
+        )
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.93),
+        ncol=len(handles),
+        fontsize=7.5,
+        handletextpad=0.4,
+        columnspacing=1.6,
     )
 
     out = out_path or target_output(cfg, "torso_topoplot.png")

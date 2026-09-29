@@ -6,7 +6,128 @@ versioning. Dates in ISO-8601.
 
 ## [Unreleased]
 
+### Fixed — physics
+- **The Berg-Scherg reference series under-read the surface potential by
+  0.4-0.9x, and that is where the EEG calibration factor of 0.622 came
+  from.** `homogeneous_sphere_eeg_potential` divided the radial term of the
+  series by n and the tangential term by n(n+1); the correct coefficients,
+  the radial and tangential gradient of the Neumann point-source series, are
+  (2n+1) and (2n+1)/n. A centred tangential dipole read exactly half the
+  textbook 3 q·r̂ / (4π σ R²). The symmetry tests could not see an amplitude
+  error, and the MNE cross-checks never ran (below). The corrected series
+  now matches the textbook centred dipole, an independent numerical Neumann
+  solve (to 1e-12) and MNE's sphere EEG (to 1e-5, MNE's Berg approximation).
+
+  Re-running the sphere calibration against DUNEuro with the corrected
+  reference gives a median ratio of **0.98-1.03** across radius (80, 100 mm),
+  depth (30-70 mm), conductivity (0.2, 0.43 S/m) and pitch (2, 3 mm): in
+  mm-mode DUNEuro's EEG output is already µV per nA·m, as dimensional
+  analysis says it should be, and the "units or source-model discrepancy we
+  have not identified" was this bug. **`EEG_CALIBRATION_FACTOR` is now 1.0**
+  (was 0.622), the dimensional-analysis value, which `inob calibrate` now
+  reproduces: across 12 spheres (R 80/100 mm, depth 30-70 mm, σ 0.2/0.43)
+  the median ratio is 0.975-1.028 (CV 1.8%). The least-squares ratio ranges
+  0.72-1.02; it is dominated by the electrodes nearest the source, where a
+  3 mm mesh is least accurate for a shallow source.
+  Every electrode amplitude rises by 1/0.622 = 1.61x and every electrode
+  trial count falls by 2.6x; electrode leadfields solved before this carry
+  the old factor and must be re-solved. MG is unaffected.
+- **The EEG sphere calibration compared two different references.** The
+  DUNEuro potentials were common-average referenced and the analytic ones
+  were not, so the median ratio was biased by the analytic mean. Both are now
+  referenced, and a least-squares factor is reported beside the median.
+- **The MNE cross-checks skipped on every current MNE.** They imported
+  `_do_sphere_field` from `mne.forward._compute_forward`; MNE has since moved
+  it to `_compute_forward_numba`. Both paths are now tried. With MNE
+  installed the four Sarvas comparisons pass at rtol 1e-12, and a new EEG
+  comparison joins them. MNE is still not installed in CI, so they skip
+  there.
+- **A figure could pair a MEG source with a different electrode source.**
+  `inob torso` and the surface topoplot read the electrode leadfield at the
+  MEG source's index. The two are solved separately and need not share a
+  source list — the shipped muscle electrode solve has 7,563 sources against
+  MEG's 730 — so the muscle ESG panel painted a dipole ~110 mm from the one
+  in the MEG panel. Both now match by position
+  (`inob.viz.detectability.matching_eeg_source_idx`), warn when the nearest
+  electrode source is not the same point, and refuse when none is within
+  10 mm.
+- **An imported array's coils under the chin were reported as inside the
+  skin.** The shipped skin is consistently wound but open at its cut ends,
+  so the import oriented each face away from the body's centroid instead of
+  trusting the winding — and wherever the surface faces back towards the
+  centroid, a coil 10 mm out read as 10 mm in. A consistent winding is now
+  trusted up to one global sign taken by majority; the centroid rule is kept
+  for skins with no consistent winding. Exporting the shipped array and
+  importing it again now raises no warning.
+- **`inob location` looked for an untagged whole-body array.** Its leadfield
+  default carried the target tag and its electrode-array default did not, so
+  it only worked while a stray untagged file happened to exist. Both now
+  follow the tagged names `--set electrodes.shape=whole_body` writes.
+- **`scripts/run_target.sh muscle` always reported a failure.** It ran `inob
+  physiology`, which refuses muscle by design (a single evoked volley, no
+  event-train scenarios); the step is skipped for muscle targets.
+- The MEG mm-mode scale comment cited a `calibrate_meg_factor` that does not
+  exist. The factor of 0.1 is dimensional analysis; what checks it is the
+  2% sphere agreement in `tests/test_meg_sphere_validation.py`.
+
+### Added
+- **`inob placement --optimise` designs an array for a whole structure**
+  (Stephanie Mellor, after Roos, Hämäläinen & Iivanainen's cerebellar OPM
+  work). Positions are added one at a time, each the one that adds the most
+  total information (½ log2 det(I + L C Lᵀ/σ²), Iivanainen et al. 2021)
+  about every source in the target given those already chosen, under the
+  same spacing rule as the single-source comparison; the table sets it
+  against the positions nearest the structure. `--write-array opt.npz`
+  saves the chosen positions for `inob sensors --from`. Works for
+  triaxial, single-axis and imported arrays. On the shipped anatomy the
+  optimised array carries 14-17% more information than the positions nearest
+  the spinal cord for 4-16 sensors (1% at 64) and <=1% more for muscle; for
+  the vagus it does 5-6% worse than nearest-first, because greedy selection
+  under a spacing rule has no optimality guarantee. Proximity is an adequate
+  placement rule for these targets, as the single-source comparison found.
+- **`scripts/paper_numbers.py` — every number the worked examples quote,
+  from the leadfields on disk.** The counterpart of `paper_stats.py` for the
+  physics: noise floors per target, FEM/Sarvas ratios with their CIs, the
+  three spinal source models on the patch and the whole-body array, vagal
+  coupling along the nerve, the Q sweep, the propagation ratio and FWHM, the
+  muscle MUAP, and both placement results. Each comes from the function the
+  corresponding command uses. The draft had carried most of these numbers
+  forward from superseded solves; run this after any re-solve instead.
+- **A whole-body electrode solve no longer overwrites the target's patch.**
+  With `--set electrodes.shape=whole_body`, `--source-target T` now writes
+  `electrode_array_wholebody_T.mat` and `duneuro_eeg_leadfield_wholebody_T.npz`
+  beside the patch files instead of over them. The coverage comparisons and
+  torso panel b need both, and until now the second could only be made by
+  renaming files by hand. `scripts/brain_sanity.py` reads the tagged brain
+  file.
+- **`scripts/eeg_calibration_sweep.py`** runs `inob calibrate` across radius,
+  depth, conductivity and pitch and reports the spread. It replaces the
+  "27-case sweep" the manuscript cited, which was not in the repository.
+- **`scripts/sensor_sweep.py` — what noise and stand-off cost.** Rebuilds the
+  magnetometer array at each stand-off, solves one source with DUNEuro, and
+  reports amplitude and trials under each noise preset (default: spine C7
+  source; 6.5, 10, 20, 30 mm; QZFM-3 against QZFM-2).
+
 ### Changed
+- **Triaxial tangential coils are oriented about a fixed axis, not per
+  sensor.** T1 and T2 used to come from the SVD null space of each sensor's
+  own normal, which is orthonormal but leaves the split between them to
+  LAPACK: on the shipped 2,730-position array T1 wandered up to 30 degrees
+  out of horizontal (median 5) and jumped between neighbouring sensors by
+  several times their angular separation, so a tangential field map carried
+  steps the field does not have. Both tangents are now built about +Z —
+  `T1 = up x n`, `T2 = n x T1` — making T1 the circumferential axis and T2
+  the head-foot one at every sensor. `sensors.tangent_basis: local_svd`
+  restores the old frame for reproducing leadfields solved before this.
+
+  The radial channel is bit-identical and the tangent plane the two axes
+  span is identical to machine precision, so no field and no leadfield
+  magnitude changes. What does move is `per_source_peak`, which maxes over
+  channels and so depends on where inside that plane the axes sit: on the
+  solved leadfields the array peak shifts by -0.1% (vagus), +2.9% (spine)
+  and +0.1% (muscle), with individual sources moving up to 40%. Re-run
+  `inob sensors` and re-solve to pick this up; an existing leadfield is
+  unaffected until you do.
 - **`inob torso` is two panels, not four.** The unrolled θ–z map and the
   patch-frame ESG topography are gone; what is left is MEG and ESG on the
   body, side by side. Both are painted on the same mesh, in the same camera,
@@ -25,7 +146,165 @@ versioning. Dates in ISO-8601.
   "measured" mask now come from the array's own contact spacing rather than
   `electrodes.contact_pitch_mm`, which describes only the paddle.
 
+### Fixed
+- **The exploded anatomy figure sets its type from the render height.** Label
+  size was a fixed pixel count chosen for a 2,600 px render, so asking for a
+  taller figure silently shrank the captions. It is now a fraction of the
+  height, and set larger; leader lines are thicker and darker, which they had
+  to be to survive reduction to a column width.
+- **A system's label no longer lands on its neighbour's mesh.** Column packing
+  tested mesh extents alone, so two systems that merely stack (lower-limb
+  muscle under the spinal cord) shared a column and the lower caption was
+  drawn across the upper mesh. Packing now reserves the label's headroom,
+  which surfaced as soon as the type was large enough to read.
+- **The body-surface field maps show the array that produced them.**
+  `inob torso` draws the sensor positions over the painted field, so the map
+  reads as the Gaussian interpolation of a 30 mm-spaced array sampled at the
+  stand-off that it is, rather than as a continuous measurement on the skin —
+  the interpolation is wide enough to smooth away the spacing it was built
+  from. `--no-sensors` restores the clean surface.
+- **`inob --help` described `torso` as a four-panel figure.** It has been two
+  panels since the unrolled and patch-frame maps went; the summary now says
+  what it draws, MEG beside ESG.
+
 ### Added
+- **Bring your own array; single-axis arrays; a SQUID noise preset**
+  (Stephanie Mellor, Harry Cook, Nic Alexander). `inob sensors --from FILE`
+  (or `sensors.from_file`) imports a magnetometer array — CSV/TXT
+  `x y z nx ny nz` in mm, an NPZ with `coil_pos`/`coil_orient`, or a
+  FieldTrip `grad` .mat (`coilpos`/`coilori`, else `chanpos`/`chanori`;
+  `unit` m/cm/mm converted; v7 and v7.3; gradiometer `tra` refused) — and
+  `inob electrodes --from FILE` (or `electrodes.from_file`) does the same for
+  electrodes (CSV `x y z`, NPZ, FieldTrip `elec` with `elecpos`/`chanpos`).
+  Both write the file `forward`/`eeg` already read. Positions are taken as
+  body frame (docs/COORDINATES.md) and registering them is the user's job;
+  the import warns when coils sit inside the skin or > 100 mm from it
+  (electrodes: > 10 mm), and refuses zero-length or non-finite values.
+  Three orthogonal coils per position are stored in the R/T1/T2 block layout
+  with R the coil nearest the skin normal; one coil per position is stored
+  as single-axis `-R`; any other grouping keeps file order as `-A1`, `-A2`…
+  `sensors.axes: radial` (default `triaxial`, unchanged) generates one coil
+  per position along the outward skin normal, the usual SQUID arrangement.
+  Figures that took the first third of the channels as radial now read the
+  labels, and the placement comparison refuses a non-triaxial array with a
+  message instead of reading the wrong channels. New noise preset
+  `megin_triux_mag` (5 fT/√Hz, 3.3 kHz; Elekta TRIUX technical manual,
+  `verified=False`); the default stays `quspin_qzfm3`.
+- **Figure titles name the vertebral level, not just a height.** "z = 1393
+  mm" meant nothing to a reader without the model open (Maike Schmidt,
+  Stephanie Mellor). `inob.anatomy.vertebral_level` reads the segmented
+  vertebra meshes and names the level of the axial plane through a source —
+  "body of C6", "C4/C5 intervertebral gap" — from the anterior quarter of
+  each bone, which is its body: whole-bone bounds overlap by a level because
+  the spinous processes slope down. Titles now read "source #72, z = 1393 mm
+  (C6)" in `torso`, `topoplot`, `sensor-field`, `cross`, `location` and
+  `source-models`. The level is of the plane, not of the skin: the spine
+  patch is centred on the C7 bone (spinous process included), and the cord
+  source nearest it lies at the level of the C6 body. Without the bone
+  meshes the suffix is simply left off.
+- **`inob torso` says what is drawn and from which way.** An arrow shows the
+  dipole's moment where there was only a star; the target's modelled sources
+  (the cord, the vagus, the muscle cloud) are drawn through the skin so the
+  dipole is seen inside its structure; a labelled x/y/z triad names the axes
+  (anterior is −y) for the shared camera; a legend names each mark; and a
+  subtitle states that both panels come from the full-body FEM, not the
+  sphere or Biot–Savart models (Nic Alexander, Stephanie Mellor).
+- **Electrode re-referencing and a fixed dipole orientation, for `inob
+  detect` and `inob snr`.** Asked whether ESG loses to OPM because of the
+  common-average reference, and how a dipole pointing out of the back
+  compares (Stephanie Mellor). `--eeg-reference average|electrode:N|farthest|
+  nearest:x,y,z` re-references the stored leadfield (linear on its rows, no
+  re-solve; only contacts in the array can serve). In `inob detect` it adds a
+  single-contact `EEG_referenced_*` figure beside the bipolar one, which is
+  reference-free and does not move. `--orientation x|y|z|posterior|anterior|
+  vx,vy,vz` fixes the moment; the default "best" is now defined in `--help`
+  as the maximum over channels (or contact pairs) and over the x, y, z axes.
+  Both default to the old behaviour and leave the output unchanged. At the
+  C7 source (#72) with Q = 5.11 nA·m, the 32-contact patch reads 0.19 µV
+  average-referenced, 0.33 µV far-referenced (402 trials, equal to the
+  best pair); the 1200-contact whole-body array reaches 0.64 µV (104
+  trials); the OPM needs 6. A posterior (+Y) dipole is harder for both, and
+  worse for the electrodes: 0.05 µV on the patch (~17,000 trials) and 0.11
+  µV on the whole-body array (~3,600), against 179 fT (8 trials).
+- **`noise.eeg_contact_temperature_K`** (default 310.15 K, unchanged) sets
+  the temperature in the electrode Johnson term. Skin-like 305 K lowers the
+  electrode noise floor by 0.014%, because the amplifier dominates it.
+- **`scripts/brain_sanity.py` — MG against EG for the one target where both
+  are well measured.** Asked why electrography comes out so far behind
+  magnetography at the neck (Stephanie Mellor), the package should first get
+  the brain right. On the shipped whole-body FEM a cortical source 20-30 mm
+  under the skin gives a median 134 fT/nA·m at the OPM and 0.22 µV/nA·m
+  between the best contact pair — 1.3 pT and 2.2 µV for a 10 nA·m evoked
+  dipole, which is where on-scalp OPM and scalp EEG evoked responses sit. The
+  leadfields are not the asymmetry. The noise floors are: under the 217 fT
+  and 2.19 µV floors every other target is judged against, EG's SNR is
+  0.14-0.31 of MG's for the brain, where MEG and EEG evoked SNR are
+  empirically comparable (Goldenholz et al. 2009). Both floors are
+  instrument-only — no environmental interference for the OPM, no EMG, ECG
+  or background EEG for the electrodes — and that, not the forward model, is
+  where the MG advantage in the worked examples comes from. The defaults are
+  unchanged; a noise model calibrated against empirical brain SNR is an open
+  question.
+- **`scripts/paper_stats.py` — the counts the manuscript makes about the
+  package, measured rather than remembered.** Four of the six were wrong by
+  submission: 605 tests against 948, 18,400 lines of Python against 22,066,
+  28,000 with tests against 33,789, and 13,000 lines of TypeScript against
+  9,610. (The two Nic Alexander queried, the subcommand and binary counts,
+  were the two that were right.) Run it and paste the output at each
+  revision.
+- **`inob placement` — does the forward model beat a tape measure?** Imaging
+  Neuroscience asks a software toolbox to compare itself against existing
+  practice, and the practice here is putting the sensors as close to the
+  target as they will go. The command places `--n-sensors` positions two
+  ways from one solved leadfield — by predicted coupling, and by proximity
+  to the source — holds both to the same minimum spacing, and scores both
+  by the multichannel matched-filter amplitude.
+
+  On the shipped anatomy the answer is that it does not: the two arms land
+  within 1% (vagus), 1% (spine) and 9% (muscle) of each other, because
+  under a convex skin surface the best-coupled positions are very nearly the
+  nearest ones (Spearman rho 0.88-0.99 between coupling and proximity; 19-20
+  of the top 20 positions shared). That holds out to a 50 mm error in where
+  the experimenter thinks the source is. The model's value is in the
+  amplitude and the trial count, which proximity cannot supply at all, and
+  in which region to cover — not in picking sensors within a covering array.
+  `--min-spacing-mm` and `--source-idx` vary the comparison;
+  `inob placement --help` states the result so nobody has to rediscover it.
+- **`per_source_triaxial_peak`** in `inob.analysis.snr`: the field magnitude
+  over a position's three axes, rather than its largest single axis. A
+  triaxial sensor measures all three at once, so any orientation is
+  recoverable afterwards and the available signal is the vector magnitude —
+  which, unlike `per_source_peak`, does not depend on the tangential
+  convention. It is not wired into the reported figures; `per_source_peak`
+  remains what `inob detect` uses.
+- **Per-tissue mesh quality at FEM build time.** `inob build-fem` now logs
+  the Joe-Liu distribution for each compartment, not just one figure for the
+  whole mesh, via `inob.mesh.quality.quality_by_tissue`. On the shipped
+  whole-body mesh the worst of 294,031 elements scores 0.0989 against the
+  0.05 gate and the median is 0.585, so the threshold is never binding: it
+  is a tripwire for a mesher failure, not a tuning knob, and that is now
+  stated where it is enforced.
+- **Heart, brain and lungs are modelled tissues, not just figure anatomy.**
+  The FEM gains three compartments — myocardium 0.20 S/m (Gabriel 1996),
+  homogeneous brain 0.33 S/m (Haueisen 2002) and inflated lung 0.10 S/m
+  (Gabriel 1996) — and `--source-target` gains `heart` and `brain`, so the
+  cardiac and cortical generators can be solved on the same body, the same
+  array and the same noise floor as the vagal one. The heart compartment is
+  myocardium throughout (chamber blood is not separate) and the brain has no
+  grey/white split and no CSF; both are stated in the config and in the
+  physiology profiles rather than left for the reader to discover. Lungs are
+  a volume conductor only — 3.2 litres of low-conductivity tissue flanking
+  the heart, which is what shapes the cardiac field seen at the neck.
+- **Physiology profiles for the two new targets, both marked PROVISIONAL.**
+  `heart` carries the ~2 µA·m peak-QRS equivalent dipole (Baule & McFee 1963;
+  Wikswo 1980) and an 80 ms QRS width; `brain` carries the conventional
+  10 nA·m cortical evoked ECD (Hämäläinen 1993) and a 30 ms response width.
+  Both are measured equivalent dipoles, so `PhysiologyProfile` gained
+  `event_moment_nAm_override`: a generator that is not a volley of myelinated
+  axons now states its event moment instead of deriving a wrong one from the
+  Hämäläinen per-fibre formula. Neither profile has an activation-sequence or
+  cortical-patch model, so both answer "how large is the field here" and not
+  "what does the waveform look like".
 - **A labelled exploded view of the anatomy the model has to represent**
   (`scripts/exploded_anatomy.py` → `outputs/anatomy/exploded_anatomy.png`):
   brain, vertebral column, spinal cord, vagus nerve, heart, lungs,

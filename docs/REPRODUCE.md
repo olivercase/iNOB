@@ -48,6 +48,14 @@ bash scripts/regenerate_figures.sh
 | Cervical vagus | `inob topoplot --source-target vagus`, `inob detect --source-target vagus`, `inob physiology --source-target vagus`, `inob sensor-field --source-target vagus` | `outputs/*_vagus.png` |
 | Spinal cord | same with `--source-target spine`, plus `inob cross`, `inob cap-compare`, `inob location` | `outputs/*_spine.png` |
 | Neck muscles | `inob topoplot --source-target muscle --target meg`, `inob cap-compare --source-target muscle`, `python scripts/muscle_field_sarvas.py` | `outputs/*_muscle.png`, `outputs/muscle_skin_topoplot.png` |
+| Heart (peak-QRS dipole) | `inob forward --source-target heart --set forward.source_spacing_mm=10`, then `inob detect --source-target heart` | `outputs/*_heart.png` |
+| Brain (cortical evoked dipole) | same with `--source-target brain` | `outputs/*_brain.png` |
+| Whole-body electrode array (coverage comparisons, torso panel b) | `inob electrodes --source-target T --set electrodes.shape=whole_body`, then `inob eeg` with the same flags (muscle: add `--set forward.source_spacing_mm=15`) | `outputs/forward/duneuro_eeg_leadfield_wholebody_T.npz` |
+| Field on the body (Figs 3-5) | `inob torso --source-target T --esg-npz outputs/forward/duneuro_eeg_leadfield_wholebody_T.npz` | `outputs/torso_topoplot_T.png` |
+| Stand-off and noise level | `python scripts/sensor_sweep.py` (one DUNEuro solve per stand-off) | table on stdout |
+| Array design | `inob placement --source-target T`, `inob placement --source-target T --optimise` | table on stdout, `outputs/placement_comparison_T.png` |
+| EEG unit calibration across spheres | `python scripts/eeg_calibration_sweep.py` | table on stdout, `outputs/calibration/sweep/` |
+| Every number in the worked examples | `python scripts/paper_numbers.py` (reads the leadfields above; no solve) | stdout |
 | Conductivity sensitivity | `inob sensitivity` (re-solves DUNEuro per perturbation) | `outputs/forward/sensitivity/` |
 
 ## Archiving what you produced

@@ -27,7 +27,8 @@ import math
 
 import numpy as np
 
-from inob.analysis.snr import compute_noise_floors, per_source_peak
+from inob.analysis.reference import rereference
+from inob.analysis.snr import compute_noise_floors, parse_orientation, per_source_peak
 from inob.config import Config
 from inob.io.npz import load_leadfield
 from inob.physiology.profiles import profile_for
@@ -65,6 +66,8 @@ def compute_detectability(
     strengths_nAm=None,
     threshold_snr: float = 3.0,
     modality: str = "meg",
+    orientation=None,
+    eeg_reference=None,
 ) -> dict:
     """Per-source SNR + trials-to-detect from a solved leadfield.
 
@@ -73,6 +76,13 @@ def compute_detectability(
     the positions that were solved — for the GUI flow these are the clicked
     ``cfg.forward.point_sources``. Raises ``FileNotFoundError`` if the required
     leadfield has not been computed yet.
+
+    ``orientation`` fixes the dipole direction (a unit vector or a spec for
+    :func:`inob.analysis.snr.parse_orientation`); ``None`` keeps the best of
+    x, y and z. ``eeg_reference`` re-references the electrode leadfield before
+    taking the single-channel peak (see
+    :func:`inob.analysis.reference.parse_reference`); ``None`` keeps the
+    stored common average. It is an error for MEG, which has no reference.
     """
     modality = modality.lower()
     floors = compute_noise_floors(cfg)
@@ -87,7 +97,14 @@ def compute_detectability(
     else:
         raise ValueError(f"modality must be 'meg' or 'eeg', got {modality!r}")
 
-    peak = per_source_peak(lf.L_fT_per_nAm)  # (S,) fT/nAm or µV/nAm
+    L = lf.L_fT_per_nAm
+    if eeg_reference is not None:
+        if modality != "eeg":
+            raise ValueError("eeg_reference applies to the eeg modality only")
+        L = rereference(L, eeg_reference, electrode_pos=lf.coil_pos, source_pos=lf.source_pos)
+    if isinstance(orientation, str):
+        orientation = parse_orientation(orientation)
+    peak = per_source_peak(L, orientation=orientation)  # (S,) fT/nAm or µV/nAm
     n_sources = int(peak.shape[0])
     pos = np.asarray(lf.source_pos, dtype=float)
     # Default event strength comes from the target's physiology rather than a

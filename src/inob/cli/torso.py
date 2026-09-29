@@ -60,6 +60,11 @@ see `inob --help` for the full list.""",
         help="Output PNG (default: outputs/torso_topoplot_<target>.png).",
     )
     p.add_argument("--dpi", type=int, default=300)
+    p.add_argument(
+        "--no-sensors",
+        action="store_true",
+        help="Hide the array positions drawn over the field.",
+    )
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="torso_topoplot")
     out = render_torso_topoplot(
@@ -69,6 +74,7 @@ see `inob --help` for the full list.""",
         eeg_npz=args.esg_npz,
         out_path=args.out,
         dpi=args.dpi,
+        show_sensors=not args.no_sensors,
     )
     print(f"figure: {out}")
     return 0

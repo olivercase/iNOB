@@ -26,6 +26,7 @@ from inob.analysis.cross_modality import (
     per_source_amplitude,
     predict_meg_from_eeg,
 )
+from inob.anatomy import level_suffix
 from inob.config import Config, target_output
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
@@ -148,7 +149,10 @@ def render_cross_modality(
     ax_b = fig.add_subplot(gs[0, 1])
     vmin_b, vmax_b = divergent_norm(V_eeg_obs)
     _draw_eeg_2d_topoplot(ax_b, electrodes, V_eeg_obs, cfg, vmin=vmin_b, vmax=vmax_b)
-    ax_b.set_title(f"Observed EEG  ·  source z = {src[2]:.0f} mm  (longitudinal moment)")
+    ax_b.set_title(
+        f"Observed EEG  ·  source z = {src[2]:.0f} mm"
+        f"{level_suffix(cfg.data.bone_dir, src[2])}  (longitudinal moment)"
+    )
     add_panel_label(ax_b, "b")
 
     # ── panel c: predicted MEG (from EEG inversion) ────────────────────────

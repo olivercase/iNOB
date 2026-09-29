@@ -26,7 +26,7 @@ def test_main_defaults(tmp_path, monkeypatch) -> None:
     tag = source_target_tag(cfg)
     assert calls["paddle_mat"] == cfg.outputs.electrodes_mat
     assert calls["paddle_npz"] == cfg.outputs.forward_eeg_npz
-    assert calls["wholebody_mat"] == Path("outputs/sensors/electrode_array_wholebody.mat")
+    assert calls["wholebody_mat"] == Path("outputs/sensors/electrode_array_wholebody_vagus.mat")
     assert calls["wholebody_npz"] == tag_path(
         Path("outputs/forward/duneuro_eeg_leadfield_wholebody.npz"), tag
     )

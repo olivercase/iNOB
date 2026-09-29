@@ -119,6 +119,67 @@ def add_common_args(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _orientation_spec(text: str) -> str:
+    """argparse type: validate an orientation spec, keep the string."""
+    from inob.analysis.snr import parse_orientation
+
+    try:
+        parse_orientation(text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+    return text
+
+
+def _reference_spec(text: str) -> str:
+    """argparse type: validate a reference spec, keep the string."""
+    from inob.analysis.reference import parse_reference
+
+    try:
+        parse_reference(text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+    return text
+
+
+_BEST_ORIENTATION_HELP = (
+    "Default 'best': for each source, the largest signal over every channel "
+    "(or contact pair) and over the three axis-aligned directions x, y and z "
+    "(not oblique ones)."
+)
+
+
+def add_orientation_arg(p: argparse.ArgumentParser, *, default_help: str | None = None) -> None:
+    """Attach ``--orientation`` (fixed dipole direction).
+
+    ``default_help`` says what happens without it; commands whose signal is
+    not a best-channel maximum pass their own wording.
+    """
+    p.add_argument(
+        "--orientation",
+        type=_orientation_spec,
+        default=None,
+        metavar="DIR",
+        help="Dipole direction: x, y, z, posterior (+y, out of the back), "
+        "anterior (-y), or three numbers vx,vy,vz. " + (default_help or _BEST_ORIENTATION_HELP),
+    )
+
+
+def add_eeg_reference_arg(p: argparse.ArgumentParser) -> None:
+    """Attach ``--eeg-reference`` (electrode reference, default average)."""
+    p.add_argument(
+        "--eeg-reference",
+        type=_reference_spec,
+        default=None,
+        metavar="REF",
+        help="Reference for single-electrode figures: average (the saved "
+        "leadfield), electrode:N, farthest (the contact farthest from each "
+        "source), or nearest:x,y,z (the contact nearest that point, in mm). "
+        "Only contacts in the array can serve; a point off the array is "
+        "never solved. Bipolar (contact-difference) figures are "
+        "reference-free and do not change.",
+    )
+
+
 def apply_source_target(cfg: Config, target: str) -> Config:
     """Repoint every per-target output at ``target`` and set its source tissue.
 
@@ -153,6 +214,15 @@ def apply_source_target(cfg: Config, target: str) -> Config:
     # EEG solve would silently use whichever array was written last.
     elec_tagged = tag_path(cfg.outputs.electrodes_mat, target)
     elec_png_tagged = tag_path(cfg.outputs.electrodes_png, target)
+    eeg_name = f"duneuro_eeg_leadfield_{target}.npz"
+    # A whole-body array is a second electrode array for the same target, not
+    # a replacement for its patch: tag both files so solving one does not
+    # overwrite the other. Without this the only way to get a whole-body
+    # leadfield beside the patch was to rename files by hand.
+    if cfg.electrodes.shape == "whole_body":
+        elec_tagged = tag_path(cfg.outputs.electrodes_mat, f"wholebody_{target}")
+        elec_png_tagged = tag_path(cfg.outputs.electrodes_png, f"wholebody_{target}")
+        eeg_name = f"duneuro_eeg_leadfield_wholebody_{target}.npz"
     # Chunks and the conductivity-sensitivity sweep are per-target too: both
     # are derived from this target's sources, so sharing a directory would
     # let one target's run consume or overwrite another's intermediates.
@@ -163,7 +233,7 @@ def apply_source_target(cfg: Config, target: str) -> Config:
         outputs=replace(
             cfg.outputs,
             forward_npz=fwd_dir / f"duneuro_leadfield_{target}.npz",
-            forward_eeg_npz=fwd_dir / f"duneuro_eeg_leadfield_{target}.npz",
+            forward_eeg_npz=fwd_dir / eeg_name,
             electrodes_mat=elec_tagged,
             electrodes_png=elec_png_tagged,
             forward_chunks_dir=tag_path(cfg.outputs.forward_chunks_dir, target),

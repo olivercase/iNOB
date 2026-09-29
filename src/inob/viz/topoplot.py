@@ -26,9 +26,11 @@ import numpy as np
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
+from inob.anatomy import level_suffix
 from inob.config import Config, source_region_label
 from inob.io.hdf5 import load_geometry, load_sensors
 from inob.io.npz import load_leadfield
+from inob.sensors.layout import position_channels
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -648,15 +650,16 @@ def render_dual_topoplot(
     except Exception:
         # The skin backdrop is decorative; the data plot must still draw.
         logger.debug("skin backdrop skipped", exc_info=True)
+    opm_pos = sensors.coilpos[position_channels(sensors.labels, sensors.coilpos)]
     ax_a.scatter(
-        sensors.coilpos[::3, 0],
-        sensors.coilpos[::3, 1],
-        sensors.coilpos[::3, 2],
+        opm_pos[:, 0],
+        opm_pos[:, 1],
+        opm_pos[:, 2],
         c=NATURE_PALETTE["blue"],
         s=4,
         alpha=0.5,
         depthshade=False,
-        label=f"OPM array (n={len(sensors.coilpos) // 3})",
+        label=f"OPM array (n={len(opm_pos)})",
     )
     ax_a.scatter(
         electrodes.coilpos[:, 0],
@@ -776,7 +779,7 @@ def render_dual_topoplot(
 
     fig.suptitle(
         f"Dual-modality forward model of a single {source_region_label(cfg)} source "
-        f"(z = {src[2]:.0f} mm, longitudinal moment)",
+        f"(z = {src[2]:.0f} mm{level_suffix(cfg.data.bone_dir, src[2])}, longitudinal moment)",
         fontsize=11,
         fontweight="bold",
         y=0.985,
@@ -813,7 +816,8 @@ def render_meg_montage(
             source_idx=int(idx),
             ax=ax,
             show_skin=True,
-            title=f"z = {lf.source_pos[idx, 2]:.0f} mm",
+            title=f"z = {lf.source_pos[idx, 2]:.0f} mm"
+            f"{level_suffix(cfg.data.bone_dir, lf.source_pos[idx, 2])}",
             panel_label=panel_letters[k] if k < len(panel_letters) else None,
         )
     fig.suptitle(

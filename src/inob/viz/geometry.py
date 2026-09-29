@@ -18,6 +18,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from inob.config import Config
 from inob.io.hdf5 import load_geometry, load_sensors
+from inob.sensors.layout import position_channels
 
 logger = logging.getLogger(__name__)
 
@@ -127,9 +128,9 @@ def render_geometry(
 
     if with_sensors and cfg.outputs.sensors_mat.exists():
         sensors = load_sensors(cfg.outputs.sensors_mat)
-        n = len(sensors.coilpos) // 3
-        positions = sensors.coilpos[:n]
-        normals = sensors.coilori[:n]
+        one_per_position = position_channels(sensors.labels, sensors.coilpos)
+        positions = sensors.coilpos[one_per_position]
+        normals = sensors.coilori[one_per_position]
         for ax, (xi, yi) in ((ax_lat, (0, 1)), (ax_post, (2, 1)), (ax_ax, (0, 2))):
             ax.scatter(
                 positions[:, xi],

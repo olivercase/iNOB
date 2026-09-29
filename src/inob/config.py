@@ -40,6 +40,11 @@ class DataPaths:
     muscle_dir: Path
     vessel_dir: Path
     spinal_cord_dir: Path
+    # Thoracic and cranial compartments. Optional so that the reduced configs
+    # (quickstart, tiny_test) — which model the neck alone — stay valid.
+    heart_dir: Path | None = None
+    brain_dir: Path | None = None
+    lung_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +108,34 @@ class FemCfg:
     validate: FemValidate
 
 
+#: How the two tangential coil axes are oriented at each sensor position.
+#:
+#: ``global_up`` builds both from one fixed reference axis (+Z, superior),
+#: so T1 is the horizontal tangent and T2 the head-foot one at every
+#: position and a tangential field map is comparable across the array.
+#: ``local_svd`` takes the null space of each normal on its own, which is
+#: what the package did before v1.2.0: still orthonormal, but with an
+#: orientation LAPACK picks rather than one anatomy fixes, so T1 at one
+#: sensor bears no relation to T1 at its neighbour. Kept to reproduce
+#: leadfields solved before the change.
+TANGENT_BASES: tuple[str, ...] = ("global_up", "local_svd")
+
+#: Used when a config predates ``sensors.tangent_basis``.
+DEFAULT_TANGENT_BASIS = "global_up"
+
+#: How many coils a generated sensor position carries.
+#:
+#: ``triaxial`` is three: R, T1 and T2. ``radial`` is R alone — one coil per
+#: position, the usual SQUID magnetometer arrangement. R is the outward unit
+#: normal of the skin triangle under the sensor (the face the placement ray
+#: hit), so a positive reading is field pointing out of the body; the coil
+#: itself sits ``depth_mm`` further out along that normal.
+SENSOR_AXES: tuple[str, ...] = ("triaxial", "radial")
+
+#: Used when a config predates ``sensors.axes``.
+DEFAULT_SENSOR_AXES = "triaxial"
+
+
 @dataclass(frozen=True)
 class SensorCfg:
     resolution_mm: float
@@ -110,6 +143,24 @@ class SensorCfg:
     angular_margin_deg: float
     cylinder_radius_factor: float
     z_crop_low_factor: float
+    tangent_basis: str = DEFAULT_TANGENT_BASIS
+    axes: str = DEFAULT_SENSOR_AXES
+    # A magnetometer array to import instead of generating one (.csv/.txt,
+    # .npz or a FieldTrip grad .mat; see inob.sensors.imported). Relative
+    # paths resolve against the project root. When set, every placement
+    # field above is ignored: the file's positions are used as they are.
+    from_file: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.tangent_basis not in TANGENT_BASES:
+            raise ConfigError(
+                f"[sensors] tangent_basis must be one of {list(TANGENT_BASES)}, "
+                f"got {self.tangent_basis!r}"
+            )
+        if self.axes not in SENSOR_AXES:
+            raise ConfigError(
+                f"[sensors] axes must be one of {list(SENSOR_AXES)}, got {self.axes!r}"
+            )
 
 
 #: FEM discretisations DUNEuro compiles for tetrahedra.
@@ -407,6 +458,9 @@ class ElectrodeCfg:
     label_prefix: str = "elec"
     n_contacts: int = 1000  # whole_body: total contact count
     sample_seed: int = 0  # whole_body: RNG seed for skin sampling
+    # An electrode array to import instead of placing one (.csv/.txt, .npz or
+    # a FieldTrip elec .mat). Relative paths resolve against the project root.
+    from_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -426,6 +480,13 @@ class NoiseCfg:
     opm_bandwidth_hz: float = 135.0
     eeg_amplifier_uV_sqrtHz: float = 0.1
     eeg_electrode_skin_kohm: float = 10.0
+    # Temperature of the electrode-skin contact resistance in the Johnson term
+    # sqrt(4 k T R). 310.15 K is core temperature, kept as the default so
+    # published floors reproduce; skin under a contact is nearer 305 K. That
+    # lowers the Johnson voltage by 0.8% (its power by 1.7%) but the total
+    # electrode floor by only 0.014%, because at 10 kOhm Johnson noise is
+    # 0.013 uV/sqrt(Hz) against a 0.1 uV/sqrt(Hz) amplifier.
+    eeg_contact_temperature_K: float = 310.15
     # Recording passband. Noise integrates over ``band_hi - band_lo``, so the
     # filter settings are part of the detectability answer rather than an
     # afterthought: a broadband 0-1000 Hz figure overstates σ by ~1.5x against
@@ -441,6 +502,11 @@ class NoiseCfg:
         if self.opm_bandwidth_hz <= 0:
             raise ConfigError(
                 f"[noise] opm_bandwidth_hz must be positive, got {self.opm_bandwidth_hz}"
+            )
+        if self.eeg_contact_temperature_K <= 0:
+            raise ConfigError(
+                "[noise] eeg_contact_temperature_K must be positive (kelvin), "
+                f"got {self.eeg_contact_temperature_K}"
             )
         if self.bandwidth_hz is None and self.band_hi_hz <= self.band_lo_hz:
             raise ConfigError(
@@ -587,6 +653,11 @@ SOURCE_TARGETS: dict[str, dict[str, str]] = {
         "level": "c7",
     },
     "muscle": {"tissues": "muscle", "label": "muscle", "electrodes": "muscle"},
+    # Thoracic and cranial generators. Both are competing sources for a
+    # concurrent brain-heart-vagus array rather than peripheral-nerve targets,
+    # so their electrode patch sits over the generator itself.
+    "heart": {"tissues": "heart", "label": "heart", "electrodes": "heart"},
+    "brain": {"tissues": "brain", "label": "brain", "electrodes": "brain"},
     "spine_muscle": {
         "tissues": "spinal_cord,muscle",
         "label": "spine + muscle",
@@ -841,6 +912,20 @@ def _build_shrinkwrap(d: dict[str, Any]) -> dict[str, ShrinkwrapParams]:
     return out
 
 
+def _build_sensors(d: dict[str, Any]) -> SensorCfg:
+    """Build :class:`SensorCfg`, defaulting the post-v1.1 fields if absent.
+
+    Every other sensor field stays required, so a typo is still caught. Only
+    ``tangent_basis``, ``axes`` and ``from_file`` are filled, because they
+    postdate the configs in the wild and an older config should keep loading.
+    """
+    d = dict(d)
+    d.setdefault("tangent_basis", DEFAULT_TANGENT_BASIS)
+    d.setdefault("axes", DEFAULT_SENSOR_AXES)
+    d.setdefault("from_file", None)
+    return _build_dataclass(SensorCfg, d, "sensors", allow_defaults=False)
+
+
 def _build_noise(d: dict[str, Any]) -> NoiseCfg:
     """Build :class:`NoiseCfg`, filling the OPM numbers from its preset.
 
@@ -927,10 +1012,15 @@ def _build_outputs(d: dict[str, Any], root: Path) -> OutputPaths:
     return OutputPaths(**{k: resolve_path(d[k], root) for k in expected})
 
 
+_OPTIONAL_DATA_DIRS = ("heart_dir", "brain_dir", "lung_dir")
+
+
 def _build_data(d: dict[str, Any], root: Path) -> DataPaths:
     expected = {f.name for f in fields(DataPaths)}
-    _check_keys("data", expected, set(d.keys()))
+    _check_keys("data", expected, set(d.keys()), optional=set(_OPTIONAL_DATA_DIRS))
+    optional = {k: resolve_path(d[k], root) for k in _OPTIONAL_DATA_DIRS if k in d}
     return DataPaths(
+        **optional,
         bone_dir=resolve_path(d["bone_dir"], root),
         torso_skin=resolve_path(d["torso_skin"], root),
         vagus_left_glob=str(resolve_path(d["vagus_left_glob"], root)),
@@ -1005,7 +1095,7 @@ def load_config(
         outputs=_build_outputs(raw["outputs"], root),
         geometry=_build_geometry(raw["geometry"]),
         fem=_build_fem(raw["fem"]),
-        sensors=_build_dataclass(SensorCfg, raw["sensors"], "sensors", allow_defaults=False),
+        sensors=_build_sensors(raw["sensors"]),
         electrodes=_build_dataclass(
             ElectrodeCfg,
             raw.get("electrodes", {}),

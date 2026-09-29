@@ -21,9 +21,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
 
+from inob.anatomy import level_suffix
 from inob.anatomy import vertebra_z_band as _anatomy_z_band
 from inob.config import Config, source_target_tag, target_output
 from inob.io.npz import Leadfield, load_leadfield
+from inob.sensors.layout import radial_channels
 from inob.viz.style import (
     NATURE_PALETTE,
     add_panel_label,
@@ -55,8 +57,12 @@ def _color_pct_clip(cfg: Config) -> float | None:
 
 
 def _radial_idx(lf: Leadfield) -> np.ndarray:
-    """Channel indices of the radial OPM component (first third of the array)."""
-    return np.arange(lf.coil_pos.shape[0] // 3)
+    """Channel indices of the radial OPM component, one per position.
+
+    The first third of a triaxial array, every channel of a single-axis one;
+    read from the labels so that a single-axis array is not cut to a third.
+    """
+    return radial_channels(lf.channel_names)
 
 
 def _dominant_moment(lf: Leadfield, source_idx: int) -> int:
@@ -371,7 +377,8 @@ def render_sensor_field(
     ch = sensor_field_characteristics(lf, source_idx, moment=moment)
     scope = f"{region_label} " if region_label else ""
     fig.suptitle(
-        f"Sensor field pattern — {scope}source {source_idx}/{n_src} at z={src[2]:.0f} mm "
+        f"Sensor field pattern — {scope}source {source_idx}/{n_src} at z={src[2]:.0f} mm"
+        f"{level_suffix(cfg.data.bone_dir, src[2])} "
         f"(dominant moment {ch['dominant_moment']}, peak {ch['peak_fT_per_nAm']:.0f} fT/nA·m, "
         f"lobe sep {ch['dipole_lobe_separation_mm']:.0f} mm)",
         fontsize=12,

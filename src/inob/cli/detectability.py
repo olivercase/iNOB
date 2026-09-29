@@ -10,8 +10,14 @@ from pathlib import Path
 
 import numpy as np
 
+from inob.analysis.snr import parse_orientation
 from inob.anatomy import VERTEBRA_LEVELS, vertebra_z_band
-from inob.cli._common import add_common_args, setup
+from inob.cli._common import (
+    add_common_args,
+    add_eeg_reference_arg,
+    add_orientation_arg,
+    setup,
+)
 from inob.config import Config, source_target_tag
 from inob.io.npz import load_leadfield
 from inob.viz.detectability import (
@@ -94,6 +100,15 @@ examples:
   inob detect --q-nAm 20                 assume a 20 nA·m source
   inob detect --level c7                 only sources at one vertebral level
   inob detect --print-summary            JSON to stdout as well as the figure
+  inob detect --orientation posterior    dipole pointing out of the back
+  inob detect --eeg-reference farthest   far-referenced electrode amplitude
+
+What "signal" means. OPM: the largest |field| on any one channel. Electrodes:
+the largest potential difference between any two contacts (best bipolar
+pair). A difference between two contacts does not depend on the reference, so
+--eeg-reference never changes those numbers or the figures; it adds a
+single-contact amplitude against that reference to the JSON summary. That
+amplitude can never exceed the bipolar one, which is its upper bound.
 
 The planning question this whole package exists to answer.
 
@@ -148,6 +163,8 @@ see `inob --help` for the full list.""",
         "at the spine's magnetospinography anchor, and --q-nAm 1 5.11 10 "
         "20 plots it over the cord's whole reported range.",
     )
+    add_orientation_arg(p)
+    add_eeg_reference_arg(p)
     p.add_argument("--out-surface", type=Path, default=None)
     p.add_argument("--out-detect", type=Path, default=None)
     p.add_argument("--dpi", type=int, default=300)
@@ -159,6 +176,7 @@ see `inob --help` for the full list.""",
     args = p.parse_args(argv)
     cfg = setup(args, log_prefix="detectability")
     source_idx = _resolve_source_idx(cfg, args.level, args.source_idx)
+    orientation = parse_orientation(args.orientation)
     scenarios = fixed_q_scenarios(*args.q_nAm) if args.q_nAm else None
     if scenarios is not None:
         logger.info(
@@ -183,10 +201,16 @@ see `inob --help` for the full list.""",
             scenarios=scenarios,
             snr_threshold=args.snr_threshold,
             max_trials=args.max_trials,
+            **({"orientation": orientation} if orientation is not None else {}),
         )
 
     if args.print_summary or args.target in ("detect", "all"):
-        summary = detectability_summary(cfg, source_idx=source_idx, scenarios=scenarios)
+        extra = {}
+        if orientation is not None:
+            extra["orientation"] = orientation
+        if args.eeg_reference is not None:
+            extra["eeg_reference"] = args.eeg_reference
+        summary = detectability_summary(cfg, source_idx=source_idx, scenarios=scenarios, **extra)
         sys.stdout.write(json.dumps(summary, indent=2) + "\n")
     return 0
 

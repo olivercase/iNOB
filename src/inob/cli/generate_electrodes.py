@@ -28,8 +28,20 @@ examples:
   inob electrodes --level c7             centre it on one vertebral level
   inob electrodes --rows 8 --cols 4      a different grid
   inob electrodes --full-spine           cover the whole cord, not one patch
+  inob electrodes --from my_cap.csv      your own electrode positions
 
 The patch is target-specific, so --source-target tags its output file.
+
+--from FILE (or electrodes.from_file) takes an electrode array as:
+  .csv/.txt  one contact per row: x y z, in mm
+  .npz       a coil_pos array (mm, or set a 'unit' entry)
+  .mat       a FieldTrip elec: elecpos or chanpos, with its unit (m, cm
+             or mm)
+The positions must already be in the model's body frame, in which +X is
+left, +Y posterior (anterior is -Y) and +Z superior; see
+docs/COORDINATES.md. Registering them is your responsibility: the command
+warns when a contact is more than 10 mm off the skin. The grid options
+above do not apply to an imported array.
 
 Every command also takes --config, --set, --source-target, --log-level;
 see `inob --help` for the full list.""",
@@ -65,6 +77,13 @@ see `inob --help` for the full list.""",
         "where no single source is of interest. Overrides the "
         "spine → c7 default; mutually exclusive with --level.",
     )
+    p.add_argument(
+        "--from",
+        dest="from_file",
+        default=None,
+        metavar="FILE",
+        help="Import this electrode array instead of placing one (see below).",
+    )
     args = p.parse_args(argv)
     if args.full_spine and args.level:
         p.error("--full-spine and --level are mutually exclusive")
@@ -76,6 +95,7 @@ see `inob --help` for the full list.""",
         contact_pitch_mm=args.contact_pitch_mm,
         # "" is the explicit slab opt-out; None means "use the source-target default".
         target_level="" if args.full_spine else args.level,
+        from_file=args.from_file,
     )
     return 0
 

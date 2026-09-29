@@ -46,6 +46,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 
 from inob.analysis.propagation import is_ordered_polyline
+from inob.analysis.reference import parse_reference, reference_electrodes, rereference
 from inob.analysis.snr import (
     compute_noise_floors,
     per_source_best_bipolar,
@@ -231,10 +232,10 @@ def scenarios_for_target(cfg: Config) -> tuple[DetectabilityScenario, ...]:
 
 # Canonical best-channel peak signal lives in inob.analysis.snr so the figure
 # and the GUI detect endpoint never disagree. Thin alias kept for readability.
-def per_source_peak_amplitude(L: np.ndarray) -> np.ndarray:
+def per_source_peak_amplitude(L: np.ndarray, *, orientation=None) -> np.ndarray:
     """Peak |L| across (channels × moments) for each source — see
     :func:`inob.analysis.snr.per_source_peak`."""
-    return per_source_peak(L)
+    return per_source_peak(L, orientation=orientation)
 
 
 def per_source_rms_amplitude(L: np.ndarray) -> np.ndarray:
@@ -245,7 +246,7 @@ def per_source_rms_amplitude(L: np.ndarray) -> np.ndarray:
     return np.sqrt(np.mean(L3**2, axis=(0, 2)))
 
 
-def per_source_eeg_amplitude(L: np.ndarray) -> np.ndarray:
+def per_source_eeg_amplitude(L: np.ndarray, *, orientation=None) -> np.ndarray:
     """The EEG observable: best bipolar pair in the array, per source.
 
     MEG channels measure a field directly, so the best-channel peak is the
@@ -255,7 +256,7 @@ def per_source_eeg_amplitude(L: np.ndarray) -> np.ndarray:
     footprint. What an electrode array measures is a *difference*, so that is
     what the EEG panels use. See :func:`inob.analysis.snr.per_source_best_bipolar`.
     """
-    return per_source_best_bipolar(L)
+    return per_source_best_bipolar(L, orientation=orientation)
 
 
 #: Averages used by clinical somatosensory-evoked-potential recording
@@ -437,6 +438,36 @@ def _compatible_eeg_leadfield(meg_lf, eeg_lf):
     return eeg_lf
 
 
+def matching_eeg_source_idx(meg_lf, eeg_lf, source_idx: int, *, tol_mm: float = 10.0) -> int:
+    """The electrode leadfield's index for MEG source ``source_idx``.
+
+    The two leadfields are solved separately and need not share a source list:
+    the muscle electrode solve samples at 5 mm (7,563 sources) where the MEG
+    one samples at 15 mm (730), so reusing the MEG index painted a dipole
+    ~110 mm from the one the MEG panel shows. Match by position instead, warn
+    when the nearest electrode source is not the same point, and refuse when
+    it is plainly a different source.
+    """
+    p = np.asarray(meg_lf.source_pos, dtype=float)[source_idx]
+    d = np.linalg.norm(np.asarray(eeg_lf.source_pos, dtype=float) - p, axis=1)
+    j = int(np.argmin(d))
+    if d[j] > tol_mm:
+        raise ValueError(
+            f"no electrode-leadfield source within {tol_mm:g} mm of MEG source "
+            f"#{source_idx} (nearest is {d[j]:.1f} mm away); solve both "
+            "modalities on the same FEM and source list"
+        )
+    if d[j] > 0.5:
+        logger.warning(
+            "MEG source #%d is paired with electrode source #%d, %.1f mm away: "
+            "the two leadfields were solved on different source lists",
+            source_idx,
+            j,
+            d[j],
+        )
+    return j
+
+
 def default_source_idx(meg_lf, eeg_lf) -> int:
     """Which source the single-source panels (a, c, d, f) should report.
 
@@ -460,6 +491,14 @@ def default_source_idx(meg_lf, eeg_lf) -> int:
     return int(np.argmin(np.linalg.norm(meg_lf.source_pos - centre, axis=1)))
 
 
+def _orientation_caption(orientation) -> str:
+    """Caption prefix naming a fixed dipole direction; empty for "best"."""
+    if orientation is None:
+        return ""
+    q = np.asarray(orientation, dtype=float)
+    return f"Dipole fixed along ({q[0]:.2f}, {q[1]:.2f}, {q[2]:.2f}). "
+
+
 def render_detectability(
     cfg: Config,
     *,
@@ -469,6 +508,7 @@ def render_detectability(
     scenarios: tuple[DetectabilityScenario, ...] | None = None,
     snr_threshold: float = 3.0,
     max_trials: int = 1_000_000,
+    orientation=None,
 ) -> Path:
     """Six-panel detectability figure (3 MEG + 3 EEG).
 
@@ -479,6 +519,9 @@ def render_detectability(
 
     ``scenarios`` defaults to the target-appropriate source-strength set
     (muscle → magnetomyography Q range; otherwise the vagal-CAP range).
+    ``orientation`` (a unit vector, see
+    :func:`inob.analysis.snr.parse_orientation`) fixes the dipole direction for
+    both modalities instead of taking the best of x, y and z.
     """
     if scenarios is None:
         scenarios = scenarios_for_target(cfg)
@@ -497,9 +540,9 @@ def render_detectability(
 
     # One signal number per Z position. MEG: best-channel peak. EEG: best
     # bipolar pair, since a potential is only measurable as a difference.
-    meg_peak = per_source_peak_amplitude(meg_lf.L_fT_per_nAm)  # fT/nAm
+    meg_peak = per_source_peak_amplitude(meg_lf.L_fT_per_nAm, orientation=orientation)  # fT/nAm
     eeg_peak = (
-        per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)  # µV/nAm
+        per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm, orientation=orientation)  # µV/nAm
         if has_eeg
         else None
     )
@@ -518,7 +561,8 @@ def render_detectability(
     prop = propagation_correction(cfg, meg_lf, eeg_lf, source_idx=source_idx)
 
     caption = (
-        "MEG: best-channel peak |L| per source. EEG: best bipolar pair, which "
+        _orientation_caption(orientation)
+        + "MEG: best-channel peak |L| per source. EEG: best bipolar pair, which "
         "is reference-independent and is what an electrode array measures "
         "(after Hämäläinen et al. 1993; "
         f"OPM noise floor from the {cfg.noise.sensor.label} spec "
@@ -940,12 +984,23 @@ def detectability_summary(
     *,
     source_idx: int = -1,
     scenarios: tuple[DetectabilityScenario, ...] | None = None,
+    orientation=None,
+    eeg_reference=None,
 ) -> dict:
     """Compute headline detectability numbers as a JSON-serialisable dict.
 
     ``scenarios`` defaults to the target-appropriate ladder, exactly as
     :func:`render_detectability` does — pass the same tuple to both so the
     figure and the JSON never describe different source strengths.
+
+    ``orientation`` fixes the dipole direction (see
+    :func:`inob.analysis.snr.parse_orientation`); ``None`` keeps the best of
+    x, y and z. ``eeg_reference`` (see
+    :func:`inob.analysis.reference.parse_reference`) adds a single-channel
+    electrode figure under that reference, as ``EEG_referenced_*`` keys beside
+    the bipolar ones. The bipolar ``EEG_*`` figures are reference-free and do
+    not change with it. With both left as ``None`` the output is exactly what
+    it was before either option existed.
     """
     floors = compute_noise_floors(cfg)
     sigma_meg = floors.meg_per_channel_fT
@@ -956,12 +1011,35 @@ def detectability_summary(
     if source_idx < 0:
         source_idx = default_source_idx(meg_lf, eeg_lf)
 
-    meg_peak = float(per_source_peak_amplitude(meg_lf.L_fT_per_nAm)[source_idx])
     eeg_peak = (
-        float(per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm)[source_idx])
+        float(per_source_eeg_amplitude(eeg_lf.L_fT_per_nAm, orientation=orientation)[source_idx])
         if eeg_lf is not None
         else None
     )
+    meg_peak = float(
+        per_source_peak_amplitude(meg_lf.L_fT_per_nAm, orientation=orientation)[source_idx]
+    )
+    ref_info = None
+    eeg_ref_peak = None
+    if eeg_reference is not None and eeg_lf is not None:
+        ref = parse_reference(eeg_reference)
+        L_ref = rereference(
+            eeg_lf.L_fT_per_nAm,
+            ref,
+            electrode_pos=eeg_lf.coil_pos,
+            source_pos=eeg_lf.source_pos,
+        )
+        eeg_ref_peak = float(per_source_peak(L_ref, orientation=orientation)[source_idx])
+        rows = reference_electrodes(ref, eeg_lf.coil_pos, eeg_lf.source_pos)
+        ref_info = {"eeg_reference": ref.label}
+        if rows is not None:
+            r = int(rows[source_idx])
+            ref_info["eeg_reference_electrode"] = r
+            ref_info["eeg_reference_distance_mm"] = float(
+                np.linalg.norm(
+                    np.asarray(eeg_lf.coil_pos[r]) - np.asarray(eeg_lf.source_pos[source_idx])
+                )
+            )
     src = meg_lf.source_pos[source_idx]
     budget = clinical_average_budget(cfg)
     prop = propagation_correction(cfg, meg_lf, eeg_lf, source_idx=source_idx)
@@ -990,6 +1068,13 @@ def detectability_summary(
                     "EEG_trials_for_SNR3": n_eeg,
                 }
             )
+            if eeg_ref_peak is not None:
+                sig_ref = eeg_ref_peak * sc.Q_nAm
+                row["EEG_referenced_per_trial_uV"] = sig_ref
+                row["EEG_referenced_single_trial_SNR"] = (
+                    sig_ref / sigma_eeg if sigma_eeg else float("inf")
+                )
+                row["EEG_referenced_trials_for_SNR3"] = required_trials(sig_ref, sigma_eeg, 3.0)
             if prop is not None and prop.eeg is not None:
                 # The propagating source model is the honest case wherever the
                 # profile says lumping is invalid; report both so the headline
@@ -1005,9 +1090,15 @@ def detectability_summary(
                 if prop is not None and prop.eeg is not None:
                     row["EEG_within_clinical_budget_propagating"] = bool(n_eeg_prop <= budget[1])
         rows[sc.label] = row
+    extra: dict = {}
+    if orientation is not None:
+        extra["orientation"] = [float(v) for v in np.asarray(orientation, dtype=float)]
+    if ref_info is not None:
+        extra.update(ref_info)
     return {
         "source_idx": int(source_idx),
         "source_z_mm": float(src[2]),
+        **extra,
         "noise_meg_fT": float(sigma_meg),
         "noise_eeg_uV": float(sigma_eeg),
         "bandwidth_hz": float(cfg.noise.effective_bandwidth_hz),

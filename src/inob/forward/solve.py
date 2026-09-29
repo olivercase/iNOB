@@ -25,6 +25,7 @@ from inob.forward.duneuro_driver import (
 )
 from inob.io.hdf5 import load_fem, load_sensors, validate_fem, validate_sensors
 from inob.io.npz import Leadfield, save_leadfield, validate_leadfield
+from inob.sensors.layout import array_layout, position_channels
 from inob.sources.vagus import resolve_source_positions
 
 logger = logging.getLogger(__name__)
@@ -46,9 +47,10 @@ def run_forward(cfg: Config) -> Path:
     sensors = load_sensors(cfg.outputs.sensors_mat)
     validate_sensors(sensors)
     logger.info(
-        "Sensors: %d channels (%d positions × 3 axes)",
+        "Sensors: %d channels at %d positions (%s)",
         len(sensors.coilpos),
-        len(sensors.coilpos) // 3,
+        len(position_channels(sensors.labels, sensors.coilpos)),
+        array_layout(sensors.labels),
     )
 
     src_pos_mm = resolve_source_positions(cfg, fem)

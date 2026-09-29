@@ -147,7 +147,7 @@ inob detect            # trials-to-detect for the configured sources
 | Start here | `doctor` · `status` · `run` |
 | Build the model | `build-geom` · `build-fem` · `sensors` · `electrodes` |
 | Solve | `forward` (MEG) · `eeg` · `volume-field` |
-| Analyse | `detect` · `snr` · `sensitivity` · `location` · `cross` · `physiology` · `cap-compare` · `source-models` |
+| Analyse | `detect` · `snr` · `sensitivity` · `location` · `cross` · `placement` · `physiology` · `cap-compare` · `source-models` |
 | Validate | `ladder` · `sarvas` · `calibrate` |
 | Figures | `topoplot` · `torso` · `sensor-field` · `visualise` · `muscle-sources` |
 

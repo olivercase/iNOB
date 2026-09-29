@@ -114,3 +114,54 @@ def test_main_forwards_thresholds(tmp_path, monkeypatch) -> None:
     assert calls["detect"]["snr_threshold"] == 5.0
     assert calls["detect"]["max_trials"] == 100
     assert calls["detect"]["source_idx"] == 2
+
+
+def test_main_forwards_orientation_and_reference(tmp_path, monkeypatch) -> None:
+    calls = {}
+    _patch_all(monkeypatch, calls)
+    monkeypatch.setattr(
+        cli_mod,
+        "detectability_summary",
+        lambda cfg, **kw: (calls.setdefault("summary", kw), {"eeg_reference": "farthest"})[1],
+    )
+    rc = cli_mod.main(
+        [
+            "--config",
+            str(TINY_CFG),
+            "--project-root",
+            str(tmp_path),
+            "--target",
+            "detect",
+            "--orientation",
+            "posterior",
+            "--eeg-reference",
+            "farthest",
+        ]
+    )
+    assert rc == 0
+    assert calls["detect"]["orientation"].tolist() == [0.0, 1.0, 0.0]
+    assert calls["summary"]["orientation"].tolist() == [0.0, 1.0, 0.0]
+    assert calls["summary"]["eeg_reference"] == "farthest"
+
+
+def test_main_defaults_pass_no_orientation_or_reference(tmp_path, monkeypatch, capsys) -> None:
+    """Without the options the calls are exactly what they were, so the
+    published figures and JSON reproduce."""
+    calls = {}
+    _patch_all(monkeypatch, calls)
+    rc = cli_mod.main(
+        ["--config", str(TINY_CFG), "--project-root", str(tmp_path), "--target", "detect"]
+    )
+    assert rc == 0
+    assert "orientation" not in calls["detect"]
+    out = capsys.readouterr().out
+    assert "eeg_reference" not in out and "orientation" not in out
+
+
+def test_main_rejects_bad_orientation_and_reference(tmp_path, monkeypatch) -> None:
+    import pytest
+
+    _patch_all(monkeypatch, {})
+    for flag, value in (("--orientation", "sideways"), ("--eeg-reference", "nose")):
+        with pytest.raises(SystemExit):
+            cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path), flag, value])

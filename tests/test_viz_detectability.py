@@ -14,6 +14,7 @@ import pytest
 from inob.viz.detectability import (
     DetectabilityScenario,
     detectability_summary,
+    matching_eeg_source_idx,
     per_source_peak_amplitude,
     per_source_rms_amplitude,
     render_detectability,
@@ -187,3 +188,80 @@ def test_propagation_correction_skipped_where_lumping_is_valid(tmp_path: Path) -
     # Both modalities measured, both a genuine attenuation.
     assert 0.0 < spine.meg <= 1.0
     assert spine.eeg is not None and 0.0 < spine.eeg <= 1.0
+
+
+def test_detectability_summary_orientation_and_reference(tmp_path: Path) -> None:
+    """--orientation moves the MEG and bipolar numbers to the fixed-moment
+    ones; --eeg-reference adds referenced single-channel figures and leaves
+    the reference-free bipolar ones exactly as they were."""
+    from inob.analysis.reference import rereference
+    from inob.analysis.snr import parse_orientation, per_source_best_bipolar, per_source_peak
+    from inob.io.npz import load_leadfield
+
+    cfg = build_pipeline_cfg(tmp_path)
+    base = detectability_summary(cfg, source_idx=2)
+    q = parse_orientation("posterior")
+    fixed = detectability_summary(cfg, source_idx=2, orientation=q)
+    ref = detectability_summary(cfg, source_idx=2, eeg_reference="farthest")
+
+    meg = load_leadfield(cfg.outputs.forward_npz)
+    eeg = load_leadfield(cfg.outputs.forward_eeg_npz)
+    row = next(iter(fixed["scenarios"].values()))
+    Q = row["Q_nAm"]
+    assert row["MEG_per_trial_fT"] == pytest.approx(
+        per_source_peak(meg.L_fT_per_nAm, orientation=q)[2] * Q
+    )
+    assert row["EEG_per_trial_uV"] == pytest.approx(
+        per_source_best_bipolar(eeg.L_fT_per_nAm, orientation=q)[2] * Q
+    )
+    assert fixed["orientation"] == [0.0, 1.0, 0.0]
+    assert "eeg_reference" not in fixed
+
+    assert ref["eeg_reference"] == "farthest"
+    assert "eeg_reference_electrode" in ref and ref["eeg_reference_distance_mm"] > 0
+    L_far = rereference(
+        eeg.L_fT_per_nAm, "farthest", electrode_pos=eeg.coil_pos, source_pos=eeg.source_pos
+    )
+    for label, r in ref["scenarios"].items():
+        b = base["scenarios"][label]
+        assert r["EEG_per_trial_uV"] == b["EEG_per_trial_uV"]  # bipolar untouched
+        assert r["MEG_per_trial_fT"] == b["MEG_per_trial_fT"]
+        assert r["EEG_referenced_per_trial_uV"] == pytest.approx(
+            per_source_peak(L_far)[2] * r["Q_nAm"]
+        )
+        assert r["EEG_referenced_per_trial_uV"] <= r["EEG_per_trial_uV"] + 1e-12
+        assert r["EEG_referenced_trials_for_SNR3"] >= r["EEG_trials_for_SNR3"]
+
+
+def test_render_detectability_accepts_orientation(tmp_path: Path) -> None:
+    from inob.analysis.snr import parse_orientation
+
+    cfg = build_pipeline_cfg(tmp_path)
+    out = render_detectability(
+        cfg, out_path=tmp_path / "det_y.png", orientation=parse_orientation("y")
+    )
+    assert out.exists()
+
+
+def _lf_at(positions):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(source_pos=np.asarray(positions, dtype=float))
+
+
+def test_matching_eeg_source_idx_matches_by_position_not_index(caplog) -> None:
+    """A finer electrode source list must not be read with the MEG index."""
+    meg = _lf_at([[0, 0, 0], [0, 0, 15], [0, 0, 30]])
+    eeg = _lf_at([[0, 0, z] for z in range(0, 35, 5)])  # 0, 5, ..., 30
+    assert matching_eeg_source_idx(meg, eeg, 1) == 3
+    assert matching_eeg_source_idx(meg, eeg, 2) == 6
+    assert "different source lists" not in caplog.text
+
+
+def test_matching_eeg_source_idx_warns_on_offset_and_refuses_far(caplog) -> None:
+    meg = _lf_at([[0, 0, 0]])
+    with caplog.at_level("WARNING"):
+        assert matching_eeg_source_idx(meg, _lf_at([[0, 3, 0]]), 0) == 0
+    assert "3.0 mm away" in caplog.text
+    with pytest.raises(ValueError, match="no electrode-leadfield source within"):
+        matching_eeg_source_idx(meg, _lf_at([[0, 110, 0]]), 0)

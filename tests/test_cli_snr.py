@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import inob.cli.snr as cli_mod
 
@@ -16,6 +17,8 @@ TINY_CFG = REPO_ROOT / "configs" / "tiny_test.yaml"
 class _FakeLF:
     # shape (channels=2, 3*sources=3) so per_source_amplitude's reshape works.
     L_fT_per_nAm = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    coil_pos = np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]])
+    source_pos = np.array([[90.0, 0.0, 0.0]])
 
 
 class _FakeFloors:
@@ -118,3 +121,40 @@ def test_main_n_averages_forwarded(tmp_path, monkeypatch, capsys) -> None:
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out["n_averages"] == 4
+
+
+def _run(tmp_path, *extra):
+    return cli_mod.main(["--config", str(TINY_CFG), "--project-root", str(tmp_path), *extra])
+
+
+def test_main_orientation_replaces_moment(tmp_path, monkeypatch, capsys) -> None:
+    _patch(monkeypatch, {})
+    assert _run(tmp_path, "--orientation", "posterior") == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["orientation"] == [0.0, 1.0, 0.0]
+    # y-moment column is [2, 5]: RMS = sqrt((4 + 25) / 2), SNR = that / 15.
+    assert out["snr_summary"]["max"] == pytest.approx(np.sqrt(14.5) / 15.0)
+
+
+def test_main_eeg_reference(tmp_path, monkeypatch, capsys) -> None:
+    _patch(monkeypatch, {})
+    assert _run(tmp_path, "--modality", "eeg", "--eeg-reference", "farthest") == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["eeg_reference"] == "farthest"
+    # Farthest contact from x=90 is x=0 (row 0): rows become [0,0,0] and
+    # [3,3,3], so per-channel rms-moment amplitudes are 0 and 3.
+    expected = np.sqrt((0.0 + 9.0) / 2.0) / 0.5
+    assert out["snr_summary"]["max"] == pytest.approx(expected)
+
+
+def test_main_defaults_omit_new_keys(tmp_path, monkeypatch, capsys) -> None:
+    _patch(monkeypatch, {})
+    assert _run(tmp_path) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert "orientation" not in out and "eeg_reference" not in out
+
+
+def test_main_eeg_reference_rejected_for_meg(tmp_path, monkeypatch) -> None:
+    _patch(monkeypatch, {})
+    with pytest.raises(SystemExit):
+        _run(tmp_path, "--eeg-reference", "farthest")

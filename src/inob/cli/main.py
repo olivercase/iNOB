@@ -106,6 +106,12 @@ COMMANDS: tuple[Command, ...] = (
         "cross", "inob.cli.cross_modality", "Analyse", "MEG and EEG coupling for the same source"
     ),
     Command(
+        "placement",
+        "inob.cli.placement",
+        "Analyse",
+        "Model-chosen sensor positions vs nearest-to-source",
+    ),
+    Command(
         "physiology",
         "inob.cli.physiology",
         "Analyse",
@@ -137,9 +143,7 @@ COMMANDS: tuple[Command, ...] = (
     ),
     # --- Figures ----------------------------------------------------------
     Command("topoplot", "inob.cli.topoplot", "Figures", "MEG/EEG field maps on the body surface"),
-    Command(
-        "torso", "inob.cli.torso", "Figures", "Four-panel field map painted on the body itself"
-    ),
+    Command("torso", "inob.cli.torso", "Figures", "MEG beside ESG, painted on the body itself"),
     Command(
         "sensor-field",
         "inob.cli.sensor_field",

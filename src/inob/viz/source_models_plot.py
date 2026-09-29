@@ -31,6 +31,7 @@ from inob.analysis.source_models import (
     SourceModelComparison,
     compare_source_models,
 )
+from inob.anatomy import level_suffix
 from inob.config import Config, source_region_label, source_target_tag, target_output
 from inob.io.npz import load_leadfield
 from inob.viz.style import (
@@ -167,7 +168,7 @@ def render_source_models(
     fig.suptitle(
         f"{region}: OPM vs surface electrodes on the same cord activity — "
         f"Q = {cmp.Q_nAm:g} nA·m per active source, source #{cmp.source_idx} "
-        f"(z = {cmp.source_z_mm:.0f} mm)",
+        f"(z = {cmp.source_z_mm:.0f} mm{level_suffix(cfg.data.bone_dir, cmp.source_z_mm)})",
         fontsize=11,
         fontweight="bold",
         y=0.965,
