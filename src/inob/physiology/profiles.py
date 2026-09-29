@@ -102,9 +102,12 @@ def dorsal_column_population(
     The cuneate/gracile fasciculi carry large-myelinated Aβ cutaneous and
     proprioceptive afferents — coarser and faster than the vagal A-fibre
     population, and it is their fastest components that dominate the evoked
-    volley. The resulting mean CV of ≈ 59 m/s sits in the 55–70 m/s range
-    measured for the human cervical cord by magnetospinography (Kawabata 2002,
-    Sasaki 2008), which is the observable this population is tuned to match.
+    volley. The resulting mean CV of ≈ 59 m/s sits between the conduction
+    velocities magnetospinography measures in humans: 73.4 ± 19.6 m/s over
+    C5–C7 after ulnar stimulation (Miyano et al. 2020, Clin Neurophysiol
+    131:2460) and 42.4 m/s along the thoracic cord after sciatic stimulation
+    (Hashimoto et al. 2021, Clin Neurophysiol 133:39). This used to cite
+    Kawabata 2002, which is a feline study at 80–120 m/s.
     """
     return lognormal_fibre_distribution(
         mean_um=mean_um,
