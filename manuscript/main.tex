@@ -139,9 +139,10 @@ magnetometer array (for example, optically pumped magnetometers) and/or
 a surface-electrode array. From this information, a pipeline is run to
 create triangulated atlas meshes, from which a multi-tissue tetrahedral
 finite-element model is used to calculate magnetic and electric
-leadfields in absolute units. Finite-element solutions are benchmarked
+leadfields in physical units (fT and µV per nA·m). Finite-element solutions are benchmarked
 against analytic spherical-conductor (Sarvas) solutions to show where
-simpler models are and are not adequate. Using our tool, we present
+simpler models are and are not adequate, and information-optimised
+sensor placement is compared with placing sensors nearest the target. Using our tool, we present
 experimental designs to image the spinal cord, vagus nerve, and a set of
 neck muscles, highlighting the advantages to be gained from our
 target-specific approach. iNOB is intended for experimental design
@@ -185,11 +186,10 @@ is the object that every source reconstruction method ultimately depends
 on. Forward modelling \citep{227} has been used since the very early
 days of magnetoencephalography (MEG) and electroencephalography (EEG)
 \citep{195, 196, 226, 228}. Although the earliest biomagnetic
-measurements were in fact of the heart (Baule \& McFee, 1963),
+measurements were in fact of the heart \citep{BauleMcFee1963},
 source-level forward modelling outside the head has since received
-comparatively little attention (but see van Oosterom \& Oostendorp,
-2004, for the heart, and O'Neill et al., 2025, and
-Schmidt et al., 2026, for the spinal cord).
+comparatively little attention (but see \citealp{vanOosterom2004}, for the heart, and
+\citealp{233, 234}, for the spinal cord).
 
 Existing forward modelling platforms and solvers are, with some specific
 exceptions, optimised specifically for the brain. This largely reflects
@@ -248,7 +248,7 @@ We present iNOB, a generalisable FEM framework for modelling a variety
 of body structures, including the spinal cord, peripheral nerve and
 muscle, within one consistent pipeline, and accessible to investigators
 without specialised meshing or numerical-methods expertise. It is built
-to answer one question: for any structure in the body, what would a
+to answer one question: for any structure included in the atlas, what would a
 sensor on the skin surface measure, and, for a stated noise level, how
 many trials would be needed to detect it?
 
@@ -271,7 +271,8 @@ from the same tetrahedral model under the same conductivity assignment
 and calibrated against analytic references to physical units (fT and µV
 per nA·m), so MG and EG predictions for a given target are directly
 comparable, rather than being expressed in the solver's
-raw, dimensionally ambiguous output units.
+raw output units, whose physical scale depends on the length unit in
+which the mesh and conductivities are expressed.
 
 (3) Third, a physiological layer, applied after the leadfield
 calculation, maps fibre-level source assumptions to dipole moments,
@@ -294,7 +295,7 @@ package:
 
 \begin{quote}
 (i) maintains a curated atlas of watertight triangulated meshes derived
-from BodyParts3D (Mitsuhashi et al., 2009);
+from BodyParts3D \citep{241};
 
 (ii) builds a multi-tissue tetrahedral model by voxel shrink-wrapping and
 CGAL meshing;
@@ -304,7 +305,7 @@ noise level and stand-off from the skin) and surface-electrode arrays
 automatically on the relevant body surface;
 
 (iv) computes both the MG and EG forward models from the same base model
-with DUNEuro, calibrated to absolute units; and
+with DUNEuro, calibrated to physical units; and
 
 (v) estimates detectability (predicted signal-to-noise ratio (SNR) and
 the number of averaged trials required) for a chosen source and noise
@@ -330,11 +331,11 @@ continuous integration on Python 3.11 and 3.12.
 \centering
 \input{figures/fig1_pipeline.tex}
 \caption{The iNOB pipeline. Each node is a processing stage and each
-edge a data dependency, labelled with the artefact the upstream stage
+edge a data dependency, labelled with the output the upstream stage
 writes and the downstream stage consumes: the recording modality, the
 tissue surfaces of the selected anatomy, their conductivities
 ($\sigma$), the tetrahedral volume, the sensor or electrode array, the
-source dipoles and the leadfield. The same graph drives the web
+source dipoles and the leadfield. The same graph drives the browser-based
 interface, where an edge is highlighted once its upstream stage has
 written its outputs, source position and orientation are specified
 interactively in a three-dimensional view of the selected anatomy, and
@@ -414,7 +415,7 @@ solutions \\
 \texttt{inob sarvas} & \texttt{inob-sarvas} & Benchmark the FEM against the analytic
 sphere \\
 \texttt{inob calibrate} & \texttt{inob-calibrate} & Calibrate DUNEuro electrography output
-to absolute units \\
+to physical units \\
 \addlinespace[4pt]
 \multicolumn{3}{@{}l}{\textit{Figures}} \\
 \addlinespace[1pt]
@@ -503,13 +504,13 @@ forward problem is solved independently at each time point.
 
 From this we can define the forward model as a linear mapping that
 predicts the sensor data y produced by a given neural current
-distribution j: y = Lj + ε. Here, y (N\_sensors × 1) contains the
-predicted magnetic field or electric potential values at the sensors, j
+distribution \(\mathbf{j}\): \(\mathbf{y} = \mathbf{L}\mathbf{j} + \symbfit{\varepsilon}\). Here, \(\mathbf{y}\) (N\_sensors × 1) contains the
+predicted magnetic field or electric potential values at the sensors, \(\mathbf{j}\)
 (N\_sources × 1) represents the source moment amplitude, assuming it is
-a dipolar source, at each potential location and orientation, \textbf{L}
-(N\_sensors × N\_sources) is the leadfield matrix, and ε (N\_sensors ×
+a dipolar source, at each potential location and orientation, \(\mathbf{L}\)
+(N\_sensors × N\_sources) is the leadfield matrix, and \(\symbfit{\varepsilon}\) (N\_sensors ×
 1) accounts for the measurement noise and modelling errors. Each column
-of L shows the sensor-level magnetic field/electric potential pattern
+of \(\mathbf{L}\) shows the sensor-level magnetic field/electric potential pattern
 produced by a unit dipole at a specific location and orientation.
 Calculating \textbf{L}, the leadfield matrix, requires solving the
 electromagnetic forward problem, which iNOB does.
@@ -519,7 +520,10 @@ electromagnetic forward problem, which iNOB does.
 For evaluating the forward fields, magnetic fields at sensor level,
 each element of L is evaluated using the Biot--Savart law:
 
-\[\mathbf{B}\left( \mathbf{r} \right) = \frac{\mu_{0}}{4\pi}\int_{V}^{}\frac{\mathbf{J}\left( \mathbf{r}' \right) \times \ \left( \mathbf{r} - \mathbf{r}^{\mathbf{'}} \right)}{\left| \mathbf{r} - \mathbf{r}' \right|^{3}}\text{dV'}(1)\]
+\begin{equation}
+\mathbf{B}\left( \mathbf{r} \right) = \frac{\mu_{0}}{4\pi}\int_{V}^{}\frac{\mathbf{J}\left( \mathbf{r}' \right) \times \ \left( \mathbf{r} - \mathbf{r}^{\mathbf{'}} \right)}{\left| \mathbf{r} - \mathbf{r}' \right|^{3}}\text{dV'}
+\tag{1}
+\end{equation}
 
 where μ₀ = 1.25663706127(20) × 10⁻⁶ H m⁻¹ \citep{248} is the vacuum
 magnetic permeability. The total current density J(r) comprises two
@@ -538,14 +542,17 @@ via the electrical conductivity distribution and the electric potential
 divergence-free by charge conservation, which yields
 Poisson's equation for the electric potential
 \citep{226}. With the neuronal primary current modelled as a current dipole
-with moment p located at r0, Eq. (1) can therefore be decomposed as:
+with moment \(\mathbf{p}\) located at \(\mathbf{r}_0\), Eq. (1) can therefore be decomposed as:
 
-\[\mathbf{B}\left( \mathbf{r} \right) = \mathbf{B}^{P}\left( \mathbf{r} \right) + \mathbf{B}^{V}\left( \mathbf{r} \right) = \frac{\mu_{0}}{4\pi}\frac{\ \left( \mathbf{p}\  \times \ \left( \mathbf{r} - \mathbf{r}_{0} \right) \right)}{\left| \mathbf{r} - \mathbf{r}' \right|^{3}} - \frac{\mu_{0}}{4\pi}\int_{}^{}{\sigma\left( \mathbf{r}' \right)\nabla u\left( \mathbf{r}' \right)\left( \frac{\mathbf{r} - \mathbf{r}'}{\left| \mathbf{r} - \mathbf{r}' \right|^{3}} \right)\text{dV'}}(2)\]
+\begin{equation}
+\mathbf{B}\left( \mathbf{r} \right) = \mathbf{B}^{P}\left( \mathbf{r} \right) + \mathbf{B}^{V}\left( \mathbf{r} \right) = \frac{\mu_{0}}{4\pi}\frac{\mathbf{p} \times \left( \mathbf{r} - \mathbf{r}_{0} \right)}{\left| \mathbf{r} - \mathbf{r}_{0} \right|^{3}} - \frac{\mu_{0}}{4\pi}\int_{}^{}{\sigma\left( \mathbf{r}' \right)\nabla u\left( \mathbf{r}' \right)\left( \frac{\mathbf{r} - \mathbf{r}'}{\left| \mathbf{r} - \mathbf{r}' \right|^{3}} \right)\text{dV'}}
+\tag{2}
+\end{equation}
 
-The first term of Eq. (2), \textbf{B}\textsubscript{P}, is the magnetic
+The first term of Eq. (2), \(\mathbf{B}^{P}\), is the magnetic
 field of a current dipole in an infinite homogeneous medium (an
 analytically simple expression) \citep{195}. The second term,
-\textbf{B}\textsubscript{V}, incorporates the contribution of the
+\(\mathbf{B}^{V}\), incorporates the contribution of the
 secondary volume currents, and requires knowledge of how the electric
 potential u(r) varies throughout the conductor.
 
@@ -575,16 +582,27 @@ skull conductivity equals that of the brain (a key assumption).
 For magnetic fields (in MG), Sarvas derived the closed-form solution for
 the magnetic field at an exterior point \textbf{r}:
 
-\[B^{\text{sphere}}\left( \mathbf{r} \right) = \frac{\mu_{0}}{4\pi F^{2}}\left\lbrack F\left( \mathbf{p}\mathbf{}\mathbf{\times}\mathbf{r}_{0} \right) - \left( \mathbf{p}\  \times \ \mathbf{r}_{0}.\mathbf{r} \right)\nabla F \right\rbrack(3)\]
+\begin{equation}
+B^{\text{sphere}}\left( \mathbf{r} \right) = \frac{\mu_{0}}{4\pi F^{2}}\left\lbrack F\left( \mathbf{p}\times\mathbf{r}_{0} \right) - \left( \left(\mathbf{p}\times\mathbf{r}_{0}\right)\cdot\mathbf{r} \right)\nabla F \right\rbrack
+\tag{3}
+\end{equation}
 
 where
 
-\(a = |\mathbf{r} - \mathbf{r}_{0}|\) ,
-\(\widehat{\mathbf{a}} = \mathbf{r -}\mathbf{r}_{\mathbf{0}}\) (4)
+\begin{equation}
+\mathbf{a} = \mathbf{r} - \mathbf{r}_{0}, \qquad a = |\mathbf{a}|
+\tag{4}
+\end{equation}
 
-\[F = a(\left| \mathbf{r} \right|a + \left| \mathbf{r} \right|^{2} - \mathbf{r}_{0}.\mathbf{r})(5)\]
+\begin{equation}
+F = a(\left| \mathbf{r} \right|a + \left| \mathbf{r} \right|^{2} - \mathbf{r}_{0}\cdot\mathbf{r})
+\tag{5}
+\end{equation}
 
-∇\(F = \left( \frac{a^{2}}{\left| \mathbf{r} \right|} + \frac{\mathbf{r}_{0}.\ \mathbf{r}}{a}_{2a} + 2\left| \mathbf{r} \right| \right)\mathbf{r} - \left( a + 2\left| \mathbf{r} \right| + \frac{\mathbf{r}_{\mathbf{0}}.\mathbf{r}}{\mathbf{a}} \right)r_{\mathbf{0}}\mathbf{(}6)\)
+\begin{equation}
+\nabla F = \left( \frac{a^{2}}{|\mathbf{r}|} + \frac{\mathbf{a}\cdot\mathbf{r}}{a} + 2a + 2|\mathbf{r}| \right)\mathbf{r} - \left( a + 2|\mathbf{r}| + \frac{\mathbf{a}\cdot\mathbf{r}}{a} \right)\mathbf{r}_{0}
+\tag{6}
+\end{equation}
 
 For iNOB, we use the Sarvas solution (Eqs.~(3)--(6)) as the simplest format
 which represents some boundary between the source and the sensor. It, in
@@ -596,7 +614,7 @@ complex, anatomy-dependent solutions.
 \subsection{The finite element method}\label{the-finite-element-method}
 
 When the volume conductor geometry cannot be approximated as spherically
-symmetric, the volume current integral B\textsubscript{V} must be
+symmetric, the volume current integral \(\mathbf{B}^{V}\) must be
 evaluated numerically. This is the case for most of the body outside the
 head, where explicit models of the tissue geometry and conductivity
 should be applied to best represent the underlying anatomy.
@@ -611,7 +629,10 @@ integration by parts and a boundary condition saying no current flows
 into air. The `weak form' is then given
 by:
 
-\[\int_{\Omega}^{}{\sigma\left( \mathbf{r} \right)\nabla u\left( \mathbf{r} \right).\ \nabla v\left( \mathbf{r} \right)d\Omega = \ \int_{\Omega}^{}{\mathbf{J}^{P}\left( \mathbf{r} \right).\nabla v\left( \mathbf{r} \right)d\Omega}}(7)\]
+\begin{equation}
+\int_{\Omega}^{}{\sigma\left( \mathbf{r} \right)\nabla u\left( \mathbf{r} \right).\ \nabla v\left( \mathbf{r} \right)d\Omega = \ \int_{\Omega}^{}{\mathbf{J}^{P}\left( \mathbf{r} \right).\nabla v\left( \mathbf{r} \right)d\Omega}}
+\tag{7}
+\end{equation}
 
 The domain is discretised into a tetrahedral mesh, and both the
 potential \emph{u} and the test function \emph{v} are approximated using
@@ -620,7 +641,10 @@ defined on the mesh nodes. The continuous Galerkin (CG-FEM) method sets
 the test functions equal to the basis functions, giving the sparse
 linear system:
 
-\[\mathbf{K}(\sigma)\Phi = \mathbf{b(8)}\]
+\begin{equation}
+\mathbf{K}(\sigma)\Phi = \mathbf{b}
+\tag{8}
+\end{equation}
 
 where Φ contains the nodal potential values, \textbf{b} is the
 discretised right-hand side of Eq. (7), whose ith entry is the integral
@@ -653,7 +677,7 @@ wrapped around the skin surface, and/or a surface-electrode array over
 the target. Fourth, the forward problem is solved on that mesh with
 DUNEuro, giving the magnetic field and the surface potential that a unit
 source at each candidate location would produce at every sensor. Fifth,
-those outputs are calibrated to absolute units against analytic
+those outputs are calibrated to physical units against analytic
 solutions, and the single-sphere approximation is benchmarked against
 the full FEM. Sixth, a physiological source model converts fibre
 populations and firing scenarios into realistic source amplitudes, which
@@ -663,7 +687,11 @@ trials needed for detection. Each stage is described in turn below.
 \subsection{Anatomical inputs and tissue-surface
 preparation}\label{anatomical-inputs-and-tissue-surface-preparation}
 
-Surface meshes were derived from the BodyParts3D open atlas \citep{241}:
+Atlas surface meshes can contain holes, duplicate or overlapping
+components and inconsistent normals, any of which would cause the volume
+mesher to fail or mislabel tissue, so each surface is repaired and
+checked before use. Surface meshes were derived from the BodyParts3D
+open atlas \citep{241}:
 one whole-body skin surface and 3,209 anatomical structure meshes
 (Figure 2).
 
@@ -674,7 +702,9 @@ overlapping connected components; (iii) voxel shrinkwrap, which
 rasterises each compartment at a per-tissue voxel pitch (0.5--3 mm),
 applies morphological closing and exterior flood-fill, re-extracts the
 surface via marching cubes, and finishes with quadric decimation and
-Taubin smoothing; and (iv) pymeshfix as a final hole-closer. Taubin
+Taubin smoothing; and (iv) pymeshfix as a final hole-closer. In plain terms, each surface is
+converted into a filled block of small cubes (voxels), gaps and holes
+are closed, and a clean, smooth surface is re-extracted from that block. Taubin
 smoothing is applied in this per-tissue surface stage, before
 voxelisation, with a configurable number of iterations per tissue (for
 example, 10 for bone and 6 for muscle); the tetrahedra are subsequently
@@ -695,7 +725,11 @@ required for the simulations.}
 \subsection{Tetrahedral FEM
 construction}\label{tetrahedral-fem-construction}
 
-The multi-tissue tetrahedral mesh can be built on a single global voxel
+The FEM solver needs a single volume mesh in which every element
+carries one tissue label and is well enough shaped for a stable
+solution; this subsection describes how the repaired surfaces are
+combined into it. The multi-tissue tetrahedral mesh can be built on a
+single global voxel
 grid (the voxel size, or pitch, and the margin added around the tissues,
 or padding, are configurable; 3 mm pitch with 50 mm padding by default)
 covering all compartments (inob.fem.cgal\_builder). Each tissue is
@@ -709,7 +743,13 @@ spinal cord, heart, brain and lung; and the same splatting, closing
 (30 mm) and exterior flood-fill for the skin, keeping the largest
 connected component and closing internal cavities,}
 which accommodates anatomical openings (mouth, nostrils) for which
-simple interior fills fail. Tissues are composited into a single
+simple interior fills fail. The choice follows the shape of each
+structure: a convex hull is fast and adequate for compact bones, but
+over-fills anything thin, curved or concave and displaces its centroid,
+so sheet-like and curved structures (for example the platysma, which
+wraps the neck, and the spinal cord, which follows the cervical and
+thoracic curvature) are instead filled from their surfaces. Tissues are
+composited into a single
 labelled image, painted outermost-first according to the
 configuration's tissue ordering, so that inner labels
 overwrite outer; CGAL Mesh\_3 is then invoked through iso2mesh.cgalv2m
@@ -725,7 +765,7 @@ affect the results. Mesh size, element count and per-tissue
 conductivities depend on the target structure and configuration;
 isotropic, frequency-independent conductivities are assigned per tissue
 from the IT'IS Database (v4.1) or user-supplied values
-(Gabriel et al., 1996; Haueisen et al., 2002).
+\citep{Gabriel1996, Haueisen2002}.
 
 \subsection{Magnetometer and surface-electrode
 arrays}\label{magnetometer-and-surface-electrode-arrays}
@@ -822,12 +862,9 @@ was itself validated against the textbook centred-dipole potential
 \(3\,\mathbf{p}\cdot\hat{\mathbf{r}}/(4\pi\sigma R^{2})\), an
 independent numerical Neumann solve (agreement to better than
 \(10^{-6}\)) and
-MNE-Python's sphere EEG model (to \(10^{-5}\)). An earlier version of
-that series divided its radial terms by \(n\) and its tangential terms
-by \(n(n+1)\), under-reading the potential by a factor of 0.4--0.9 and
-producing an apparent calibration factor of 0.622; with the series
-corrected, no empirical factor is needed, and
-\texttt{EEG\_CALIBRATION\_FACTOR} = 1.0 in \texttt{inob/forward/eeg.py}.
+MNE-Python's sphere EEG model (to \(10^{-5}\)). No empirical calibration factor is
+needed (\texttt{EEG\_CALIBRATION\_FACTOR} = 1.0 in
+\texttt{inob/forward/eeg.py}).
 The remaining numerical uncertainty is FEM
 discretisation, which is largest near shallow sources.}
 
@@ -866,7 +903,7 @@ synaptic activity, so the targets considered here are modelled as
 action-potential sources. Per-fibre dipole moments follow the Hämäläinen
 formulation:
 
-\emph{Q = π·d\textsuperscript{2}·σ\textsubscript{in}·ΔV/4} (9)
+\begin{equation}Q = \frac{\pi d^{2} \sigma_{\text{in}} \Delta V}{4}\tag{9}\end{equation}
 
 where d is the fibre diameter, σ\textsubscript{in} the intra-axonal
 conductivity and ΔV the action-potential amplitude. σ\textsubscript{in}
@@ -906,7 +943,7 @@ vagus (0.5 ms, spectral peak 318 Hz), 0.51 for the spinal cord (0.7 ms,
 of 217, 166 and 108 fT,} against which unattenuated signal amplitudes are
 compared (QuSpin Gen-3, QZFM-3; the Gen-2 value of
 \(\text{15 fT/}\sqrt{\text{Hz}}\) is available for comparison). For
-HD-EG, the amplifier term (\(0.1\ µV/\sqrt{\text{Hz}}\)) was summed in
+high-density electrography, the amplifier term (\(0.1\ µV/\sqrt{\text{Hz}}\)) was summed in
 quadrature with the Johnson voltage noise of the skin contact,
 \(v_{n}\  = \ \sqrt{4k_{B}T\ R}\), at T = 310.15 K and R = 10 kΩ
 (≈\(0.013\ µV/\sqrt{\text{Hz}}\)), giving
@@ -966,7 +1003,7 @@ involved in a number of critical neural processes, such as pain
 perception and breathing control. Due to the geometry of the torso, the
 spinal cord is a clear example of a case where the standard spherical
 assumptions which might be made for source imaging in encephalography
-break down (cite George's paper). Here we demonstrate how iNOB can be
+break down \citep{233}. Here we demonstrate how iNOB can be
 used to flexibly generate ESG and MSG leadfields under different source
 and sensor assumptions.
 
@@ -978,7 +1015,7 @@ a complex, low-conductivity volume of vertebral bone. The section works
 through four questions in turn: how well a single-sphere approximation
 compares with the full FEM for the spinal cord; what signal is observed
 if the entire cord is synchronously active; what signal results from an
-arguably more physiologically realistic (cite Japanese work) travelling
+arguably more physiologically realistic travelling
 volley instead; and whether wider electrode coverage can close the gap
 in trials-to-detect between surface electrodes and OPMs. The forward
 solution for a single unit dipole on the cord axis is shown in Figure 3.
@@ -998,24 +1035,32 @@ currents through the surrounding soft tissue, and its prediction
 diverges sharply from the FEM's, whose peak field comes
 out \revised{4.34× higher (95\% CI 4.25--4.41, B = 2,000)} at the same source strength.
 
-The next question is what happens if the whole cord is modelled using
-the simple Sarvas method, as one synchronous generator, the simplest
+The next question is what happens if the whole cord is modelled as one
+synchronous generator (full FEM leadfield), the simplest
 possible source assumption. Firing all 91 modelled segments in phase
 predicts \revised{5.32 pT (OPM) and 9.66 µV (ESG) at the C6/C7 level}, both detectable in a
 single trial. This provides an upper bound for expected M/ESG signals
 but ultimately is unrealistic: the modelled cord spans \revised{477 mm}, meaning
-an ascending volley takes approximately 8.1 ms to traverse it at 59 m/s, so the
+an ascending volley takes approximately 8.1 ms to traverse it at 59 m/s
+(the mean over the modelled dorsal-column fibre diameters, between the
+42 m/s thoracic and 73 m/s cervical conduction velocities measured
+non-invasively by magnetospinography; \citealp{Hashimoto2021, Miyano2020}),
+so the
 time resolution of electrophysiological imaging is sufficient that such
-travelling sources would not appear synchronously. Collapsing them into
+travelling sources would not appear synchronously; under the
+quasi-static approximation (Section~\ref{theory}) volume conduction is
+instantaneous and so does not smear the volley in time. Collapsing them into
 one dipole inflates the OPM amplitude by \revised{57×} over the true
 travelling-volley estimate, making this case a naïve upper bound rather
 than a realistic estimate.
 
-Restricting the question to a single dipolar generator entering at \revised{C6/C7}
+Restricting the question to a single stationary dipole on the cord at \revised{C6/C7}
 gives a more realistic pair of estimates. Summing the volley into one
 stationary segment gives \revised{208.5 fT / 6 trials} (OPM) and \revised{0.535 µV / 151
 trials} (ESG). Altering our source assumptions to instead represent a
-single wavefront travelling rostrally along the spinal cord at 59 m/s
+single wavefront travelling rostrally along the spinal cord at 59 m/s,
+as imaged non-invasively with magnetospinography
+\citep{Miyano2020, Hashimoto2021},
 reduces these values to \revised{92.8 fT / 29 trials and 0.159 µV / 1,709 trials}. \revised{Both electrode estimates are within a clinical averaging budget: the
 stationary one below and the propagating one inside the
 500--2,000-average somatosensory evoked potential (SSEP) range. Which is
@@ -1026,17 +1071,25 @@ is the modality gap at a fixed cervical patch: OPM needs 25--59 times
 fewer trials than the 32-contact patch under either source model, so,
 under the noise assumptions used here, the OPM advantage at the patch
 holds however the stationary/propagating balance is eventually
-settled.} This runs counter
+settled.} These source-model amplitudes are for a moment along the
+cord. A dipole at the same position pointing dorsally, out of the back,
+costs MG about 12\% in amplitude (187.4 fT, 8 trials, against 201.2 fT
+and 7 trials for the axial moment) but costs ESG about seven times on
+the patch (0.078 µV, 7,004 trials) and six times on the whole-body
+array (0.165 µV, 1,588 trials), so the axial source is much the easier
+case for ESG. This runs counter
 to empirical experience, in which ESG is often easier to observe at the
 sensor level than MSG, and underlines that these estimates depend
 strongly on the assumed noise levels and source model.
 
 \revised{Given how far EG lags OPM at a fixed cervical patch, we next ask whether
-wider electrode coverage closes the gap. It largely does. With the same
+wider electrode coverage closes the gap. The 1,000-contact whole-body
+array is an idealised bound on coverage rather than a practical montage,
+but it shows how much of the gap is geometric. It largely does. With the same
 source models, the 1,000-contact whole-body array reaches SNR 3 in 45
 trials for the stationary source (0.987 µV) and 48 for the ascending
 volley (0.947 µV), against 1,709 for the 32-contact patch and 29 for
-OPM, leaving OPM ahead by a factor of only 1.7 in trials. This is
+OPM for the ascending volley, leaving OPM ahead by a factor of only 1.7 in trials. This is
 consistent with the empirical experience above. Along the cord, the
 whole-body array's best single contact sees a median of 40 times the
 patch's signal (range 2.9--170×). Most of that advantage comes from the
@@ -1046,7 +1099,11 @@ reaching the head--neck junction drives a head-versus-trunk potential,
 the same far field that clinical SSEP recordings capture as the P14 with
 a non-cephalic reference. The result therefore depends on where the
 modelled cord ends, and should be read as a statement about that far
-field rather than about electrode coverage as such.} \revised{Extending coverage beyond the cervical patch also recruits
+field rather than about electrode coverage as such. Because the
+potentials are common-average referenced, the size of this far field
+also depends on the reference; the electrode reference is a
+configuration option, so a distant or non-cephalic reference can be
+compared directly.} \revised{Extending coverage beyond the cervical patch also recruits
 progressively larger muscle groups; a single motor unit near C7 already
 exceeds the cord volley by roughly 300--950×, each measured on its own cervical
 paddle (150
@@ -1072,7 +1129,9 @@ fT per nA·m at 10 mm).}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig3_spinal_cord}
-\caption{Spinal cord forward solution. Fields are shown for a
+\caption{Spinal cord forward solution, computed with the full
+multi-tissue FEM (the single-sphere comparison in the text is not
+shown). Fields are shown for a
 single z-oriented unit dipole (1 nA·m) on the cord axis at \revised{z = 1393 mm,
 level C6 (source \#72), drawn as an arrow along its moment in both panels;
 teal dots mark all modelled cord sources and open circles the sensor and
@@ -1084,7 +1143,10 @@ mm mean contact spacing)}, common-average referenced. Both panels share
 mesh, camera, orthographic projection and scale (bar: 50 mm): \revised{the
 magnetic field divides the neck left from right about the midline, while
 the potential divides it head from trunk, the two patterns roughly
-orthogonal.} Skin further than 1.6 × the array spacing from the nearest
+orthogonal.} Sensor values are sampled at the array's stand-off from
+the skin and interpolated onto it for display, so the maps are smoother
+than the sampled data. Skin further than 1.6 × the array spacing from
+the nearest
 sensor is left unpainted. Colour scales are symmetric about zero,
 clipped to the 98th percentile of the measured surface \revised{(±5.6 fT per nA·m
 in a; ±0.16 µV per nA·m in b)}, and are given beneath each panel.}
@@ -1186,7 +1248,8 @@ magnitude while leaving the 9.7× modality gap untouched.}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig4_vagus}
-\caption{Vagus nerve forward solution. Fields are shown for a
+\caption{Vagus nerve forward solution, computed with the full
+multi-tissue FEM. Fields are shown for a
 single z-oriented unit dipole (1~nA·m) on the left vagus nerve at \revised{z =
 1333 mm, level T2 (source \#53), drawn as an arrow along its moment in
 both panels; teal dots mark all modelled vagal sources}. (a) Radial
@@ -1248,7 +1311,7 @@ vagus's 70 nA·m full-summation figure, since Q scales as
 fibre diameter squared and muscle fibres are roughly 8× bigger than
 vagal A-fibres. Third, muscle is the only target given an anisotropic
 conductivity: a fibre-aligned tensor with σ∥ = 0.40 S/m and σ⊥ = 0.10
-S/m (Gabriel 1996; Rush 1963), one per muscle mesh and aligned to that
+S/m (\citealp{Gabriel1996}; Rush, 1963), one per muscle mesh and aligned to that
 muscle's own axis, enabled through native options within
 DUNEuro.
 
@@ -1270,9 +1333,8 @@ evoked-M-wave analogue with no motor-unit recruitment, firing-rate or
 MUAP-shape model. It represents the magnitude argument well, although it
 makes no modelled assumptions about voluntary contraction.
 
-The question that this work seeks to address is the detectability of an
-electrophysiologically active medium. Muscle activity is simply so large
-that it is always detectable. Often, muscle activity acts as
+For muscle, then, detectability is not in question: its activity is
+large enough to be detected in a single trial. Often, muscle activity acts as
 interference rather than the signal of interest, obscuring the spinal
 cord and vagus nerve, for example. For this reason, the detectability
 result is not surprising. \revised{The modality comparison for the
@@ -1284,7 +1346,8 @@ whole-body array narrows those gaps to 1.7 and about 3.9 times.}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig5_neck_muscles}
-\caption{Neck muscle forward solution. Fields are shown for a
+\caption{Neck muscle forward solution, computed with the full
+multi-tissue FEM. Fields are shown for a
 single z-oriented unit dipole (1 nA·m) in the \revised{anterior midline neck musculature} at \revised{z = 1375 mm, level C7 (source \#330 of 736),
 drawn as an arrow along its moment in both panels; teal dots mark all
 modelled muscle sources}. (a) Radial magnetic field on the skin, interpolated
@@ -1324,18 +1387,19 @@ an investigator can ask whether a given structure is reachable at all
 with available sensors, how many trials would be required, where on the
 body surface the array should be placed, and whether the electrical or
 magnetic modality is better suited to the target. Our own examples
-answer three such questions. For the cervical vagus, coupling varies
+answer three such questions. For the spinal cord, extending electrode coverage
+over the whole body brings the trial count inside the clinical
+somatosensory evoked potential range, but it also recruits progressively
+larger muscle groups, so each added channel brings muscle artefact as
+well as sensitivity. For the cervical vagus, coupling varies
 \revised{17-fold} along the nerve and trials-to-detect varies by two orders of
 magnitude between its ends, so array placement is the most important
 design decision, and electrode repositioning cannot rescue the
 electrical measurement because the limiting factor is attenuation of the
 surface potential across approximately 50 mm of conductive tissue rather
-than coverage or bone. For the spinal cord, extending electrode coverage
-over the whole body brings the trial count inside the clinical
-somatosensory evoked potential range, but it also recruits progressively
-larger muscle groups, so each added channel brings muscle artefact as
-well as sensitivity. For muscle, detectability is never the question,
-and the design problem is separability instead. The package can also
+than coverage or bone. For muscle, detectability is never the question,
+and the design problem is separability instead, which we have not
+analysed here and leave to future work. The package can also
 compare array placements directly\revised{: \texttt{inob placement -\/-optimise}
 greedily chooses the positions that maximise the total information
 carried about all sources in the target,
@@ -1355,7 +1419,13 @@ guarantee.} \revised{This agrees with
 \citet{Iivanainen2021}, who found that for large numbers of samples
 uniform grids carry nearly the same total information as model-informed
 ones, and extends that result to extracranial targets. For these
-targets, proximity is therefore an adequate placement rule.}
+targets, proximity is therefore an adequate placement rule.} Where the anatomy
+allows it, as for the cervical vagus, the single-sphere model also
+remains useful: it is fast, and because it does not depend on the fine
+detail of the mesh it is less sensitive than the full FEM to errors in
+the anatomical model; where the source is encased in bone, as for the
+spinal cord, it underestimates the peak field and the full FEM is
+required.
 
 The same machinery applies to targets we have not modelled. In future
 work, we intend to extend iNOB to also model muscular and neural signals
@@ -1381,7 +1451,7 @@ example, regulatory strategies and our sense of self \citep{44, 18}.
 Interoceptive afferent signalling has been linked to memory \citep{229},
 decision making \citep{230} and emotion \citep{231, 232}, and implicated
 in the pathophysiology and treatment of different mental health
-conditions (Nord \& Garfinkel, 2022). To fully understand neural
+conditions \citep{197}. To fully understand neural
 processing, we must therefore consider the body, and the autonomic and
 peripheral nervous systems, in their entirety. Within the autonomic
 nervous system, vagal afferent traffic, including baroreceptor
@@ -1447,13 +1517,17 @@ spectrum.
 30--500 Hz band. Correlated environmental interference would inflate
 trials-to-detect and spatial filtering would reduce it; neither is
 modelled, so the reported figures carry an uncertainty that we have not
-resolved. Both floors are also instrument-only. As a check, we solved
+resolved. Because noise is assumed uncorrelated across channels and
+trials, the best channel set here does not depend on the number of
+averages; with correlated noise, such as muscle artefact shared between
+neighbouring channels, channel selection and trial number would need to
+be chosen together. Both floors are also instrument-only. As a check, we solved
 brain MG and EG leadfields on the same whole-body FEM with the same
 noise floors: the leadfield magnitudes are as expected for the brain
 (for a 10 nA·m dipole 0--20 mm below the scalp, \revised{≈2.5 pT} at an on-scalp
 OPM and \revised{≈5.3 µV} at the scalp), but the EG SNR is only \revised{0.20--0.45} times
 the MG SNR across source depths of 0--60 mm, whereas, empirically, evoked
-MEG and EEG SNRs are broadly comparable (Goldenholz et al., 2009). This
+MEG and EEG SNRs are broadly comparable \citep{Goldenholz2009}. This
 points to the noise model rather than the forward model as the source of
 the large MG advantage reported in the worked examples, and the
 MG-versus-EG comparisons should be read as holding under
