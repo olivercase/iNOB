@@ -131,6 +131,7 @@ see `inob --help` for the full list.""",
         f"  peak    : {summary.factor_peak:.4e}\n"
         f"  median  : {summary.factor_median:.4e}\n"
         f"  geomean : {summary.factor_geomean:.4e}\n"
+        f"  lstsq   : {summary.factor_lsq:.4e}\n"
         f"  (n_elec={summary.n_electrodes}, R={summary.radius_mm:.0f} mm,\n"
         f"   src_r={summary.source_radius_mm:.0f} mm, σ={summary.sigma_S_per_m} S/m,\n"
         f"   n_tets={summary.n_tets})\n"

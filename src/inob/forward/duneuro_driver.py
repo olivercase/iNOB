@@ -284,10 +284,11 @@ def build_orthogonal_dipoles(
 # magnetic field it returns is a fixed factor larger than SI Tesla per (A·m).
 # Because the field scales as length^-2 (the (r)/|r|^3 kernel integrated over a
 # fixed dipole moment), the mm/m convention introduces a single geometry- and
-# conductivity-independent constant. Measured against the Sarvas analytic sphere
-# it is exactly 10.0 to machine precision (see
-# inob.analysis.sphere_calibration.calibrate_meg_factor), so the raw field is
-# converted to SI by multiplying by 0.1.
+# conductivity-independent constant, 10.0, so the raw field is converted to SI
+# by multiplying by 0.1. That value is dimensional analysis, not a fit: what
+# checks it is inob.analysis.sphere_calibration.validate_meg_sphere, where the
+# FEM field times 0.1 matches the Sarvas sphere to within 2% in magnitude
+# (tests/test_meg_sphere_validation.py, run against a real DUNEuro build).
 MEG_MM_MODE_TO_SI: float = 0.1
 
 

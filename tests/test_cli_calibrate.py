@@ -14,6 +14,7 @@ class _FakeSummary:
     factor_peak = 1.0
     factor_median = 2.0
     factor_geomean = 3.0
+    factor_lsq = 4.0
     n_electrodes = 200
     radius_mm = 100.0
     source_radius_mm = 50.0

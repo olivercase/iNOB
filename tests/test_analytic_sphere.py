@@ -180,15 +180,91 @@ def test_eeg_tangential_dipole_dipolar_pattern() -> None:
     np.testing.assert_allclose(abs(V[0]), abs(V[1]), rtol=1e-6)
 
 
+@pytest.mark.parametrize("q_dir", [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.3, -0.5, 0.8]])
+def test_eeg_centred_dipole_is_three_times_infinite_medium(q_dir) -> None:
+    """A centred dipole in an insulated sphere reads 3 q·r̂ / (4π σ R²).
+
+    Textbook (Malmivuo & Plonsey 1995, §8): the boundary triples the
+    infinite-medium surface value, for every orientation. The earlier
+    tangential coefficient read exactly half of this, which the symmetry
+    tests above cannot see.
+    """
+    R, sigma = 0.1, 0.33
+    rng = np.random.default_rng(0)
+    rhat = rng.normal(size=(20, 3))
+    rhat /= np.linalg.norm(rhat, axis=1)[:, None]
+    # The series decomposes about r0, which is undefined at the centre.
+    r0 = np.array([0.0, 0.0, 1e-9])
+    q = 1e-9 * np.asarray(q_dir) / np.linalg.norm(q_dir)
+    V = homogeneous_sphere_eeg_potential(r0, q, R * rhat, sphere_radius_m=R, sigma_S_per_m=sigma)
+    expected = 3.0 * (rhat @ q) / (4.0 * np.pi * sigma * R**2)
+    np.testing.assert_allclose(V, expected, rtol=1e-6, atol=1e-12 * np.abs(expected).max())
+
+
+@pytest.mark.parametrize("q", [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.4, 0.7, -0.2]])
+def test_eeg_eccentric_dipole_matches_numerical_neumann_solve(q) -> None:
+    """Off-centre, the series matches an independent Neumann solve.
+
+    The reference is built without any Legendre series: the infinite-medium
+    dipole potential plus a harmonic correction Σ c_lm r^l Y_lm, with c fitted
+    by least squares so that no current leaves the sphere. Surface potentials
+    are compared after removing the mean, since only differences are defined.
+    """
+    from scipy.special import sph_harm_y
+
+    R, sigma, L = 1.0, 1.0, 22
+    r0 = np.array([0.1, -0.2, 0.3])  # eccentricity 0.37 → series tail < 1e-9
+    q = np.asarray(q, dtype=np.float64)
+
+    def harmonics(X):
+        rr = np.linalg.norm(X, axis=1)
+        th = np.arccos(np.clip(X[:, 2] / rr, -1.0, 1.0))
+        ph = np.arctan2(X[:, 1], X[:, 0])
+        B, dB = [], []
+        for ell in range(1, L + 1):
+            for m in range(-ell, ell + 1):
+                Y = sph_harm_y(ell, abs(m), th, ph)
+                Yr = Y.real if m >= 0 else Y.imag
+                B.append(rr**ell * Yr)
+                dB.append(ell * rr ** (ell - 1) * Yr)
+        return np.array(B).T, np.array(dB).T
+
+    rng = np.random.default_rng(1)
+    fit = rng.normal(size=(3000, 3))
+    fit /= np.linalg.norm(fit, axis=1)[:, None]
+    d = fit - r0
+    dn = np.linalg.norm(d, axis=1)
+    grad_inf = (q[None, :] / dn[:, None] ** 3 - 3.0 * (d @ q)[:, None] * d / dn[:, None] ** 5) / (
+        4.0 * np.pi * sigma
+    )
+    _, dB = harmonics(fit)
+    c, *_ = np.linalg.lstsq(dB, -(grad_inf * fit).sum(axis=1), rcond=None)
+
+    pts = rng.normal(size=(40, 3))
+    pts /= np.linalg.norm(pts, axis=1)[:, None]
+    B, _ = harmonics(pts)
+    dp = pts - r0
+    ref = (dp @ q) / (4.0 * np.pi * sigma * np.linalg.norm(dp, axis=1) ** 3) + B @ c
+    V = homogeneous_sphere_eeg_potential(r0, q, pts, sphere_radius_m=R, sigma_S_per_m=sigma)
+    ref -= ref.mean()
+    V -= V.mean()
+    np.testing.assert_allclose(V, ref, atol=1e-6 * np.abs(ref).max())
+
+
 # ── MNE-Python cross-validation regression tests ──────────────────────────
 
 
 def _mne_sphere_field_or_skip():
     """Return MNE's _do_sphere_field, skipping the test if unavailable."""
+    # MNE moved the kernel into a numba module (1.7-ish); the old path is kept
+    # for older installs. Without the new path this skipped on every current MNE.
     try:
-        from mne.forward._compute_forward import _do_sphere_field
-    except ImportError:  # pragma: no cover
-        pytest.skip("mne-python not available")
+        from mne.forward._compute_forward_numba import _do_sphere_field
+    except ImportError:
+        try:
+            from mne.forward._compute_forward import _do_sphere_field
+        except ImportError:  # pragma: no cover
+            pytest.skip("mne-python not available")
     return _do_sphere_field
 
 
@@ -242,3 +318,42 @@ def test_sarvas_matches_mne_to_machine_precision(src_pos_m, Q_Am) -> None:
 
     Bs_ours = sarvas_meg_field(src_pos_m, Q_Am, sensors_m)
     np.testing.assert_allclose(Bs_ours, Bs_mne, rtol=1e-12, atol=1e-30)
+
+
+@pytest.mark.parametrize("src_pos_m", [np.array([0.01, -0.02, 0.05]), np.array([0.0, 0.0, 0.03])])
+def test_eeg_series_matches_mne_single_shell(src_pos_m) -> None:
+    """Our homogeneous-sphere EEG must agree with MNE's sphere EEG.
+
+    MNE evaluates the multi-shell series by the Berg approximation, which is
+    exact to ~1e-5 when every shell has the same conductivity; the two are
+    compared after common-average referencing.
+    """
+    try:
+        import mne
+        from mne.forward._compute_forward_numba import _do_eeg_spherepot_coil
+    except ImportError:  # pragma: no cover
+        pytest.skip("mne-python not available")
+    R, sigma = 0.09, 0.33
+    sphere = mne.make_sphere_model(
+        r0=(0, 0, 0), head_radius=R, relative_radii=(0.5, 1.0), sigmas=(sigma, sigma), verbose=False
+    )
+    rng = np.random.default_rng(0)
+    el = rng.normal(size=(30, 3))
+    el *= R / np.linalg.norm(el, axis=1)[:, None]
+    M = _do_eeg_spherepot_coil(
+        src_pos_m[None, :],
+        el,
+        np.ones(30),
+        np.arange(30),
+        np.zeros(3),
+        R,
+        sphere["mu"],
+        sphere["lambda"],
+    )
+    for k in range(3):
+        ours = homogeneous_sphere_eeg_potential(
+            src_pos_m, np.eye(3)[k], el, sphere_radius_m=R, sigma_S_per_m=sigma
+        )
+        np.testing.assert_allclose(
+            ours - ours.mean(), M[k] - M[k].mean(), atol=1e-4 * np.abs(M[k]).max()
+        )

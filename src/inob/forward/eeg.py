@@ -44,15 +44,15 @@ from inob.sources.vagus import resolve_source_positions
 logger = logging.getLogger(__name__)
 
 
-# Empirical conversion factor that turns DUNEuro mm-mode raw EEG output
-# (V at internal mm-units) into µV per (1 nA·m source moment). Calibrated
-# against the Berg-Scherg analytic series on a homogeneous-sphere FEM by
-# :mod:`inob.analysis.sphere_calibration`. See ``outputs/calibration/
-# calibration.json`` and ``docs/VALIDATION.md`` §2 for the derivation.
-#
-# Median over 27-case (R, depth, σ) sweep is 0.622 with CV = 6.8%, and is
-# σ-invariant (Berg-Scherg's 1/σ and DUNEuro's σ scaling cancel exactly).
-EEG_CALIBRATION_FACTOR: float = 0.622
+# Conversion from DUNEuro mm-mode raw EEG output to µV per (1 nA·m source
+# moment). With the mesh in mm and conductivities in S/mm, a unit dipole
+# moment is 1 A·mm = 1e6 nA·m and the potential comes out in V, so V per A·mm
+# is exactly µV per nA·m: the factor is 1 by dimensional analysis.
+# :mod:`inob.analysis.sphere_calibration` checks it against the Berg-Scherg
+# series on a homogeneous-sphere FEM: median 0.975, least squares 1.016
+# (R = 100 mm, 50 mm deep, 3 mm pitch), the spread being the coarse mesh.
+# Until 2026-09 this was 0.622, an artefact of a bug in that reference series.
+EEG_CALIBRATION_FACTOR: float = 1.0
 
 
 def attach_electrodes(

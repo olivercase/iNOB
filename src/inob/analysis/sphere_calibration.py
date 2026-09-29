@@ -50,6 +50,7 @@ class SphereCalibration:
     factor_peak: float
     factor_median: float
     factor_geomean: float
+    factor_lsq: float
 
 
 def build_sphere_fem(
@@ -283,6 +284,13 @@ def calibrate_eeg_factor(
     # In our human-friendly slot we report µV/(nA·m).
     # 1 V/(A·m) = 1e6 µV / 1e9 nA·m = 1e-3 µV/(nA·m)
     V_analytic_uV_per_nAm = V_analytic * 1e-3
+    # The DUNEuro side is common-average referenced (run_sphere_eeg_forward);
+    # the analytic side must be too, or the per-electrode ratio compares two
+    # different references and is biased by however far the analytic mean
+    # sits from zero.
+    V_analytic_uV_per_nAm = V_analytic_uV_per_nAm - V_analytic_uV_per_nAm.mean(
+        axis=0, keepdims=True
+    )
     np.save(out_dir / "sphere_V_analytic.npy", V_analytic_uV_per_nAm)
 
     # Compute conversion factors per (electrode, moment) pair
@@ -295,6 +303,9 @@ def calibrate_eeg_factor(
         np.exp(np.mean(np.log(np.abs(ratio[ratio != 0])))) * np.sign(np.median(ratio))
     )
     factor_peak = float(np.abs(V_analytic_uV_per_nAm).max() / max(np.abs(L_raw).max(), 1e-30))
+    # Least squares over every electrode and moment: unlike the median of
+    # ratios it is not dominated by electrodes near a zero crossing.
+    factor_lsq = float((flat_V * flat_L).sum() / max((flat_L * flat_L).sum(), 1e-300))
     summary = SphereCalibration(
         radius_mm=radius_mm,
         pitch_mm=pitch_mm,
@@ -310,6 +321,7 @@ def calibrate_eeg_factor(
         factor_peak=factor_peak,
         factor_median=factor_median,
         factor_geomean=factor_geomean,
+        factor_lsq=factor_lsq,
     )
     (out_dir / "calibration.json").write_text(json.dumps(asdict(summary), indent=2))
     logger.info(

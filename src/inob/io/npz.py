@@ -7,7 +7,7 @@ Local solve and cluster-reduce paths produce the SAME schema:
                                          EEG: raw V at DUNEuro mm-mode units
     L_fT_per_nAm   (C, 3*S) float64    "human" units, modality-dependent:
                                          MEG: L × 1e6                  → fT per nA·m
-                                         EEG: L × EEG_CALIBRATION_FACTOR (=0.622) → µV per nA·m
+                                         EEG: L × EEG_CALIBRATION_FACTOR (=1.0) → µV per nA·m
                                        The field name is historical (the
                                        schema started life as MEG-only); for
                                        EEG outputs read it as µV per nA·m.

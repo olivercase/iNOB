@@ -182,11 +182,15 @@ def homogeneous_sphere_eeg_potential(
     # Legendre P_n and dP_n/dx at x = cos_theta, computed via recursion.
     n = np.arange(1, n_terms + 1)
     # Series coefficient for radial dipole (P_n) and tangential (P_n^1):
-    # V_rad = (1/(4π σ R²)) Σ ((2n+1)/n) (f/R)^(n-1) P_n(cos θ)
-    # V_tan = (1/(4π σ R²)) Σ ((2n+1)/(n(n+1))) (f/R)^(n-1) P_n^1(cos θ) cos φ
+    # V_rad = (1/(4π σ R²)) Σ (2n+1) (f/R)^(n-1) P_n(cos θ)
+    # V_tan = (1/(4π σ R²)) Σ ((2n+1)/n) (f/R)^(n-1) P_n^1(cos θ) cos φ
+    # These are the gradient, radial and tangential, of the Neumann point-source
+    # series (1/(4π σ R)) Σ ((2n+1)/n) (f/R)^n P_n. Until 2026-09 the radial
+    # term was divided by n and the tangential by n(n+1), which under-read the
+    # potential by 0.4-0.9x and is where the old EEG factor of 0.622 came from.
     f_over_R = f / R
-    coef_rad = (2 * n + 1) / n * f_over_R ** (n - 1)
-    coef_tan = (2 * n + 1) / (n * (n + 1)) * f_over_R ** (n - 1)
+    coef_rad = (2 * n + 1) * f_over_R ** (n - 1)
+    coef_tan = (2 * n + 1) / n * f_over_R ** (n - 1)
 
     out = np.zeros(len(r), dtype=np.float64)
     # P_{n-1}, P_n via recurrence
