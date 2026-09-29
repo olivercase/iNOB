@@ -1,0 +1,16 @@
+*.aux
+*.log
+*.bbl
+*.blg
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+main.pdf
+build.log
+*.toc
+*.bcf
+
+# The paper's own figures are copies of rendered outputs; they are
+# committed so the manuscript builds from a clone.
+!figures/*.png

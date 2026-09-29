@@ -1,0 +1,33 @@
+% Figure 1: the iNOB pipeline, top to bottom. The model-building stages run
+% down the left; sources join from the right; both meet at the forward solve.
+\begin{tikzpicture}[
+    font=\sffamily,
+    node distance=0.62cm and 1.6cm,
+    stage/.style={draw=black!75, line width=0.55pt, rounded corners=2pt, fill=white,
+      text width=4.6cm, minimum height=0.95cm, align=center, inner sep=3pt,
+      execute at begin node={\setlength{\parindent}{0pt}\setstretch{1}\centering\hyphenpenalty=10000\exhyphenpenalty=10000}},
+    goal/.style={stage, line width=1.1pt, draw=black},
+    flow/.style={-{Stealth[length=4.5pt,width=3.6pt]}, line width=0.6pt, draw=black!80},
+    edge/.style={font=\ttfamily\scriptsize, text=black!60, inner sep=3pt},
+  ]
+  % \stage[style]{name}{number}{title}{subtitle}{placement}
+  \newcommand{\stagetext}[3]{{\footnotesize\bfseries #1\,\,#2}\\[-1pt]{\scriptsize\color{black!60}#3}}
+
+  \node[stage]                   (mod) {\stagetext{1}{Modality}{MEG, EEG or both}};
+  \node[stage, below=of mod]     (ana) {\stagetext{2}{Anatomy}{tissue surfaces for the target region}};
+  \node[stage, below=of ana]     (con) {\stagetext{3}{Conductivities}{one value per tissue}};
+  \node[stage, below=of con]     (fem) {\stagetext{4}{FEM meshing}{multi-tissue tetrahedral volume}};
+  \node[stage, below=of fem]     (sen) {\stagetext{5}{Sensor array}{OPMs and/or surface electrodes}};
+  \node[stage, right=of sen]     (src) {\stagetext{6}{Sources}{dipole location, orientation, strength}};
+  \node[stage, below=0.9cm of $(sen.south)!0.5!(src.south)$] (fwd)
+        {\stagetext{7}{Forward solve}{DUNEuro finite-element leadfield}};
+  \node[goal, below=of fwd]      (tri) {\stagetext{8}{Trials to detect}{amplitude, SNR and averages needed}};
+
+  \draw[flow] (mod) -- node[edge, right] {meg/eeg}  (ana);
+  \draw[flow] (ana) -- node[edge, right] {surfaces} (con);
+  \draw[flow] (con) -- node[edge, right] {sigma}    (fem);
+  \draw[flow] (fem) -- node[edge, right] {volume}   (sen);
+  \draw[flow] (sen.south) |- ++(0,-0.45) -| node[edge, above, pos=0.25] {sensors} ([xshift=-6pt]fwd.north);
+  \draw[flow] (src.south) |- ++(0,-0.45) -| node[edge, above, pos=0.25] {dipoles} ([xshift=6pt]fwd.north);
+  \draw[flow] (fwd) -- node[edge, right] {leadfield} (tri);
+\end{tikzpicture}
