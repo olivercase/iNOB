@@ -13,7 +13,7 @@
   % \stage[style]{name}{number}{title}{subtitle}{placement}
   \newcommand{\stagetext}[3]{{\footnotesize\bfseries #1\,\,#2}\\[-1pt]{\scriptsize\color{black!60}#3}}
 
-  \node[stage]                   (mod) {\stagetext{1}{Modality}{MEG, EEG or both}};
+  \node[stage]                   (mod) {\stagetext{1}{Modality}{MXG, EXG or both}};
   \node[stage, below=of mod]     (ana) {\stagetext{2}{Anatomy}{tissue surfaces for the target region}};
   \node[stage, below=of ana]     (con) {\stagetext{3}{Conductivities}{one value per tissue}};
   \node[stage, below=of con]     (fem) {\stagetext{4}{FEM meshing}{multi-tissue tetrahedral volume}};
@@ -23,7 +23,7 @@
         {\stagetext{7}{Forward solve}{DUNEuro finite-element leadfield}};
   \node[goal, below=of fwd]      (tri) {\stagetext{8}{Trials to detect}{amplitude, SNR and averages needed}};
 
-  \draw[flow] (mod) -- node[edge, right] {meg/eeg}  (ana);
+  \draw[flow] (mod) -- node[edge, right] {mxg/exg}  (ana);
   \draw[flow] (ana) -- node[edge, right] {surfaces} (con);
   \draw[flow] (con) -- node[edge, right] {sigma}    (fem);
   \draw[flow] (fem) -- node[edge, right] {volume}   (sen);
