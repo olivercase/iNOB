@@ -1,0 +1,265 @@
+# Spinal-cord worked example — the configuration file of the paper's appendix.
+#
+# This file is configs/default.yaml with nothing changed but this header, so
+# running it reproduces every spinal-cord figure and number in the paper.
+# Copy it, edit the copy, and rerun to try your own design:
+#
+#     inob run      --config configs/spine.yaml --source-target spine
+#     inob electrodes --config configs/spine.yaml --source-target spine
+#     inob eeg      --config configs/spine.yaml --source-target spine
+#     inob detect   --config configs/spine.yaml --source-target spine
+#
+# The target (the cord) is chosen with --source-target spine rather than in
+# this file, because it sets three things together: the tissue the dipoles
+# are placed in (spinal_cord), the tissue and level the electrode paddle is
+# centred over (spinal_cord, C7), and the names of the output files, so a
+# spine run never overwrites a run for another target.
+#
+# The lines a design study usually changes:
+#   forward.source_spacing_mm   distance between dipoles along the cord
+#   forward.conductivities_sm   tissue conductivities, S/m
+#   sensors.resolution_mm       OPM spacing on the skin
+#   sensors.depth_mm            OPM stand-off from the skin
+#   electrodes.*                paddle layout (shape, rows, cols, pitch)
+#   noise.opm_sensor            OPM model: quspin_qzfm3, quspin_qzfm2,
+#                               fieldline_v3, he4_wideband
+#   noise.band_lo_hz/band_hi_hz recording band
+# Which commands to rerun after each kind of change is listed in the paper's
+# appendix (and in docs/REPRODUCE.md).
+
+# iNOB default configuration — single source of truth for the pipeline.
+# All paths relative to project_root (auto-detected; can override with --project-root).
+
+project_root: .
+
+data:
+  bone_dir: data/bone
+  torso_skin: data/torso/FJ2810_BP22617_FMA7163_Skin.stl
+  vagus_left_glob: "data/vagus/*left*.stl"
+  vagus_right_glob: "data/vagus/*right*.stl"
+  muscle_dir: data/muscle      # neck muscles around the carotid sheath
+  vessel_dir: data/vessel      # carotid-sheath vessels (carotid, jugular)
+  spinal_cord_dir: data/spinal_cord
+  heart_dir: data/heart          # myocardial chamber walls
+  brain_dir: data/brain          # cerebral gyri + cerebellum + brainstem
+  lung_dir: data/lung            # inflated parenchyma, flanks the heart
+
+outputs:
+  base: outputs
+  geometry_mat: outputs/geometry/geometry.mat
+  geometry_png: outputs/geometry/geometry.png
+  fem_mat: outputs/fem/fem.mat
+  fem_png: outputs/fem/fem.png
+  sensors_mat: outputs/sensors/sensor_array.mat
+  sensors_png: outputs/sensors/sensor_array.png
+  electrodes_mat: outputs/sensors/electrode_array.mat
+  electrodes_png: outputs/sensors/electrode_array.png
+  forward_npz: outputs/forward/duneuro_leadfield_vagus.npz
+  forward_chunks_dir: outputs/forward/chunks
+  forward_eeg_npz: outputs/forward/duneuro_eeg_leadfield_vagus.npz
+  sensitivity_dir: outputs/forward/sensitivity
+  intermediate_bone_clean: outputs/intermediate/bone/clean
+  intermediate_bone_union: outputs/intermediate/bone/union.stl
+  logs_dir: outputs/logs
+
+geometry:
+  shrinkwrap:
+    mesh_skin:        {pitch: 3.0, n_samples: 300000, close_iter: 2, decimate_target: 30000, smooth_iter: 8}
+    mesh_bone:        {pitch: 2.0, n_samples: 400000, close_iter: 2, decimate_target: 25000, smooth_iter: 10}
+    mesh_vagus_left:  {pitch: 0.5, n_samples: 80000,  close_iter: 1, decimate_target: 8000,  smooth_iter: 4}
+    mesh_vagus_right: {pitch: 0.5, n_samples: 80000,  close_iter: 1, decimate_target: 8000,  smooth_iter: 4}
+    mesh_muscle:      {pitch: 1.0, n_samples: 150000, close_iter: 1, decimate_target: 15000, smooth_iter: 6}
+    mesh_blood_vessel: {pitch: 0.5, n_samples: 60000, close_iter: 1, decimate_target: 6000,  smooth_iter: 3}
+    # Cord is thin (~9 mm) but 450 mm long, so it needs a high sample count:
+    # at 200k the splat leaves gaps that close_iter cannot bridge and the
+    # shrinkwrap intermittently degenerates (1 seed in 8). 600k is clean on
+    # 8/8 seeds and reconstructs 35 cm^3 vs ~31 cm^3 true volume.
+    mesh_spinal_cord: {pitch: 0.8, n_samples: 600000, close_iter: 1, decimate_target: 12000, smooth_iter: 4}
+    # Heart and lungs are compact blobs; the brain is 64 separate gyral meshes
+    # that only become one object after the union, so it needs the samples.
+    mesh_heart:       {pitch: 1.5, n_samples: 200000, close_iter: 2, decimate_target: 15000, smooth_iter: 6}
+    mesh_brain:       {pitch: 2.0, n_samples: 400000, close_iter: 2, decimate_target: 25000, smooth_iter: 8}
+    mesh_lung:        {pitch: 2.0, n_samples: 250000, close_iter: 2, decimate_target: 20000, smooth_iter: 6}
+  validate:
+    require_watertight: true
+    require_winding_consistent: true
+    require_euler_2: true
+
+fem:
+  pitch_mm: 3.0
+  pad_mm: 50.0
+  radbound: 2.5
+  maxvol: 20.0
+  vagus_dilate_voxels: 1
+  bone_closing_mm: 30.0
+  tissues: ["vagus_left", "vagus_right", "blood_vessel", "spinal_cord", "heart", "brain", "lung", "muscle", "bone", "skin"]
+  validate:
+    min_mesh_quality: 0.05
+    require_contiguous_tissue_ids: true
+    require_units_mm: true
+
+sensors:
+  resolution_mm: 30.0
+  depth_mm: 10.0
+  angular_margin_deg: 90.0
+  cylinder_radius_factor: 0.75
+  z_crop_low_factor: 0.55     # crop_lo = z_lo + factor * (z_hi - z_lo)
+  # global_up: T1 horizontal, T2 head-foot, about +Z. local_svd is the
+  # pre-v1.2.0 per-sensor null space, kept only for reproducibility.
+  tangent_basis: global_up
+
+forward:
+  conductivities_sm:           # SINGLE source of truth — used locally + on cluster
+    vagus_left:   0.30
+    vagus_right:  0.30
+    blood_vessel: 0.70         # blood ≈ 0.7 S/m (carotid/jugular lumen)
+    spinal_cord:  0.23         # grey/white matter mix (Haueisen et al. 2002)
+    heart:        0.20         # myocardium, isotropic mean (Gabriel et al. 1996)
+    brain:        0.33         # homogeneous brain (Haueisen et al. 2002); no
+                               # grey/white split and no CSF compartment, the
+                               # standard single-shell brain of MEG head models
+    lung:         0.10         # inflated parenchyma (Gabriel et al. 1996)
+    muscle:       0.35         # skeletal muscle (isotropic mean)
+    bone:         0.0042
+    skin:         0.43
+  sigma_unit_scale: 1.0e-3     # S/m → S/mm (DUNEuro mm-mode)
+  muscle_anisotropy:           # fibre-aligned muscle conductivity tensor
+    mode: auto                 # auto = on iff 'muscle' is a source_tissue.
+                               # vagus/spine stay isotropic automatically;
+                               # force with on/off for an A/B comparison.
+    sigma_long_sm:  0.40       # along fibre (Gabriel 1996; Rush 1963)
+    sigma_trans_sm: 0.10       # across fibre (≈4:1 anisotropy)
+  source_spacing_mm: 5.0
+  source_tissue: vagus_left
+  duneuro_path: null           # optional override; default = use installed duneuropy
+  local_workers: 0             # forward solve parallelism: 0 = all CPU cores
+                               # (coil array split into per-core chunks, then
+                               # stitched); 1 = serial single process.
+  source_model:
+    # How a point dipole becomes a FEM right-hand side.
+    #   partial_integration - load on the containing element's vertices only
+    #                         (cheapest; every leadfield in outputs/ used this)
+    #   venant              - St. Venant: monopoles on an element patch, fitted
+    #                         to the dipole moments (Buchner et al. 1997)
+    #   multipolar_venant   - as venant, multipolar load
+    # The venant.* parameters below are ignored by partial_integration.
+    type: partial_integration
+    number_of_moments: 3
+    reference_length_mm: 20.0    # mm-mode, same units as the mesh
+    weighting_exponent: 1        # must be < number_of_moments
+    relaxation_factor: 1.0e-6
+    mixed_moments: true
+    restrict: true               # keep the monopole patch inside one tissue
+    initialization: closest_vertex   # or single_element
+    extensions: vertex           # patch growth: vertex | intersection | ""
+    intorderadd: 2
+  solver:
+    type: cg
+    reduction: 1.0e-10
+    edge_norm_type: houston
+    penalty: 20
+    scheme: sipg
+    weights: tensorOnly
+    intorderadd: 5
+    post_process_meg: true
+    subtract_mean: true
+  validate:
+    require_finite: true
+    max_abs_fT_per_nAm: 1.0e+6   # sanity bound; regulars are O(1e-3..1e2)
+
+electrodes:
+  # Real PEDOT:PSS hardware: 32-channel paddle layout (1 head + 5×6 body + 1 foot).
+  # "rectangular" / "paddle32" / "whole_body".
+  shape: paddle32
+  rows: 6                         # body grid rows (paddle) or N rows (rectangular)
+  cols: 5                         # body grid cols (paddle) or N cols (rectangular)
+  contact_pitch_mm: 5.0
+  head_offset_mm: 15.0            # paddle: distance grid-top → head contact
+  foot_offset_mm: 15.0            # paddle: distance grid-bottom → foot contact
+  target_tissue: vagus_left
+  target_z_low_factor: 0.65
+  target_z_high_factor: 0.95
+  label_prefix: elec
+  n_contacts: 1000                # whole_body: number of skin-sampled electrodes
+  sample_seed: 0
+
+noise:
+  # Per-modality noise floors used by analysis/snr.py.
+  #
+  # OPM: named preset from inob/sensors/opm_presets.py, which carries a noise
+  # density AND a bandwidth, because quoting one without the other is how a
+  # 7 fT/√Hz sensor ends up credited with a 500 Hz recording band it cannot
+  # deliver. Known presets: quspin_qzfm3 (7 fT/√Hz, 135 Hz — the default),
+  # quspin_qzfm2 (15, 135), fieldline_v3 (15, 500), he4_wideband (30, 2000).
+  # The preset supplies both numbers; write opm_intrinsic_fT_sqrtHz or
+  # opm_bandwidth_hz here (or pass --set) only to override one of them, and
+  # note that pinning a number here stops a later --set noise.opm_sensor=...
+  # from carrying its own value in.
+  #
+  # The bandwidth is a single pole applied to signal and noise alike: noise
+  # integrates over f3dB·[atan(hi/f3dB) - atan(lo/f3dB)] instead of (hi - lo),
+  # and the CAP is scaled by 1/sqrt(1 + (f_CAP/f3dB)^2) at its spectral peak
+  # f_CAP = 1/(2*pi*ap_width_ms). For the 0.5 ms vagal CAP (f_CAP ~ 318 Hz)
+  # that makes the QZFM-3's effective floor ~217 fT, not the 152 fT the old
+  # flat-band arithmetic reported. The narrow-band sensor still beats the
+  # wide-band helium-4 preset (~650 fT) here — but now by a stated margin.
+  opm_sensor: quspin_qzfm3
+  # PEDOT:PSS HD-EMG-style front end. A low-noise biopotential amplifier
+  # (e.g. TI ADS129x class, or the discrete front ends used in the OPM-MEG
+  # literature) reaches ~0.05-0.1 µV/√Hz referred to input; the 0.3-1 µV/√Hz
+  # figure sometimes quoted for HD-EMG hardware is a system-level number that
+  # already includes interface and environmental contributions counted
+  # separately below, so using it here double-counts and inflates σ ~5-10×.
+  # Electrode-skin interface contributes Johnson noise from contact impedance.
+  # Malliaras-group flexible-textile PEDOT:PSS contact impedance is ≈ 5-20
+  # kΩ at 1 kHz (Inal/Rivnay/Malliaras 2018; Pas et al. 2018), much lower
+  # than dry Ag/AgCl (≥ 100 kΩ). Use 10 kΩ as the typical operating value.
+  eeg_amplifier_uV_sqrtHz: 0.1
+  eeg_electrode_skin_kohm: 10.0
+  # Temperature of that contact resistance for the Johnson term. 310.15 K is
+  # core temperature; skin is nearer 305 K, which lowers the Johnson voltage
+  # by 0.8% and the total electrode floor by 0.014% (the 0.1 µV/√Hz amplifier
+  # dominates the 0.013 µV/√Hz Johnson term). Kept at 310.15 K so published
+  # numbers reproduce.
+  eeg_contact_temperature_K: 310.15
+  # Recording passband. Noise integrates over (band_hi - band_lo), so the
+  # filter settings are part of the detectability answer. 30-500 Hz is the
+  # evoked-potential / CAP band used clinically (Cruccu et al. 2008); the
+  # previous broadband 1000 Hz figure overstated σ by ~1.5×. Set the legacy
+  # single-number `bandwidth_hz` instead to override the pair.
+  band_lo_hz: 30.0
+  band_hi_hz: 500.0
+
+cluster:
+  n_chunks: 32
+
+sensitivity:
+  # Conductivity sensitivity sweep — multiplicative perturbations applied
+  # one tissue at a time to forward.conductivities_sm.
+  perturbations: [0.8, 1.0, 1.25]
+  tissues: ["bone", "skin"]       # the dominant uncertainty drivers
+
+analytic:
+  # Analytic forward-model ladder: Biot-Savart (no volume conductor) ->
+  # single sphere (Sarvas) -> FEM. Differencing consecutive rungs isolates
+  # the volume-current contribution and then the real-geometry contribution.
+  #
+  # These describe the concentric-circle approximation of whatever elongated
+  # structure forward.source_tissue selects — set them per target. The values
+  # below are the cervical-vagus figures from Bu et al. 2024 (Comm Biol
+  # 7:893): source 40 mm from the cervical axis, sensors at 52 mm skin +
+  # 6.5 mm QuSpin standoff.
+  source_axis_mm: 40.0
+  sensor_axis_mm: 58.5
+  # Only source/coil pairs within this half-width of the nominal distances
+  # are treated as a regime where the single-sphere solution is faithful.
+  band_tolerance_mm: 30.0
+  # Pairs where the sphere solution drops below this fraction of the
+  # Biot-Savart value are counted as "sphere-silent" (radial sources are
+  # magnetically silent in a sphere but not in free space).
+  silent_rel_threshold: 0.01
+  bootstrap_n: 2000
+  bootstrap_seed: 0
+
+reproducibility:
+  seed: 0

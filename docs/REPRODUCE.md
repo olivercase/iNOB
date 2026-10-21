@@ -55,6 +55,7 @@ bash scripts/regenerate_figures.sh
 | Stand-off and noise level | `python scripts/sensor_sweep.py` (one DUNEuro solve per stand-off) | table on stdout |
 | Array design | `inob placement --source-target T`, `inob placement --source-target T --optimise` | table on stdout, `outputs/placement_comparison_T.png` |
 | EEG unit calibration across spheres | `python scripts/eeg_calibration_sweep.py` | table on stdout, `outputs/calibration/sweep/` |
+| Spinal-cord comparison figures (forward models, sensor design) | `python scripts/spine_figures.py --config configs/spine.yaml` (reads the leadfields; no solve) | `outputs/paper/spine_*.png` |
 | Every number in the worked examples | `python scripts/paper_numbers.py` (reads the leadfields above; no solve) | stdout |
 | Conductivity sensitivity | `inob sensitivity` (re-solves DUNEuro per perturbation) | `outputs/forward/sensitivity/` |
 
@@ -64,4 +65,6 @@ bash scripts/regenerate_figures.sh
 and figures into one tarball with a SHA-256 manifest, ready for a Zenodo or
 OSF deposit. The solved leadfields are 20–170 MB each, above the journal's
 100 MB supplementary-material limit, so they go in a repository with a DOI
-rather than alongside the manuscript.
+rather than alongside the manuscript. `scripts/zenodo_deposit.py draft` uploads
+that tarball to a Zenodo draft and reserves its DOI; `publish` makes the record
+permanent once it has been checked on zenodo.org.

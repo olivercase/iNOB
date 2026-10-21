@@ -6,6 +6,26 @@ versioning. Dates in ISO-8601.
 
 ## [Unreleased]
 
+### Added
+- `scripts/spine_figures.py` draws the spinal-cord paper's two comparison
+  figures from the saved leadfields (no DUNEuro, a few seconds): Biot-Savart
+  vs Sarvas vs FEM along the cord, and trials-to-detect per array, OPM noise
+  level (including Gen-3 at 20 fT/√Hz as measured in use) and information
+  vs array size. `--sweep-json` adds a stand-off panel from
+  `sensor_sweep.py --json`.
+- `configs/spine.yaml`: `default.yaml` plus a header naming the lines a
+  design study changes; the configuration file of the paper's appendix.
+- `scripts/zenodo_deposit.py` puts the results bundle on Zenodo in two
+  separate steps, `draft` (upload, reserve the DOI; deletable) and `publish`
+  (permanent), reading its metadata from `.zenodo-results.json`.
+- `manuscript/figures/fig1_pipeline_mxg_exg.tex` (+ PNG): the pipeline
+  figure with the modalities labelled MXG/EXG.
+
+### Removed
+- The manuscript itself (`manuscript/main.tex`, `references.bib`, the
+  figure PNGs) is no longer kept in the repository; it is edited and built
+  elsewhere. Nothing in the package or its docs referenced it.
+
 ### Fixed — physics
 - **The Berg-Scherg reference series under-read the surface potential by
   0.4-0.9x, and that is where the EEG calibration factor of 0.622 came
