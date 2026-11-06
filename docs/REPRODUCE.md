@@ -56,6 +56,8 @@ bash scripts/regenerate_figures.sh
 | Array design | `inob placement --source-target T`, `inob placement --source-target T --optimise` | table on stdout, `outputs/placement_comparison_T.png` |
 | EEG unit calibration across spheres | `python scripts/eeg_calibration_sweep.py` | table on stdout, `outputs/calibration/sweep/` |
 | Spinal-cord comparison figures (forward models, sensor design) | `python scripts/spine_figures.py --config configs/spine.yaml` (reads the leadfields; no solve) | `outputs/paper/spine_*.png` |
+| Spinal-cord paper figures (trials to detect, maximum channel field, electrode coverage, source models) | `python scripts/spine_paper_figures.py --config configs/spine.yaml` (reads the leadfields; runs `inob source-models`) | `outputs/paper/fig*_spine_*.png` |
+| Check against published SQUID magnetospinography (Miyano 2020, Hashimoto 2022) | `python scripts/validate_miyano2020.py` | printed table |
 | Every number in the worked examples | `python scripts/paper_numbers.py` (reads the leadfields above; no solve) | stdout |
 | Conductivity sensitivity | `inob sensitivity` (re-solves DUNEuro per perturbation) | `outputs/forward/sensitivity/` |
 

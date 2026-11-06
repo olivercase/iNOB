@@ -9,10 +9,19 @@ versioning. Dates in ISO-8601.
 ### Added
 - `scripts/spine_figures.py` draws the spinal-cord paper's two comparison
   figures from the saved leadfields (no DUNEuro, a few seconds): Biot-Savart
-  vs Sarvas vs FEM along the cord, and trials-to-detect per array, OPM noise
-  level (including Gen-3 at 20 fT/√Hz as measured in use) and information
-  vs array size. `--sweep-json` adds a stand-off panel from
-  `sensor_sweep.py --json`.
+  vs Sarvas vs FEM along the cord, and trials-to-detect per array, magnetic
+  (MXG) sensor noise level with the Ricoh/KIT SQUID magnetoneurograph as an
+  alternative to the OPM, and information vs array size. `--sweep-json` adds
+  a stand-off panel from `sensor_sweep.py --json`.
+- `scripts/spine_paper_figures.py` draws the paper's other spinal-cord
+  figures (trials to detect with lumbar/thoracic/cervical bands, maximum
+  channel field, electrode coverage, stationary vs ascending source) from the
+  saved leadfields and `inob source-models --json-out`; labels MXG/EXG.
+- `scripts/validate_miyano2020.py` compares the spine leadfield with
+  published SQUID magnetospinography: Miyano et al. 2020 (foraminal
+  currents, cranio-caudal field) and Hashimoto et al. 2022 (thoracic cord,
+  left-right field). Free-space and FEM fields, and the moment that would
+  reproduce each measurement.
 - `configs/spine.yaml`: `default.yaml` plus a header naming the lines a
   design study changes; the configuration file of the paper's appendix.
 - `scripts/zenodo_deposit.py` puts the results bundle on Zenodo in two
@@ -20,6 +29,14 @@ versioning. Dates in ISO-8601.
   (permanent), reading its metadata from `.zenodo-results.json`.
 - `manuscript/figures/fig1_pipeline_mxg_exg.tex` (+ PNG): the pipeline
   figure with the modalities labelled MXG/EXG.
+
+### Changed
+- **QuSpin presets follow the manufacturer's specification.** `quspin_qzfm3`
+  is the Neuro-1 triaxial (23 fT/√Hz, was 7) and `quspin_qzfm2` the
+  dual-axis (15 fT/√Hz). The default OPM floor for the cord rises from 166 to
+  546 fT, so every trials-to-detect figure derived from it rises with it
+  (default source at C6: 6 -> 62 trials). The preset keys keep their names.
+- `inob torso` panel titles read MXG and EXG (were MEG and ESG).
 
 ### Removed
 - The manuscript itself (`manuscript/main.tex`, `references.bib`, the

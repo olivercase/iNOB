@@ -45,18 +45,19 @@ SPINE_Q = 5.11
 #: Clinical somatosensory-evoked-potential averaging budget, trials.
 CLINICAL_BUDGET = (500, 2000)
 #: OPM noise settings compared in the noise-level panel, as (overrides, label).
-#: The second is the Gen-3 preset at the ~20 fT/√Hz such sensors reach in
-#: practice in our laboratory, rather than the 7 fT/√Hz specification.
+#: Both QuSpin settings are manufacturer maxima: Neuro-1 triaxial (23) and
+#: dual-axis (15 fT/√Hz).
 OPM_PRESETS = (
-    (["noise.opm_sensor=quspin_qzfm3"], "Gen-3\nspec\n7"),
-    (
-        ["noise.opm_sensor=quspin_qzfm3", "noise.opm_intrinsic_fT_sqrtHz=20"],
-        "Gen-3\nin use\n20",
-    ),
-    (["noise.opm_sensor=quspin_qzfm2"], "Gen-2\n\n15"),
+    (["noise.opm_sensor=quspin_qzfm3"], "QuSpin\n3-axis\n23"),
+    (["noise.opm_sensor=quspin_qzfm2"], "QuSpin\n2-axis\n15"),
     (["noise.opm_sensor=fieldline_v3"], "Field-\nLine v3\n15"),
     (["noise.opm_sensor=he4_wideband"], "He-4\n\n30"),
 )
+#: Alternative magnetometer for the same leadfield: the SQUID magnetoneurograph of the Japanese
+#: magnetospinography studies (Sumiya 2017; Akaza 2021; Hashimoto 2022): under 4 fT/sqrt(Hz) with
+#: a flat response over a 100-5,000 Hz recording band, so no roll-off. Effective floor =
+#: 4 * sqrt(5000 * (atan(5000/5000) - atan(100/5000))) / gain(227 Hz) = 247 fT (paper Table 5).
+SQUID_FLOOR_FT = 247.0
 ARRAY_SIZES = (4, 8, 16, 32, 64)
 
 
@@ -234,12 +235,17 @@ def sensor_design(cfg, base_config: str, out: Path, sweep_json: Path | None) -> 
 
     sm, se = f.meg_per_channel_fT, f.eeg_per_channel_uV
     curves = {
-        "OPM, triaxial": (_trials(long_meg.max(axis=0) * SPINE_Q, sm), P["blue"], "-"),
-        "OPM, radial only": (_trials(long_meg[rad].max(axis=0) * SPINE_Q, sm), P["blue"], "--"),
-        "electrodes, 32-contact patch": (_trials(bipolar(eeg) * SPINE_Q, se), P["red"], "-"),
+        "MXG, OPM triaxial": (_trials(long_meg.max(axis=0) * SPINE_Q, sm), P["blue"], "-"),
+        "MXG, OPM radial only": (_trials(long_meg[rad].max(axis=0) * SPINE_Q, sm), P["blue"], "--"),
+        "EXG, 32-contact paddle": (_trials(bipolar(eeg) * SPINE_Q, se), P["red"], "-"),
     }
+    curves["MXG, SQUID triaxial (alternative)"] = (
+        _trials(long_meg.max(axis=0) * SPINE_Q, SQUID_FLOOR_FT),
+        P["teal"],
+        ":",
+    )
     if wb is not None:
-        curves["electrodes, 1,000 whole-body"] = (
+        curves["EXG, 1,000-contact whole body"] = (
             _trials(bipolar(wb) * SPINE_Q, se),
             P["red"],
             "--",
@@ -257,7 +263,12 @@ def sensor_design(cfg, base_config: str, out: Path, sweep_json: Path | None) -> 
     ax = axes[0]
     ax.axhspan(*CLINICAL_BUDGET, color=P["glow"], alpha=0.25, lw=0)
     ax.text(
-        z.max(), CLINICAL_BUDGET[0], "clinical SSEP budget ", fontsize=6, va="bottom", ha="right"
+        z.min() + 4,
+        CLINICAL_BUDGET[1] * 0.9,
+        "clinical SSEP budget",
+        fontsize=6,
+        va="top",
+        ha="left",
     )
     for name, (n, colour, ls) in curves.items():
         ax.plot(z[order], n[order], color=colour, ls=ls, lw=1.1, label=name)
@@ -285,15 +296,21 @@ def sensor_design(cfg, base_config: str, out: Path, sweep_json: Path | None) -> 
         names.append(label)
         n_pre.append(int(_trials(peak, sigma)[0]))
         print(f"  {' '.join(overrides):<70} effective floor {sigma:6.1f} fT -> {n_pre[-1]} trials")
+    names.append("SQUID\n(alt.)\n4")
+    n_pre.append(int(_trials(peak, SQUID_FLOOR_FT)[0]))
+    print(f"  SQUID floor {SQUID_FLOOR_FT:.0f} fT -> {n_pre[-1]} trials")
     bars = ax.bar(
-        range(len(names)), n_pre, color=[P["blue"], P["blue"], P["teal"], P["purple"], P["grey"]]
+        range(len(names)),
+        n_pre,
+        color=[P["blue"], P["blue"], P["teal"], P["purple"], P["grey"]],
     )
     bars[1].set_alpha(0.55)
+    bars[-1].set_hatch("//")
     for b, n in zip(bars, n_pre, strict=True):
         ax.text(b.get_x() + b.get_width() / 2, n, f"{n}", ha="center", va="bottom", fontsize=7)
-    ax.set_xticks(range(len(names)), names, fontsize=6.5, rotation=0)
+    ax.set_xticks(range(len(names)), names, fontsize=5.5, rotation=0)
     ax.set_ylabel(f"trials to SNR 3, source #{idx}")
-    ax.set_title("OPM noise level", fontsize=8, fontweight="normal")
+    ax.set_title("MXG noise level", fontsize=8, fontweight="normal")
     ax.set_xlabel("sensor; noise density (fT/√Hz)", fontsize=7)
     add_panel_label(ax, "b", y=1.08)
 

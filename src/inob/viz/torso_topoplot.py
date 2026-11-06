@@ -3,7 +3,7 @@
 One figure per source target, the two modalities side by side:
 
     a  MEG  — the magnetic field on the skin
-    b  ESG  — the electric potential on the skin
+    b  EXG  — the electric potential on the skin
 
 Same mesh, same crop, same camera, same orthographic projection, same scale
 bar, same colour rule. The only thing that differs between the panels is the
@@ -702,7 +702,7 @@ def render_torso_topoplot(
         axis_xy=axis_xy,
         cmap=cmap,
         rng=rng,
-        title="MEG  ·  magnetic field on the skin",
+        title="MXG  ·  magnetic field on the skin",
         moment=moment,
         target_pos=target_pos,
     )
@@ -746,7 +746,7 @@ def render_torso_topoplot(
             axis_xy=axis_xy,
             cmap=cmap,
             rng=rng,
-            title="ESG  ·  electric potential on the skin",
+            title="EXG  ·  electric potential on the skin",
             moment=moment,
             target_pos=target_pos,
         )

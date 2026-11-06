@@ -4,7 +4,7 @@ Why this module exists
 ----------------------
 A magnetometer is described by two numbers, not one. Quoting an intrinsic
 noise density without the bandwidth that goes with it produces the mistake
-this table was written to stop: pairing a QuSpin QZFM-3 (7 fT/√Hz) with a
+this table was written to stop: pairing a QuSpin sensor (e.g. 23 fT/√Hz) with a
 30–500 Hz recording band, when that sensor's own 3-dB point is ≈ 135 Hz. The
 sensor cannot integrate noise over 470 Hz, and — more importantly — it cannot
 pass a 0.5 ms compound action potential, whose Hermite-Gaussian spectrum peaks
@@ -59,20 +59,25 @@ class OpmSensor:
 OPM_SENSORS: dict[str, OpmSensor] = {
     "quspin_qzfm3": OpmSensor(
         name="quspin_qzfm3",
-        label="QuSpin QZFM Gen-3",
-        noise_fT_sqrtHz=7.0,
+        label="QuSpin Neuro-1 (triaxial, Gen-3)",
+        noise_fT_sqrtHz=23.0,
         bandwidth_hz=135.0,
         source=(
-            "QuSpin QZFM Gen-3 spec: sensitivity 7-10 fT/√Hz, 3-dB "
-            "bandwidth ~135 Hz (commonly quoted as ~150 Hz)."
+            "QuSpin Neuro-1 triaxial spec: <23 fT/√Hz (3-100 Hz), typically "
+            "15 fT/√Hz on all axes; 3-dB bandwidth ~135 Hz. The specified "
+            "maximum is used."
         ),
     ),
     "quspin_qzfm2": OpmSensor(
         name="quspin_qzfm2",
-        label="QuSpin QZFM Gen-2",
+        label="QuSpin dual-axis (Gen-3)",
         noise_fT_sqrtHz=15.0,
         bandwidth_hz=135.0,
-        source="QuSpin QZFM Gen-2 spec; the pre-Gen-3 baseline this project used.",
+        source=(
+            "QuSpin dual-axis spec: <15 fT/√Hz (3-100 Hz), typically "
+            "7-10 fT/√Hz; 3-dB bandwidth ~135 Hz. The specified maximum "
+            "is used. The key keeps its historical name."
+        ),
     ),
     "fieldline_v3": OpmSensor(
         name="fieldline_v3",

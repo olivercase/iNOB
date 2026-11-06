@@ -24,10 +24,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def test_noise_floors_have_expected_orders() -> None:
     cfg = load_config(REPO_ROOT / "configs" / "default.yaml")
     nf = compute_noise_floors(cfg)
-    # OPM: 7 fT/√Hz over the sensor-weighted band (a 135 Hz pole turns the
-    # nominal 470 Hz into ~147 Hz) ≈ 85 fT, then divided by the 0.39 gain the
-    # sensor has at the 318 Hz CAP peak → ~217 fT effective.
-    assert 50 < nf.meg_per_channel_fT < 500
+    # OPM: 23 fT/√Hz (QuSpin Neuro-1 spec) over the sensor-weighted band (a
+    # 135 Hz pole turns the nominal 470 Hz into ~147 Hz) ≈ 279 fT, then divided
+    # by the 0.39 gain the sensor has at the 318 Hz CAP peak → ~714 fT effective.
+    assert 50 < nf.meg_per_channel_fT < 1000
     # EEG amplifier 0.1 µV/√Hz dominates over Johnson@10 kΩ ≈ 0.013 µV/√Hz
     # → ~0.1 µV/√Hz × √470 ≈ 2.2 µV
     assert 0.5 < nf.eeg_per_channel_uV < 10
@@ -150,11 +150,14 @@ def test_wideband_preset_swaps_noise_and_bandwidth_together() -> None:
     nf = compute_noise_floors(cfg)
     # Wide enough to pass the CAP essentially intact...
     assert nf.meg_sensor_gain > 0.95
-    # ...but its noise density costs more than the QZFM-3's roll-off does.
+    # ...but its noise density costs more than the dual-axis QuSpin's roll-off does.
     assert (
         nf.meg_per_channel_fT
         > compute_noise_floors(
-            load_config(REPO_ROOT / "configs" / "default.yaml")
+            load_config(
+                REPO_ROOT / "configs" / "default.yaml",
+                overrides=["noise.opm_sensor=quspin_qzfm2"],
+            )
         ).meg_per_channel_fT
     )
 
