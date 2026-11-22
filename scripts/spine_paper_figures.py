@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from spine_figures import SPINE_Q, SQUID_FLOOR_FT, _levels, _trials
+from spine_figures import OPM_PRESET, SPINE_Q, SQUID_FLOOR_FT, _levels, _trials, with_sensor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 #: Clinical somatosensory-evoked-potential averaging budget, trials.
@@ -54,7 +54,14 @@ def _load(cfg):
     wb = load_leadfield(
         cfg.outputs.forward_npz.parent / "duneuro_eeg_leadfield_wholebody_spine.npz"
     )
-    return meg, eeg, wb, compute_noise_floors(cfg), default_source_idx(meg, eeg)
+    # Floors of the OPM; the SQUID alternative uses SQUID_FLOOR_FT.
+    return (
+        meg,
+        eeg,
+        wb,
+        compute_noise_floors(with_sensor(cfg, OPM_PRESET)),
+        default_source_idx(meg, eeg),
+    )
 
 
 def _bipolar(leadfield) -> np.ndarray:

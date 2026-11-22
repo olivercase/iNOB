@@ -7,6 +7,17 @@ versioning. Dates in ISO-8601.
 ## [Unreleased]
 
 ### Added
+- `noise.meg_band_lo_hz` / `noise.meg_band_hi_hz`: a magnetometer recording
+  band separate from the electrodes'. Unset, the magnetic channels use the
+  shared `band_lo_hz`/`band_hi_hz` as before, so existing configs give the
+  same numbers. A SQUID (100-5,000 Hz) and surface electrodes (30-500 Hz)
+  can now be set in one file.
+- `squid_msg` sensor preset: the SQUID magnetoneurograph of the Japanese
+  magnetospinography studies (Miyano 2020; Hashimoto 2021), 4 fT/√Hz, flat
+  (no roll-off). With 100-5,000 Hz its floor is 4·√4,900 = 280 fT.
+- `manuscript/figures/`: the generators of every figure in the paper, drawn
+  to Nature's standard, with a copy of the house style so they run from a
+  checkout. Replaces `manuscript/figures/fig1_pipeline_mxg_exg.*`.
 - `scripts/spine_figures.py` draws the spinal-cord paper's two comparison
   figures from the saved leadfields (no DUNEuro, a few seconds): Biot-Savart
   vs Sarvas vs FEM along the cord, and trials-to-detect per array, magnetic
@@ -31,6 +42,15 @@ versioning. Dates in ISO-8601.
   figure with the modalities labelled MXG/EXG.
 
 ### Changed
+- **`configs/spine.yaml` uses the paper's sensors.** Its noise block is now
+  the SQUID preset over 100-5,000 Hz with electrodes over 30-500 Hz, so
+  `inob detect --config configs/spine.yaml` gives the paper's 280 fT and
+  2.19 µV floors without `--set`. It is no longer identical to
+  `default.yaml`, which keeps the QuSpin OPM.
+- `scripts/spine_figures.py` and `spine_paper_figures.py` take the SQUID
+  floor from the preset (280 fT, flat) instead of a hardcoded 247 fT (which
+  assumed a 5 kHz pole), and force the OPM preset for their OPM curves,
+  whichever sensor the config names.
 - **QuSpin presets follow the manufacturer's specification.** `quspin_qzfm3`
   is the Neuro-1 triaxial (23 fT/√Hz, was 7) and `quspin_qzfm2` the
   dual-axis (15 fT/√Hz). The default OPM floor for the cord rises from 166 to

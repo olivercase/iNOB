@@ -1,0 +1,4 @@
+*.png
+*.svg
+src/_fig2_render.png
+src/__pycache__/

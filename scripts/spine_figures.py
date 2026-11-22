@@ -53,11 +53,44 @@ OPM_PRESETS = (
     (["noise.opm_sensor=fieldline_v3"], "Field-\nLine v3\n15"),
     (["noise.opm_sensor=he4_wideband"], "He-4\n\n30"),
 )
-#: Alternative magnetometer for the same leadfield: the SQUID magnetoneurograph of the Japanese
-#: magnetospinography studies (Sumiya 2017; Akaza 2021; Hashimoto 2022): under 4 fT/sqrt(Hz) with
-#: a flat response over a 100-5,000 Hz recording band, so no roll-off. Effective floor =
-#: 4 * sqrt(5000 * (atan(5000/5000) - atan(100/5000))) / gain(227 Hz) = 247 fT (paper Table 5).
-SQUID_FLOOR_FT = 247.0
+#: The two magnetometers these figures compare on one leadfield: the default wearable OPM and the
+#: SQUID magnetoneurograph of the Japanese magnetospinography studies (Miyano 2020; Hashimoto 2021),
+#: which is the magnetic sensor of the paper's cord example (configs/spine.yaml).
+OPM_PRESET = "quspin_qzfm3"
+SQUID_PRESET, SQUID_BAND_HZ = "squid_msg", (100.0, 5000.0)
+
+
+def with_sensor(cfg, preset: str, meg_band: tuple[float, float] | None = None):
+    """``cfg`` with its magnetometer swapped for ``preset`` (and its magnetic band, if given).
+
+    The comparison figures need both sensors from one config, whichever the config itself names.
+    """
+    from dataclasses import replace
+
+    from inob.sensors.opm_presets import opm_sensor
+
+    p = opm_sensor(preset)
+    lo, hi = meg_band if meg_band is not None else (None, None)
+    noise = replace(
+        cfg.noise,
+        opm_sensor=preset,
+        opm_intrinsic_fT_sqrtHz=p.noise_fT_sqrtHz,
+        opm_bandwidth_hz=p.bandwidth_hz,
+        meg_band_lo_hz=lo,
+        meg_band_hi_hz=hi,
+    )
+    return replace(cfg, noise=noise)
+
+
+def _squid_floor_fT() -> float:
+    """4 fT/sqrt(Hz), flat, over 100-5,000 Hz: 4 * sqrt(4,900) = 280 fT (paper Section 3.7)."""
+    from inob.sensors.opm_presets import opm_sensor
+
+    lo, hi = SQUID_BAND_HZ
+    return opm_sensor(SQUID_PRESET).noise_fT_sqrtHz * math.sqrt(hi - lo)
+
+
+SQUID_FLOOR_FT = _squid_floor_fT()
 ARRAY_SIZES = (4, 8, 16, 32, 64)
 
 
@@ -220,7 +253,7 @@ def sensor_design(cfg, base_config: str, out: Path, sweep_json: Path | None) -> 
     eeg = load_leadfield(cfg.outputs.forward_eeg_npz)
     wb_path = cfg.outputs.forward_npz.parent / "duneuro_eeg_leadfield_wholebody_spine.npz"
     wb = load_leadfield(wb_path) if wb_path.exists() else None
-    f = compute_noise_floors(cfg)
+    f = compute_noise_floors(with_sensor(cfg, OPM_PRESET))
     idx = default_source_idx(meg, eeg)
     z = meg.source_pos[:, 2]
     order = np.argsort(z)
@@ -292,6 +325,7 @@ def sensor_design(cfg, base_config: str, out: Path, sweep_json: Path | None) -> 
     names, n_pre = [], []
     for overrides, label in OPM_PRESETS:
         c = apply_source_target(load_config(base_config, overrides=overrides), "spine")
+        c = with_sensor(c, c.noise.opm_sensor)  # OPMs record over the shared band
         sigma = compute_noise_floors(c).meg_per_channel_fT
         names.append(label)
         n_pre.append(int(_trials(peak, sigma)[0]))

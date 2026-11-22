@@ -117,7 +117,7 @@ line-length = 100
 target-version = "py311"
 # AppleDouble metadata files appear on macOS-mounted external volumes; they
 # are not source.
-extend-exclude = ["**/._*"]
+extend-exclude = ["**/._*", "manuscript/figures"]  # paper drawing scripts, house style of the manuscripts repo
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "RUF"]

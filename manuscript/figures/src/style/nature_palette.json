@@ -1,0 +1,113 @@
+{
+ "source": "Nature artwork guide (https://www.nature.com/documents/natrev-artworkguide.pdf), page 2, sampled from the rendered PDF on 2026-11-18. Each family runs level 1 (lightest) to 6 (darkest).",
+ "main_background": [
+  "stone",
+  "grey"
+ ],
+ "main_accents": [
+  "red",
+  "blue",
+  "yellow"
+ ],
+ "extended": [
+  "olive",
+  "green",
+  "teal",
+  "blue",
+  "purple",
+  "red",
+  "orange",
+  "yellow",
+  "skin"
+ ],
+ "palette": {
+  "olive": [
+   "#F4F1B3",
+   "#DFDC67",
+   "#C9C700",
+   "#9BA415",
+   "#66771E",
+   "#36461A"
+  ],
+  "green": [
+   "#D9E8C6",
+   "#A0CA79",
+   "#62B347",
+   "#459434",
+   "#227130",
+   "#163B1C"
+  ],
+  "teal": [
+   "#CCE7EE",
+   "#97D2D4",
+   "#4BBCBD",
+   "#019AA3",
+   "#016879",
+   "#00394E"
+  ],
+  "blue": [
+   "#C8E7FB",
+   "#9DCBEC",
+   "#5799D1",
+   "#0272B2",
+   "#014E91",
+   "#012C5C"
+  ],
+  "purple": [
+   "#EBD6E9",
+   "#D3AAD1",
+   "#BB7CB4",
+   "#A84E94",
+   "#792C74",
+   "#481951"
+  ],
+  "red": [
+   "#FAD0CE",
+   "#EDA4A7",
+   "#DE6866",
+   "#C93E3F",
+   "#9C2826",
+   "#741915"
+  ],
+  "orange": [
+   "#FDE0BD",
+   "#FBC07F",
+   "#F59A45",
+   "#EC6F00",
+   "#B74F06",
+   "#843200"
+  ],
+  "yellow": [
+   "#FFF1C3",
+   "#F6DC8A",
+   "#EBC850",
+   "#CCA02C",
+   "#9C7717",
+   "#6B5513"
+  ],
+  "skin": [
+   "#F8E6D7",
+   "#DDBDA3",
+   "#BF997D",
+   "#936A57",
+   "#755040",
+   "#442D1F"
+  ],
+  "grey": [
+   "#E6E6ED",
+   "#C8CEDA",
+   "#99A3B4",
+   "#6F7B91",
+   "#49566D",
+   "#253247"
+  ],
+  "stone": [
+   "#F7F5EF",
+   "#E4E0CE",
+   "#C6C2A6",
+   "#A8A386",
+   "#888366",
+   "#625F4A"
+  ]
+ }
+}

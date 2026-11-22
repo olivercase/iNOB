@@ -53,6 +53,8 @@ class OpmSensor:
 
     def gain(self, f_hz: float) -> float:
         """Single-pole amplitude response at ``f_hz`` (1.0 at DC)."""
+        if self.bandwidth_hz == float("inf"):
+            return 1.0
         return 1.0 / (1.0 + (float(f_hz) / self.bandwidth_hz) ** 2) ** 0.5
 
 
@@ -122,6 +124,24 @@ OPM_SENSORS: dict[str, OpmSensor] = {
         verified=False,
     ),
 }
+
+# The SQUID magnetoneurograph of the Japanese magnetospinography studies, the
+# magnetic sensor of the paper's cord example. It has no roll-off inside its
+# recording band, so the pole is set to infinity: the noise then integrates
+# over exactly ``meg_band_hi_hz - meg_band_lo_hz`` and the signal is passed
+# whole. With the 100-5,000 Hz band that gives 4 * sqrt(4,900) = 280 fT.
+OPM_SENSORS["squid_msg"] = OpmSensor(
+    name="squid_msg",
+    label="SQUID magnetoneurograph (Japanese MSG system)",
+    noise_fT_sqrtHz=4.0,
+    bandwidth_hz=float("inf"),
+    source=(
+        "Miyano et al. 2020; Hashimoto et al. 2021: low-Tc SQUID "
+        "magnetospinography system, noise below 4 fT/sqrt(Hz), recorded "
+        "over 100-5,000 Hz with a flat response. Pair it with "
+        "noise.meg_band_lo_hz: 100 and noise.meg_band_hi_hz: 5000."
+    ),
+)
 
 DEFAULT_OPM_SENSOR = "quspin_qzfm3"
 

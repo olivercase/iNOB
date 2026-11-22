@@ -167,3 +167,37 @@ def test_unknown_opm_preset_is_rejected() -> None:
         load_config(
             REPO_ROOT / "configs" / "default.yaml", overrides=["noise.opm_sensor=no_such_sensor"]
         )
+
+
+def test_squid_preset_with_its_own_band_gives_the_paper_floors() -> None:
+    # Paper Section 3.7: a flat SQUID at 4 fT/sqrt(Hz) over 100-5,000 Hz is
+    # 4 * sqrt(4,900) = 280 fT, while the electrodes keep the 30-500 Hz band.
+    cfg = load_config(
+        REPO_ROOT / "configs" / "default.yaml",
+        overrides=[
+            "noise.opm_sensor=squid_msg",
+            "noise.meg_band_lo_hz=100",
+            "noise.meg_band_hi_hz=5000",
+        ],
+    )
+    nf = compute_noise_floors(cfg)
+    assert nf.meg_sensor_gain == 1.0
+    assert nf.meg_noise_bandwidth_hz == pytest.approx(4900.0)
+    assert nf.meg_per_channel_fT == pytest.approx(4.0 * np.sqrt(4900.0))
+    shared = compute_noise_floors(load_config(REPO_ROOT / "configs" / "default.yaml"))
+    assert nf.eeg_per_channel_uV == pytest.approx(shared.eeg_per_channel_uV)
+
+
+def test_meg_band_unset_falls_back_to_shared_band() -> None:
+    cfg = load_config(REPO_ROOT / "configs" / "default.yaml")
+    assert cfg.noise.meg_band == (cfg.noise.band_lo_hz, cfg.noise.band_hi_hz)
+
+
+def test_meg_band_needs_both_edges() -> None:
+    with pytest.raises(ConfigError):
+        load_config(REPO_ROOT / "configs" / "default.yaml", overrides=["noise.meg_band_lo_hz=100"])
+    with pytest.raises(ConfigError):
+        load_config(
+            REPO_ROOT / "configs" / "default.yaml",
+            overrides=["noise.meg_band_lo_hz=500", "noise.meg_band_hi_hz=100"],
+        )

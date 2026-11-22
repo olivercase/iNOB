@@ -1,7 +1,9 @@
 # Spinal-cord worked example — the configuration file of the paper's appendix.
 #
-# This file is configs/default.yaml with nothing changed but this header, so
-# running it reproduces every spinal-cord figure and number in the paper.
+# This file is configs/default.yaml with two changes: this header, and the
+# noise block, which uses the paper's sensors (a SQUID magnetoneurograph
+# recorded over 100-5,000 Hz, and surface electrodes over 30-500 Hz). Running
+# it reproduces every spinal-cord figure and number in the paper.
 # Copy it, edit the copy, and rerun to try your own design:
 #
 #     inob run      --config configs/spine.yaml --source-target spine
@@ -21,9 +23,12 @@
 #   sensors.resolution_mm       OPM spacing on the skin
 #   sensors.depth_mm            OPM stand-off from the skin
 #   electrodes.*                paddle layout (shape, rows, cols, pitch)
-#   noise.opm_sensor            OPM model: quspin_qzfm3, quspin_qzfm2,
-#                               fieldline_v3, he4_wideband
-#   noise.band_lo_hz/band_hi_hz recording band
+#   noise.opm_sensor            magnetometer: squid_msg (the paper),
+#                               quspin_qzfm3, quspin_qzfm2, fieldline_v3,
+#                               he4_wideband, megin_triux_mag
+#   noise.meg_band_lo_hz/_hi_hz magnetometer recording band (delete both
+#                               lines to use the electrode band for both)
+#   noise.band_lo_hz/band_hi_hz electrode recording band
 # Which commands to rerun after each kind of change is listed in the paper's
 # appendix (and in docs/REPRODUCE.md).
 
@@ -203,7 +208,14 @@ noise:
   # that makes the QZFM-3's effective floor ~217 fT, not the 152 fT the old
   # flat-band arithmetic reported. The narrow-band sensor still beats the
   # wide-band helium-4 preset (~650 fT) here — but now by a stated margin.
-  opm_sensor: quspin_qzfm3
+  #
+  # The paper's cord example uses the SQUID magnetoneurograph of the Japanese
+  # magnetospinography studies: 4 fT/sqrt(Hz), flat, recorded over
+  # 100-5,000 Hz, so a floor of 4 * sqrt(4,900) = 280 fT. Its band is set
+  # separately from the electrodes' (band_lo_hz/band_hi_hz below).
+  opm_sensor: squid_msg
+  meg_band_lo_hz: 100.0
+  meg_band_hi_hz: 5000.0
   # PEDOT:PSS HD-EMG-style front end. A low-noise biopotential amplifier
   # (e.g. TI ADS129x class, or the discrete front ends used in the OPM-MEG
   # literature) reaches ~0.05-0.1 µV/√Hz referred to input; the 0.3-1 µV/√Hz

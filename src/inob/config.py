@@ -496,6 +496,12 @@ class NoiseCfg:
     band_lo_hz: float = 30.0
     band_hi_hz: float = 500.0
     bandwidth_hz: float | None = None
+    # Magnetic recording band, when it differs from the electrodes'. A SQUID
+    # is recorded over 100-5,000 Hz while surface electrodes use the 30-500 Hz
+    # evoked-potential band; one shared band forced a choice between the two
+    # floors. Left unset, the magnetic channels use the shared band above.
+    meg_band_lo_hz: float | None = None
+    meg_band_hi_hz: float | None = None
 
     def __post_init__(self) -> None:
         opm_sensor(self.opm_sensor)  # raises on an unknown preset
@@ -511,6 +517,13 @@ class NoiseCfg:
         if self.bandwidth_hz is None and self.band_hi_hz <= self.band_lo_hz:
             raise ConfigError(
                 f"[noise] band_hi_hz ({self.band_hi_hz}) must exceed band_lo_hz ({self.band_lo_hz})"
+            )
+        if (self.meg_band_lo_hz is None) != (self.meg_band_hi_hz is None):
+            raise ConfigError("[noise] set meg_band_lo_hz and meg_band_hi_hz together, or neither")
+        if self.meg_band_lo_hz is not None and self.meg_band_hi_hz <= self.meg_band_lo_hz:
+            raise ConfigError(
+                f"[noise] meg_band_hi_hz ({self.meg_band_hi_hz}) must exceed "
+                f"meg_band_lo_hz ({self.meg_band_lo_hz})"
             )
 
     @property
@@ -548,18 +561,31 @@ class NoiseCfg:
         import math
 
         f3 = float(self.opm_bandwidth_hz)
-        if self.bandwidth_hz is not None:
-            lo, hi = 0.0, float(self.bandwidth_hz)
-        else:
-            lo, hi = float(self.band_lo_hz), float(self.band_hi_hz)
+        lo, hi = self.meg_band
+        if math.isinf(f3):  # flat sensor (SQUID): the band alone sets the noise
+            return hi - lo
         return f3 * (math.atan(hi / f3) - math.atan(lo / f3))
+
+    @property
+    def meg_band(self) -> tuple[float, float]:
+        """Magnetic recording band (lo, hi) in Hz: its own if set, else the shared one."""
+        if self.meg_band_lo_hz is not None:
+            return float(self.meg_band_lo_hz), float(self.meg_band_hi_hz)
+        if self.bandwidth_hz is not None:
+            return 0.0, float(self.bandwidth_hz)
+        return float(self.band_lo_hz), float(self.band_hi_hz)
 
     @property
     def band_label(self) -> str:
         """Human-readable passband for figure captions."""
         if self.bandwidth_hz is not None:
-            return f"BW {self.bandwidth_hz:g} Hz"
-        return f"{self.band_lo_hz:g}–{self.band_hi_hz:g} Hz"
+            label = f"BW {self.bandwidth_hz:g} Hz"
+        else:
+            label = f"{self.band_lo_hz:g}–{self.band_hi_hz:g} Hz"
+        if self.meg_band_lo_hz is not None:
+            lo, hi = self.meg_band
+            label = f"electrodes {label}, magnetometers {lo:g}–{hi:g} Hz"
+        return label
 
 
 @dataclass(frozen=True)
@@ -947,14 +973,14 @@ def _build_noise(d: dict[str, Any]) -> NoiseCfg:
             preset.name,
             preset.source,
         )
-    if cfg.bandwidth_hz is None and cfg.band_hi_hz > cfg.opm_bandwidth_hz:
+    if cfg.meg_band[1] > cfg.opm_bandwidth_hz:
         logger.warning(
             "[noise] recording band reaches %g Hz but the OPM (%s) is a "
             "single pole at %g Hz: above the pole the band contributes "
             "little noise and less signal. Both effects are modelled, so "
             "the answer is honest rather than wrong — but if you meant to "
             "record that band, choose a wider sensor preset.",
-            cfg.band_hi_hz,
+            cfg.meg_band[1],
             cfg.opm_sensor,
             cfg.opm_bandwidth_hz,
         )
