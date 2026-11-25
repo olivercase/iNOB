@@ -45,7 +45,7 @@ class _FakeDriver:
         return fields, None
 
     def computeMEGPrimaryField(self, dipoles, driver_cfg):
-        # primary Biot–Savart term (real solve adds this to the transfer field)
+        # primary Biot–Savart term (the real solve subtracts the transfer field from it)
         return [self.rng.normal(scale=1e-8, size=self.n_coils) for _ in dipoles]
 
 

@@ -84,6 +84,8 @@ class _FakeMeg:
     def __init__(self, rdm: float = 0.01, mag: float = 1.0) -> None:
         self.rdm = rdm
         self.mag = mag
+        self.rdm_radial = self.rdm_tangential = rdm
+        self.mag_radial = self.mag_tangential = mag
         self.fem_peak_fT_per_nAm = 1.23
         self.sarvas_peak_fT_per_nAm = 1.24
         self.n_coils = 60

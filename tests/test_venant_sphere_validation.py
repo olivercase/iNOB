@@ -34,5 +34,9 @@ def test_venant_source_model_matches_sarvas_on_sphere(tmp_path) -> None:
     # Same bar as partial integration in test_meg_sphere_validation.py: if
     # Venant cannot clear it on a homogeneous sphere, it is not a candidate for
     # the production solve.
-    assert v.rdm < 0.02, f"RDM {v.rdm:.4f} — Venant MEG topography wrong"
-    assert abs(v.mag - 1.0) < 0.02, f"MAG {v.mag:.4f} — Venant magnitude mis-scaled"
+    assert v.rdm_radial < 0.02, f"RDM {v.rdm_radial:.4f} — Venant MEG topography wrong"
+    assert abs(v.mag_radial - 1.0) < 0.02, f"MAG {v.mag_radial:.4f} — Venant magnitude mis-scaled"
+    # Tangential coils: the only ones that see the volume-current field.
+    # Measured on this mesh: MAG 0.980, RDM 0.091 (wrong sign: about 5 and 1.4).
+    assert abs(v.mag_tangential - 1.0) < 0.04, f"tangential MAG {v.mag_tangential:.4f}"
+    assert v.rdm_tangential < 0.12, f"tangential RDM {v.rdm_tangential:.4f}"

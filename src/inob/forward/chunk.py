@@ -123,7 +123,7 @@ def run_chunk(cfg: Config, *, chunk_id: int, n_chunks: int) -> tuple[Path, Path]
 
     logger.info("applying transfer to dipoles…")
     t_a = time.time()
-    # SI leadfield (T per A·m): secondary (transfer) + primary (Biot–Savart),
+    # SI leadfield (T per A·m): primary (Biot–Savart) minus secondary (transfer),
     # unit-corrected from DUNEuro mm-mode — same as the single-machine path.
     L = compute_meg_leadfield(driver, T, dipoles_du, driver_cfg)
     logger.info("  L %s (%.0fs)", L.shape, time.time() - t_a)

@@ -163,6 +163,8 @@ def _validate_meg(cfg, args) -> int:
         f"\n[MEG sphere] source model: {cfg.forward.source_model.type}\n"
         f"  RDM (topography, 0 = perfect) : {v.rdm:.4f}\n"
         f"  MAG (magnitude, 1 = perfect)  : {v.mag:.4f}\n"
+        f"  radial coils      RDM / MAG   : {v.rdm_radial:.4f} / {v.mag_radial:.4f}\n"
+        f"  tangential coils  RDM / MAG   : {v.rdm_tangential:.4f} / {v.mag_tangential:.4f}\n"
         f"  FEM peak                      : {v.fem_peak_fT_per_nAm:.4f} fT/nAm\n"
         f"  Sarvas peak                   : {v.sarvas_peak_fT_per_nAm:.4f} fT/nAm\n"
         f"  (n_coils={v.n_coils}, n_tets={v.n_tets}, R={v.radius_mm:.0f} mm)\n"

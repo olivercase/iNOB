@@ -353,6 +353,14 @@ class MegSphereValidation:
     rdm: float  # relative difference measure (topography); 0 = perfect
     mag: float  # magnitude ratio FEM / analytic; 1 = perfect
     mm_mode_to_si: float  # calibration constant relating raw → SI (should be 0.1)
+    # The same two measures on the radial and on the tangential coils alone.
+    # Outside a sphere the volume currents make no radial field, so the radial
+    # pair cannot see an error in the secondary field (including its sign);
+    # the tangential pair can.
+    rdm_radial: float = float("nan")
+    mag_radial: float = float("nan")
+    rdm_tangential: float = float("nan")
+    mag_tangential: float = float("nan")
 
 
 def run_sphere_meg_forward(
@@ -369,7 +377,7 @@ def run_sphere_meg_forward(
     """DUNEuro MEG forward on the sphere. Returns the SI field (n_coils,) fT/nAm.
 
     Uses the same :func:`inob.forward.duneuro_driver.compute_meg_leadfield`
-    the production solve uses (secondary transfer + primary Biot–Savart,
+    the production solve uses (primary Biot–Savart minus secondary transfer,
     mm-mode → SI), so this validates the real pipeline, not a parallel path.
 
     ``source_model`` overrides the DUNEuro source-model sub-config; default is
@@ -441,7 +449,11 @@ def validate_meg_sphere(
 
     On a homogeneous sphere the FEM MEG field must match Sarvas to within a
     few percent (RDM) with unit magnitude ratio (MAG ≈ 1). A tangential dipole
-    is used so the field is non-silent. This is the MEG analogue of
+    is used so the field is non-silent. The coils are triaxial (one radial and
+    two tangential at each of ``n_coils // 3`` sites): radial coils alone see
+    only the primary field outside a sphere, so they would pass with the
+    volume-current field missing, mis-scaled or of the wrong sign. This is the
+    MEG analogue of
     :func:`calibrate_eeg_factor`; it also reports the empirical mm-mode → SI
     constant so a regression in :data:`~inob.forward.duneuro_driver.MEG_MM_MODE_TO_SI`
     is caught.
@@ -456,11 +468,16 @@ def validate_meg_sphere(
     fem = build_sphere_fem(radius_mm=radius_mm, pitch_mm=pitch_mm, radbound=1.5, maxvol=4.0)
 
     rng = np.random.default_rng(seed)
-    u = rng.normal(size=(4 * n_coils, 3))
+    n_sites = max(1, n_coils // 3)
+    u = rng.normal(size=(40 * n_sites, 3))
     u /= np.linalg.norm(u, axis=1, keepdims=True)
-    u = u[u[:, 2] > 0.2][:n_coils]  # upper cap, near the source
-    coilpos = u * coil_radius_mm
-    coilori = u.copy()  # radial magnetometers
+    u = u[u[:, 2] > 0.2][:n_sites]  # upper cap, near the source
+    t1 = np.cross(u, [1.0, 0.0, 0.0])
+    t1 /= np.linalg.norm(t1, axis=1, keepdims=True)
+    t2 = np.cross(u, t1)
+    coilpos = np.vstack([u, u, u]) * coil_radius_mm
+    coilori = np.vstack([u, t1, t2])  # radial, then two tangential, per site
+    is_radial = np.arange(len(coilpos)) < len(u)
 
     src = np.array([0.0, 0.0, source_radius_mm], dtype=np.float64)
     moment = np.array([1.0, 0.0, 0.0], dtype=np.float64)  # tangential → non-silent
@@ -478,9 +495,16 @@ def validate_meg_sphere(
     B = sarvas_meg_field(src * 1e-3, moment * 1e-9, coilpos * 1e-3)
     sarvas_fT = np.einsum("ij,ij->i", B, coilori) * 1e15
 
-    a, b = fem_fT, sarvas_fT
-    rdm = float(np.linalg.norm(a / np.linalg.norm(a) - b / np.linalg.norm(b)))
-    mag = float(np.linalg.norm(a) / np.linalg.norm(b))
+    def _rdm_mag(sel: np.ndarray) -> tuple[float, float]:
+        a, b = fem_fT[sel], sarvas_fT[sel]
+        return (
+            float(np.linalg.norm(a / np.linalg.norm(a) - b / np.linalg.norm(b))),
+            float(np.linalg.norm(a) / np.linalg.norm(b)),
+        )
+
+    rdm, mag = _rdm_mag(np.ones(len(coilpos), bool))
+    rdm_rad, mag_rad = _rdm_mag(is_radial)
+    rdm_tan, mag_tan = _rdm_mag(~is_radial)
     # Back out the raw→SI constant actually realised (fem_fT already includes it).
     from inob.forward.duneuro_driver import MEG_MM_MODE_TO_SI
 
@@ -497,13 +521,22 @@ def validate_meg_sphere(
         rdm=rdm,
         mag=mag,
         mm_mode_to_si=float(MEG_MM_MODE_TO_SI),
+        rdm_radial=rdm_rad,
+        mag_radial=mag_rad,
+        rdm_tangential=rdm_tan,
+        mag_tangential=mag_tan,
     )
     (out_dir / "meg_sphere_validation.json").write_text(json.dumps(asdict(summary), indent=2))
     logger.info(
-        "[MEG sphere] FEM peak=%.3f  Sarvas peak=%.3f fT/nAm  RDM=%.4f  MAG=%.4f",
+        "[MEG sphere] FEM peak=%.3f  Sarvas peak=%.3f fT/nAm  RDM=%.4f  MAG=%.4f  "
+        "(radial %.4f / %.4f, tangential %.4f / %.4f)",
         summary.fem_peak_fT_per_nAm,
         summary.sarvas_peak_fT_per_nAm,
         summary.rdm,
         summary.mag,
+        summary.rdm_radial,
+        summary.mag_radial,
+        summary.rdm_tangential,
+        summary.mag_tangential,
     )
     return summary

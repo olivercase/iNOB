@@ -24,10 +24,19 @@ from inob.forward.duneuro_driver import MEG_MM_MODE_TO_SI
 def test_meg_forward_matches_sarvas_on_sphere(tmp_path) -> None:
     v = validate_meg_sphere(out_dir=tmp_path)
     # Topography: FEM must reproduce the analytic field shape.
-    assert v.rdm < 0.02, f"RDM {v.rdm:.4f} too high — MEG topography wrong"
+    assert v.rdm_radial < 0.02, f"RDM {v.rdm_radial:.4f} too high — MEG topography wrong"
     # Magnitude: absolute calibration must be correct (this is what the missing
     # primary field and the 10x scale error each broke).
-    assert abs(v.mag - 1.0) < 0.02, f"MAG {v.mag:.4f} — MEG magnitude mis-scaled"
+    assert abs(v.mag_radial - 1.0) < 0.02, f"MAG {v.mag_radial:.4f} — MEG magnitude mis-scaled"
+    # Tangential coils see the volume-current field, which radial coils cannot.
+    # Measured on this mesh (about 56,000 tetrahedra) with partial integration:
+    # MAG 1.154, RDM 0.329. That is poor, and it is the source model, not the
+    # sign: Venant gives 0.980 / 0.091 on the same mesh, and the secondary
+    # field added instead of subtracted gives about 5 / 1.4. These limits
+    # therefore only guard the sign; accuracy on tangential components needs
+    # Venant or a finer mesh (see test_meg_secondary_sign_real_duneuro.py).
+    assert abs(v.mag_tangential - 1.0) < 0.25, f"tangential MAG {v.mag_tangential:.4f}"
+    assert v.rdm_tangential < 0.5, f"tangential RDM {v.rdm_tangential:.4f}"
     # Sanity on the constant itself.
     assert MEG_MM_MODE_TO_SI == pytest.approx(0.1)
     assert v.fem_peak_fT_per_nAm == pytest.approx(v.sarvas_peak_fT_per_nAm, rel=0.02)
