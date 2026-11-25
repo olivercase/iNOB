@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from inob.forward.duneuro_driver import MEG_MM_MODE_TO_SI
+from inob.forward.duneuro_driver import compute_meg_leadfield
 from inob.io.hdf5 import FemMesh
 
 logger = logging.getLogger(__name__)
@@ -208,10 +208,8 @@ class ConductorSolver:
         p = np.asarray(pos_mm, float).reshape(-1, 3)
         dips = [self.dp.Dipole3d(pt, e) for pt in p for e in np.eye(3)]
         t0 = time.time()
-        sec, _ = self.driver.applyMEGTransfer(self.transfer, dips, self.cfg)
-        pri = self.driver.computeMEGPrimaryField(dips, self.cfg)
-        lf = (np.column_stack([np.asarray(f) for f in sec])
-              + np.column_stack([np.asarray(f) for f in pri])) * MEG_MM_MODE_TO_SI
+        # primary minus secondary: the one shared combination (see its docstring)
+        lf = compute_meg_leadfield(self.driver, self.transfer, dips, self.cfg)
         logger.info("[solver] leadfield for %d dipoles in %.1f s -> %s",
                     len(dips), time.time() - t0, lf.shape)
         if ori is None:

@@ -67,8 +67,8 @@ def run_forward(cfg: Config) -> Path:
 
     logger.info("Applying transfer to %d dipoles (3 per source)…", len(dipoles_du))
     t0 = time.time()
-    # Full MEG field in SI (T per A·m): secondary (transfer) + primary
-    # (Biot–Savart), unit-corrected from DUNEuro mm-mode. See
+    # Full MEG field in SI (T per A·m): primary (Biot–Savart) minus the
+    # secondary (transfer) field, unit-corrected from DUNEuro mm-mode. See
     # duneuro_driver.compute_meg_leadfield.
     L = compute_meg_leadfield(driver, T, dipoles_du, driver_cfg)
     logger.info("  L: %s (%.0f s)", L.shape, time.time() - t0)

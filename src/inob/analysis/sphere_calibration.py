@@ -324,7 +324,7 @@ def run_sphere_meg_forward(
     """DUNEuro MEG forward on the sphere. Returns the SI field (n_coils,) fT/nAm.
 
     Uses the same :func:`inob.forward.duneuro_driver.compute_meg_leadfield`
-    the production solve uses (secondary transfer + primary Biot–Savart,
+    the production solve uses (primary Biot–Savart minus secondary transfer,
     mm-mode → SI), so this validates the real pipeline, not a parallel path.
 
     ``source_model`` overrides the DUNEuro source-model sub-config; default is

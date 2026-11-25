@@ -116,10 +116,16 @@ class Forward:
             # Head-frame insula leadfield: read with the rotated nominal axes,
             # then express the moment in head coordinates so it is comparable
             # across orientations.
-            l_ins.append(array.project(z["B_ins"], z["chanori"]) @ rotation_matrix(ypr))
-            b_myo.append(np.einsum("scnk,nk->scn",
-                                   z["B_myo"].reshape(n_site, 3, -1, 3), myo_ori))
-            b_eq.append(z["B_eq"])
+            rot = rotation_matrix(ypr)
+            l_ins.append(array.project(z["B_ins"], z["chanori"]) @ rot)
+            # Cardiac fields: the FEM returns the WORLD-frame field vector at the
+            # rotated sites. The array turns with the head (z["chanori"] is
+            # nominal @ rot.T), so express the vector in head coordinates; the
+            # nominal (or perturbed-nominal) axes then read it as the turned array.
+            b_world = np.einsum("scnk,nk->scn",
+                                z["B_myo"].reshape(n_site, 3, -1, 3), myo_ori)
+            b_myo.append(np.einsum("cd,scn->sdn", rot, b_world))
+            b_eq.append(np.einsum("cd,scn->sdn", rot, z["B_eq"]))
         order = np.argsort([np.linalg.norm(a) for a in angles], kind="stable")
         pick = lambda xs: [xs[i] for i in order]
         return cls(array=array, angles=np.array(angles)[order],
@@ -155,8 +161,18 @@ class SimResult:
 
 def run_2x2(fwd: Forward, design: Design = DESIGN, *,
             source_nam: float = 10.0,
-            hep_invariance: str = "exact") -> SimResult:
-    """Sweep the 2x2, scoring every arm on identical data."""
+            hep_invariance: str = "exact",
+            cardiac_prior: np.ndarray | None = None,
+            extra_arms: dict | None = None) -> SimResult:
+    """Sweep the 2x2, scoring every arm on identical data.
+
+    ``cardiac_prior`` (6,), if given, adds the arm ``glm_prior``: the joint GLM
+    with the two-dipole cardiac moment fixed in DIRECTION to this vector (e.g.
+    estimated from a chest array) and only its amplitude free.
+
+    ``extra_arms`` maps arm name -> ``f(yc, yn, l_mod, phi, idx) -> (rec_bias,
+    rec_noisy)``, scored on the same data as every built-in arm (experiments).
+    """
     arr = fwd.array
     n_chan = arr.n_chan
     nom_ori = arr.chanori
@@ -187,9 +203,15 @@ def run_2x2(fwd: Forward, design: Design = DESIGN, *,
                 n_chan, sig_rms, cfa_rms, mismatch_pct)
 
     arms = ("none", "glm", *[f"hfc{o}_lcmv" for o in design.hfc_orders], "cdm")
+    if cardiac_prior is not None:
+        q_dir = np.asarray(cardiac_prior, float).ravel()
+        q_dir = q_dir / np.linalg.norm(q_dir)
+        arms = (*arms, "glm_prior")
+    extra_arms = dict(extra_arms or {})
+    arms = (*arms, *extra_arms)
     i_none, i_glm = 0, 1
     i_hfc = tuple(2 + j for j in range(len(design.hfc_orders)))
-    i_cdm = len(arms) - 1
+    i_cdm = arms.index("cdm")
     n_cell, n_arm = design.n_cells, len(arms)
 
     rec_bias: dict = {}
@@ -214,6 +236,10 @@ def run_2x2(fwd: Forward, design: Design = DESIGN, *,
         l_mod = [arr.project(fwd.b_eq[n], nom_ori) for n in idx]      # (n_chan, 6)
         gdes = np.concatenate([np.tile(phi, (n_or, 1)),
                                np.concatenate(l_mod, axis=0)], axis=1)
+        if cardiac_prior is not None:
+            gdes_prior = np.concatenate(
+                [np.tile(phi, (n_or, 1)),
+                 np.concatenate([lm @ q_dir for lm in l_mod])[:, None]], axis=1)
 
         # HFC projectors from the NOMINAL array. The span of solid harmonics up to
         # a given degree is invariant under rotation of the rigid array, so one
@@ -270,6 +296,10 @@ def run_2x2(fwd: Forward, design: Design = DESIGN, *,
                                               noise_var=design.noise_ft ** 2)
             if have_cdm:
                 out[i_cdm] = arm_cdm(yc, yn, l_mod)
+            if cardiac_prior is not None:
+                out[arms.index("glm_prior")] = arm_glm(yc, yn, gdes_prior, phi)
+            for name, fn in extra_arms.items():
+                out[arms.index(name)] = fn(yc, yn, l_mod, phi, idx)
             for a, (rb, rn) in out.items():
                 rec_bias[(c, a)][:, rep] = rb[:, k]
                 rec_noisy[(c, a)][:, rep] = rn[:, k]

@@ -271,6 +271,28 @@ def build_orthogonal_dipoles(
 MEG_MM_MODE_TO_SI: float = 0.1
 
 
+def compute_meg_field_components(
+    driver: Any,
+    transfer_matrix: np.ndarray,
+    dipoles_du: list[Any],
+    driver_cfg: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Primary and secondary MEG fields in SI units, each (n_coils, n_dipoles).
+
+    ``primary`` is the free-space Biot–Savart field of the dipole itself
+    (``computeMEGPrimaryField``). ``secondary`` is what ``applyMEGTransfer``
+    returns for the volume currents, in DUNEuro's own sign convention: it is
+    the field of ``+sigma grad(u)``, whereas the volume current is
+    ``-sigma grad(u)``. The physical field is therefore
+    ``primary - secondary``; use :func:`compute_meg_leadfield` for that.
+    """
+    secondary_raw, _ = driver.applyMEGTransfer(transfer_matrix, dipoles_du, driver_cfg)
+    primary_raw = driver.computeMEGPrimaryField(dipoles_du, driver_cfg)
+    secondary = np.column_stack([np.asarray(f, dtype=np.float64) for f in secondary_raw])
+    primary = np.column_stack([np.asarray(f, dtype=np.float64) for f in primary_raw])
+    return primary * MEG_MM_MODE_TO_SI, secondary * MEG_MM_MODE_TO_SI
+
+
 def compute_meg_leadfield(
     driver: Any,
     transfer_matrix: np.ndarray,
@@ -280,18 +302,23 @@ def compute_meg_leadfield(
     """Full MEG leadfield in SI units (Tesla per A·m), (n_coils, n_dipoles).
 
     The DUNEuro MEG transfer matrix yields ONLY the secondary (volume-current)
-    field. The primary Biot–Savart field of the source itself must be added
-    separately via ``computeMEGPrimaryField`` — it is not part of the transfer
-    result and ``post_process_meg`` does not add it. Omitting it makes the
-    leadfield collapse to ~zero for sources radial to a spherical conductor
-    (where the entire signal is primary) and wrong everywhere else.
+    field, and with the opposite sign to the one that adds to the primary
+    field. The total is ``primary - secondary``, the same combination
+    Brainstorm (``bst_duneuro.m``: ``Bp - Bs``) and FieldTrip
+    (``leadfield_duneuro.m``: ``Bp - lf``) use.
 
-    Both contributions are returned in DUNEuro mm-mode units; their sum is
-    rescaled to SI by :data:`MEG_MM_MODE_TO_SI`. ``driver_cfg`` must already
-    carry the ``source_model`` entry.
+    Adding the two instead is invisible on radial coils outside a sphere,
+    where the secondary field is zero, and wrong everywhere else: a radial
+    dipole in a sphere then gives twice the primary field instead of none.
+    tests/test_meg_secondary_sign_real_duneuro.py checks the sign against the
+    Sarvas sphere on tangential coils, with radial dipoles and with the
+    circulation of B round closed loops outside the conductor.
+
+    Both contributions come back in DUNEuro mm-mode units and are rescaled to
+    SI by :data:`MEG_MM_MODE_TO_SI`. ``driver_cfg`` must already carry the
+    ``source_model`` entry.
     """
-    secondary_raw, _ = driver.applyMEGTransfer(transfer_matrix, dipoles_du, driver_cfg)
-    primary_raw = driver.computeMEGPrimaryField(dipoles_du, driver_cfg)
-    secondary = np.column_stack([np.asarray(f) for f in secondary_raw])
-    primary = np.column_stack([np.asarray(f) for f in primary_raw])
-    return (secondary + primary) * MEG_MM_MODE_TO_SI
+    primary, secondary = compute_meg_field_components(
+        driver, transfer_matrix, dipoles_du, driver_cfg
+    )
+    return primary - secondary
