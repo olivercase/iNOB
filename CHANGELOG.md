@@ -6,6 +6,49 @@ versioning. Dates in ISO-8601.
 
 ## [Unreleased]
 
+### Fixed
+- **The ascending (propagating) source model was not a travelling wave.**
+  `inob.analysis.propagation` moved a single point dipole along the path
+  whose time envelope was fixed at the moment it reached the rostral end:
+  the moment was zero at that instant and the second half was cut off as the
+  dipole left the path. The ratio it gave against the stationary source
+  (0.67 magnetic, 0.30 electrodes on the cervical cord) came from that
+  timing, not from propagation. It is now a travelling line source: every
+  position carries the same biphasic dipole waveform delayed by its
+  conduction time, `rho(x, t) = Q s(t - (x - x0)/v) / (v sigma sqrt(e))`, so
+  each of the two opposed lobes carries the stationary moment Q. On the same
+  lead fields the ratio is 2.41 (magnetic) and 0.36 (electrodes). **Every
+  "ascending" or propagation-corrected number produced before this change
+  must be recomputed**; stationary numbers are unaffected. The ratio can now
+  exceed 1, because the wave passes every position and the stationary source
+  sits at one. Tests check exact cases (silent under uniform sensitivity;
+  each lobe carries Q; dispersion lowers the peak) in place of the old
+  assertion that the ratio is below 1.
+- GUI backend: a malformed run request no longer leaves the run lock held
+  until the backend is restarted.
+- `duneuro_driver`: the comment deriving the 0.1 mm-mode to SI factor was
+  wrong (the value was right). DUNEuro applies no prefactor; 0.1 is
+  mu0/4pi = 1e-7 times 1e6 for mm^-2 against m^-2.
+
+### Added
+- `inob.fem.refine` and `fem.refine_max_volume_mm3`: refine one tissue of
+  the mesh after CGAL meshing, with TetGen. The CGAL mesher takes one element
+  size for the whole body, which left the spinal cord one or two elements
+  across with every vertex on its surface, so no source met the Venant
+  condition (closest vertex belonging to the source compartment alone).
+  `configs/spine.yaml` refines the cord to 1 mm^3: 1,514 to about 121,000
+  cord elements, tissue volumes unchanged, 91 of 91 sources now meet the
+  condition (was 0). Needs the TetGen binary that iso2mesh ships.
+- `tests/test_meg_cylinder_real_duneuro.py`: an axial dipole on the axis of
+  a finite cylinder is magnetically silent, an exact non-spherical check of
+  the volume-current field. Residual on 51,000 elements: 0.005 multipolar
+  Venant, 0.02 Venant, 0.11 partial integration.
+
+### Changed
+- `configs/spine.yaml` solves with `multipolar_venant`. Partial integration
+  does not converge on the magnetic field of a cord-aligned source, which is
+  a small residual of the primary and volume-current fields.
+
 ### Added
 - `noise.meg_band_lo_hz` / `noise.meg_band_hi_hz`: a magnetometer recording
   band separate from the electrodes'. Unset, the magnetic channels use the
