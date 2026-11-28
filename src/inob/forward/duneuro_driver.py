@@ -279,17 +279,18 @@ def build_orthogonal_dipoles(
 
 
 # DUNEuro is run in mm-mode (mesh coordinates in mm, conductivities in S/mm).
-# Its MEG core computes the raw Biot–Savart kernel from mesh coordinates and
-# applies the SI prefactor μ0/4π = 1e-7 T·m/A outside the integral, so the
-# magnetic field it returns is a fixed factor larger than SI Tesla per (A·m).
-# Because the field scales as length^-2 (the (r)/|r|^3 kernel integrated over a
-# fixed dipole moment), the mm/m convention introduces a single geometry- and
-# conductivity-independent constant, 10.0, so the raw field is converted to SI
-# by multiplying by 0.1. That value is dimensional analysis, not a fit: what
-# checks it is inob.analysis.sphere_calibration.validate_meg_sphere, where the
-# FEM field times 0.1 matches the Sarvas sphere to within 2% in magnitude
+# Its MEG code applies no physical prefactor at all: the primary field is
+# Q x (r - r0) / |r - r0|^3 and the secondary field is the volume integral of
+# sigma grad(u) x (r - r')/|r - r'|^3, both in mesh units
+# (duneuro/driver/volume_conductor_interface.hh, computeMEGPrimaryField_impl;
+# FieldTrip's leadfield_duneuro.m multiplies by mu0/4pi afterwards for the same
+# reason). The raw value therefore lacks mu0/4pi = 1e-7 T.m/A and carries
+# 1/mm^2 where SI has 1/m^2, a factor 1e6: 1e-7 * 1e6 = 0.1 turns it into
+# tesla per A.m. That is dimensional analysis, not a fit. It is checked by
+# inob.analysis.sphere_calibration.validate_meg_sphere, where the FEM field
+# times 0.1 matches the Sarvas sphere to within 2% in magnitude
 # (tests/test_meg_sphere_validation.py, run against a real DUNEuro build), and
-# the primary field alone matches free-space Biot–Savart to 1e-6
+# by the primary field alone matching free-space Biot-Savart to 1e-6
 # (tests/test_meg_secondary_sign_real_duneuro.py).
 MEG_MM_MODE_TO_SI: float = 0.1
 

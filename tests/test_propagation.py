@@ -105,19 +105,64 @@ def test_bipolar_reduction_is_reference_invariant() -> None:
     assert np.isclose(peak_bipolar(sig.segment), peak_bipolar(shifted))
 
 
-def test_vagus_profile_is_close_to_stationary() -> None:
-    """The vagus passes the test the spine fails, over its localised segment."""
-    lf = _straight_line_leadfield()
-    sig = compute_propagation_signals(lf, VAGUS_PROFILE)
-    assert VAGUS_PROFILE.stationary_ok
-    # 50 mm at ~47 m/s is ~1 ms against a 0.5 ms AP width, so the wave barely
-    # smears — far closer to the lump than the spine's sweeping volley.
-    ratio_vagus = propagation_ratio(sig, peak_over_channels)
-    ratio_spine = propagation_ratio(
-        compute_propagation_signals(lf, SPINE_PROFILE), peak_over_channels
-    )
-    assert ratio_vagus > ratio_spine
+def _single_velocity(profile):
+    """``profile`` with one fibre class, so the wave does not disperse."""
+    from dataclasses import replace
 
+    from inob.sources.cap import FibreDistribution
+
+    return replace(
+        profile,
+        fibres=FibreDistribution(diameters_um=np.array([10.0]), weights=np.array([1.0])),
+    )
+
+
+def _uniform_leadfield(profile_fn, *, n_src: int = 400):
+    """One channel over a straight 400 mm path with a prescribed sensitivity."""
+    z = np.linspace(1000.0, 1400.0, n_src)
+    L3 = np.zeros((1, n_src, 3))
+    L3[0, :, 2] = profile_fn(z)
+    return Leadfield(
+        L=L3.reshape(1, 3 * n_src),
+        L_fT_per_nAm=L3.reshape(1, 3 * n_src) * 1e6,
+        source_pos=np.column_stack([np.zeros(n_src), np.zeros(n_src), z]),
+        coil_pos=np.zeros((1, 3)),
+        coil_orient=np.array([[0.0, 0.0, 1.0]]),
+        channel_names=("mag-000",),
+        conductivities=np.array([0.4]),
+        tissue_labels=("skin",),
+        seed=0,
+    )
+
+
+def test_travelling_wave_is_silent_under_a_uniform_sensitivity() -> None:
+    """The two lobes are opposed and equal, so a sensor that weights every
+    position equally sees nothing while the whole wave is on the path."""
+    profile = _single_velocity(SPINE_PROFILE)
+    lf = _uniform_leadfield(np.ones_like)
+    sig = compute_propagation_signals(lf, profile)
+    # Mid-transit: half the conduction time before the wave reaches the end.
+    transit_ms = sig.total_span_mm / sig.cv_mean_m_per_s
+    i_mid = int(np.argmin(np.abs(sig.t_ms - (0.4 * sig.duration_ms - 0.5 * transit_ms))))
+    assert abs(sig.whole[0, i_mid]) < 1e-3 * np.abs(sig.stationary).max()
+
+
+def test_each_lobe_carries_the_stationary_moment() -> None:
+    """With a step in sensitivity the leading lobe alone is seen as it crosses
+    the step, and its integrated moment equals the lumped moment Q."""
+    profile = _single_velocity(SPINE_PROFILE)
+    lf = _uniform_leadfield(lambda z: (z >= 1200.0).astype(float))
+    sig = compute_propagation_signals(lf, profile)
+    # The stationary peak is L * Q with L = 1 at the rostral end.
+    assert np.abs(sig.whole).max() == pytest.approx(np.abs(sig.stationary).max(), rel=0.02)
+
+
+def test_dispersion_lowers_the_peak() -> None:
+    """A spread of conduction velocities smears the volley as it climbs."""
+    lf = _uniform_leadfield(lambda z: (z >= 1200.0).astype(float))
+    one = compute_propagation_signals(lf, _single_velocity(SPINE_PROFILE))
+    many = compute_propagation_signals(lf, SPINE_PROFILE)
+    assert np.abs(many.whole).max() < np.abs(one.whole).max()
 
 def test_segment_is_whole_flag() -> None:
     """A profile with no localised generator spans the whole polyline."""

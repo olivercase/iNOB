@@ -1257,21 +1257,24 @@ async def run_ws(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         return
 
-    # Single-flight: refuse a second concurrent run rather than race on the
-    # shared output artefacts / logger.
-    if not _RUN_LOCK.acquire(blocking=False):
-        await ws.send_json({"type": "error", "message": "a pipeline run is already in progress"})
-        await ws.close()
-        return
-
     # No `stages` key means "do the usual thing", which is build and solve
     # without drawing (DEFAULT_STAGES). Asking for "all" is the explicit way to
     # include the figure stage, exactly as on the CLI.
-    stages_in = req.get("stages")
-    force = bool(req.get("force", False))
-    sources = req.get("sources") or []
-    threshold_snr = float(req.get("threshold_snr", 3.0))
-    modality = str(req.get("modality", "meg")).lower()
+    # The request is parsed before the run lock is taken: a malformed message
+    # raising here with the lock held left every later run refused until the
+    # backend was restarted.
+    try:
+        stages_in = req.get("stages")
+        force = bool(req.get("force", False))
+        sources = req.get("sources") or []
+        threshold_snr = float(req.get("threshold_snr", 3.0))
+        modality = str(req.get("modality", "meg")).lower()
+        positions = [[float(s["x"]), float(s["y"]), float(s["z"])] for s in sources]
+        strengths: list[float] = [float(s.get("strength_nAm", 70.0)) for s in sources]
+    except (AttributeError, KeyError, TypeError, ValueError) as e:
+        await ws.send_json({"type": "error", "message": f"malformed run request: {e!r}"})
+        await ws.close()
+        return
 
     # Clicked sources reach the solver as a config override. They only change
     # the dipole positions, so geom/fem/sensors do not need rebuilding — but
@@ -1281,13 +1284,17 @@ async def run_ws(ws: WebSocket) -> None:
     # building them. So: run every stage, but only *force* the forward solve —
     # the upstream stages skip themselves when their outputs are already there.
     overrides: list[str] = []
-    strengths: list[float] = []
     resolve_sources = False
     if sources:
-        positions = [[float(s["x"]), float(s["y"]), float(s["z"])] for s in sources]
-        strengths = [float(s.get("strength_nAm", 70.0)) for s in sources]
         overrides.append(f"forward.point_sources={json.dumps(positions)}")
         resolve_sources = True
+
+    # Single-flight: refuse a second concurrent run rather than race on the
+    # shared output artefacts / logger.
+    if not _RUN_LOCK.acquire(blocking=False):
+        await ws.send_json({"type": "error", "message": "a pipeline run is already in progress"})
+        await ws.close()
+        return
 
     log_q: queue.Queue[str] = queue.Queue()
     handler = _QueueLogHandler(log_q)

@@ -473,6 +473,18 @@ def build_fem(cfg: Config) -> Path:
         tissue_labels=tuple(present_labels),
     )
 
+    for label, max_vol in fcfg.refine_max_volume_mm3.items():
+        if label not in mesh.tissue_labels:
+            continue
+        from inob.fem.refine import refine_tissue, vertices_interior_to
+
+        mesh = refine_tissue(mesh, label, max_volume_mm3=max_vol)
+        logger.info(
+            "  %s now has %d vertices of its own (not shared with another tissue)",
+            label,
+            int(vertices_interior_to(mesh, label).sum()),
+        )
+
     if fcfg.validate.require_units_mm:
         assert_units_mm(mesh.nodes)
     quality = compute_quality(mesh.nodes, mesh.tets)

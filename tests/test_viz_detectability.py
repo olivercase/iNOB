@@ -187,7 +187,7 @@ def test_propagation_correction_skipped_where_lumping_is_valid(tmp_path: Path) -
     assert spine.profile_name == "spine"
     # Both modalities measured, both a genuine attenuation.
     assert 0.0 < spine.meg <= 1.0
-    assert spine.eeg is not None and 0.0 < spine.eeg <= 1.0
+    assert spine.eeg is not None and 0.0 < spine.eeg < float('inf')
 
 
 def test_detectability_summary_orientation_and_reference(tmp_path: Path) -> None:

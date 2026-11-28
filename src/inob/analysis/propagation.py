@@ -4,8 +4,10 @@ One synchronous event can be modelled two ways, at the same total dipole
 moment:
 
   * **stationary** — the whole moment lumped at one point on the polyline;
-  * **propagating** — a wavelet of that moment travelling at fibre conduction
-    velocity, each position carrying its arc-length transit delay.
+  * **propagating** — a travelling line source: every position along the
+    structure carries the same biphasic dipole waveform, delayed by its
+    conduction time, so at any instant the wave is a leading and an opposed
+    trailing lobe (each of that moment) a distance of about 2·v·σ apart.
 
 Whether the first is defensible is target-dependent, and each target's
 :class:`~inob.physiology.profiles.PhysiologyProfile` records its prediction in
@@ -251,70 +253,81 @@ def compute_propagation_signals(
         shape = biphasic_waveform(t_ms - centre_ms, ap_width_ms=ap_width_ms)
         return L_long[:, lump_idx][:, None] * Q_total_Am * shape[None, :]
 
-    def moving_wavelet(
-        x_start_idx: int,
-        x_end_idx: int,
-        *,
-        time_peak_at_hotspot: bool = True,
-    ) -> np.ndarray:
-        """Physically correct: a single AP wavelet of total moment N×<Q>_w
-        starts at ``arc_m[x_start_idx]`` and propagates rostrally at fibre-CV.
+    def travelling_wave(x_start_idx: int, x_end_idx: int) -> np.ndarray:
+        """A travelling line source from ``x_start_idx`` to ``x_end_idx``.
 
-        At each instant t and each diameter d, the wave is at position
-        ``x_d(t) = x_start + CV(d)·(t − t_fire)``. The contribution at sensor
-        c is N · w(d) · Q(d) · L_long[c, x_d(t)] · shape(t − t_fire), summed
-        over fibre diameter d.
+        An action potential V(x - v t) drives an axial intracellular current
+        proportional to -dV/dx, so the current-dipole density along the fibre
+        is a travelling biphasic profile: a forward-pointing lobe at the
+        depolarising front and an opposed lobe behind it (the "quadrupole" of
+        magnetoneurography). Every station x carries the same waveform, delayed
+        by its conduction time::
 
-        If ``time_peak_at_hotspot`` is true, ``t_fire`` is chosen so the
-        mean-CV wavelet's peak coincides with the wave passing through the
-        rostral end of the polyline — the most generous (highest-amplitude)
-        timing for the propagating model.
+            rho_d(x, t) = N w(d) Q(d) * s(t - t_fire - (x - x_start) / v_d)
+                          / (v_d * sigma * sqrt(e))
+
+        with ``s`` the unit-peak biphasic waveform of width ``sigma``. The
+        normalisation makes each lobe integrate (over x) to the fibre class's
+        moment ``N w(d) Q(d)``, so a lobe of the wave carries exactly the
+        moment the stationary model lumps at one point. The signal is the
+        integral of ``rho`` against the longitudinal lead field, by the
+        trapezoidal rule over the source positions inside the segment.
+
+        All fibres fire together at ``x_start`` (a stimulus); ``t_fire`` is set
+        so the mean-velocity wave reaches the rostral end at ``centre_ms``.
+        Faster and slower classes arrive earlier and later, which is the
+        temporal dispersion of the volley.
         """
-        x_start_m = arc_m[x_start_idx]
-        x_hot_m = arc_m[hot_idx]
-        if time_peak_at_hotspot:
-            t_fire_ms = centre_ms - (x_hot_m - x_start_m) / cv_mean * 1000.0
-        else:
-            t_fire_ms = centre_ms
+        lo, hi = sorted((int(x_start_idx), int(x_end_idx)))
+        x = arc_m[lo : hi + 1]
+        if len(x) < 2:
+            return np.zeros((L_long.shape[0], n), dtype=np.float64)
+        # Trapezoidal weights: each source stands for half the gap either side.
+        dx = np.empty_like(x)
+        dx[1:-1] = 0.5 * (x[2:] - x[:-2])
+        dx[0] = 0.5 * (x[1] - x[0])
+        dx[-1] = 0.5 * (x[-1] - x[-2])
 
-        shape_t = biphasic_waveform(t_ms - centre_ms, ap_width_ms=ap_width_ms)
+        sigma_s = ap_width_ms * 1e-3
+        lobe_m = cv_mean * sigma_s
+        spacing_m = float(np.diff(x).max())
+        if spacing_m > 0.5 * lobe_m:
+            logger.warning(
+                "source spacing (%.1f mm) is coarse against the travelling wave's "
+                "lobe width v*sigma = %.1f mm; the line integral is under-resolved. "
+                "Re-solve at a finer forward.source_spacing_mm.",
+                spacing_m * 1e3,
+                lobe_m * 1e3,
+            )
+        t_fire_ms = centre_ms - (arc_m[hot_idx] - arc_m[x_start_idx]) / cv_mean * 1000.0
+        dist_m = np.abs(x - arc_m[x_start_idx])  # distance travelled to each station
 
-        x_lo = arc_m[min(x_start_idx, x_end_idx)]
-        x_hi = arc_m[max(x_start_idx, x_end_idx)]
-        margin_m = 0.005  # 5 mm slop so AP envelope decays smoothly off-segment
-
-        # Wavelet position per (diameter, sample), snapped to the nearest source.
-        # arc_m is a cumulative arc length and therefore sorted, so searchsorted
-        # + a neighbour comparison gives the same index as an argmin over |Δ|.
-        x_dt = x_start_m + cv_per_d[:, None] * (t_ms - t_fire_ms)[None, :] * 1e-3
-        right = np.searchsorted(arc_m, x_dt).clip(1, len(arc_m) - 1)
-        left = right - 1
-        nearest = np.where(
-            np.abs(x_dt - arc_m[left]) <= np.abs(arc_m[right] - x_dt),
-            left,
-            right,
-        )
-
-        # Weight of each (diameter, sample) contribution, zero off-segment.
-        on_seg = (x_dt >= x_lo - margin_m) & (x_dt <= x_hi + margin_m)
-        w_dt = n_fibres * (fibres.weights * Q_per_fibre_Am)[:, None] * shape_t[None, :] * on_seg
-
-        # Accumulate into a (source × sample) moment map, then project through
-        # the leadfield once: same arithmetic as the per-sample loop, one matmul.
         moments = np.zeros((len(arc_m), n), dtype=np.float64)
-        t_idx = np.broadcast_to(np.arange(n), nearest.shape)
-        np.add.at(moments, (nearest.ravel(), t_idx.ravel()), w_dt.ravel())
+        q_d = n_fibres * fibres.weights * Q_per_fibre_Am  # A·m per fibre class
+        for q, v in zip(q_d, cv_per_d, strict=True):
+            if q == 0.0:
+                continue
+            arrival_ms = t_fire_ms + dist_m / v * 1000.0  # (stations,)
+            # s(tau) = -(tau/sigma) exp(-tau^2 / 2 sigma^2) * sqrt(e): the same
+            # unit-peak waveform as biphasic_waveform, written out because that
+            # function normalises by the largest *sample* it is handed.
+            tau = (t_ms[None, :] - arrival_ms[:, None]) / ap_width_ms
+            # rho * dx; the sqrt(e) of the unit-peak waveform and of the lobe
+            # integral cancel.
+            moments[lo : hi + 1] += (
+                (q / (v * sigma_s)) * (-tau * np.exp(-0.5 * tau**2)) * dx[:, None]
+            )
         return L_long @ moments
 
     return PropagationSignals(
         t_ms=t_ms,
         stationary=stationary_signal(),
         # Wave starts at the caudal end of the segment and ends at the rostral
-        # end, timed so the mean-CV wavelet peaks there. For a profile with no
+        # end, timed so the mean-CV wave arrives there. For a profile with no
         # localised generator this spans the whole polyline and coincides with
         # ``whole`` below.
-        segment=moving_wavelet(x_start_idx=seg_idx[0], x_end_idx=hot_idx),
-        whole=moving_wavelet(x_start_idx=0, x_end_idx=hot_idx),
+        segment=travelling_wave(seg_idx[0], hot_idx),
+        whole=travelling_wave(0, hot_idx),
         hot_idx=hot_idx,
         stationary_idx=lump_idx,
         n_fibres=int(n_fibres),
@@ -361,8 +374,11 @@ def propagation_ratio(
     For a profile with no localised generator the two coincide.
 
     A ratio below 1 means the stationary approximation *overestimates*: the
-    wavefront's contributions at different arc positions partially cancel, and
-    the event is spread over a transit far longer than its AP width. Returns
+    opposed lobes of the wave partly cancel at the sensors and the volley
+    disperses as it travels. A ratio above 1 is also possible, because the
+    wave passes every position on the path and the stationary source sits at
+    one: if that one is poorly coupled to the array, the wave is seen better
+    somewhere else. Returns
     1.0 if the stationary amplitude is degenerate.
     """
     prop = {"segment": signals.segment, "whole": signals.whole}

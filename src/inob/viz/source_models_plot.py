@@ -142,8 +142,8 @@ def render_source_models(
     # ── c: the ratios that do not depend on Q ──────────────────────────────
     ax_c = fig.add_subplot(gs[0, 2])
     ratio_labels = [f"OPM/elec\n{r.name}" for r in cmp.rows] + [
-        "propagation\npenalty (OPM)",
-        "propagation\npenalty (elec)",
+        "propagation\nfactor (OPM)",
+        "propagation\nfactor (elec)",
         "coherence\npenalty (OPM)",
     ]
     ratio_values = [r.modality_gap for r in cmp.rows] + [

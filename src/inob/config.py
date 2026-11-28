@@ -106,6 +106,21 @@ class FemCfg:
     bone_closing_mm: float
     tissues: tuple[str, ...]
     validate: FemValidate
+    # Optional local refinement after meshing: tissue label -> largest element
+    # volume in mm^3. The CGAL mesher takes one element size for the whole
+    # body, which leaves a thin source compartment one or two elements across;
+    # the Venant source models want vertices that belong to the source
+    # compartment alone. See inob.fem.refine. Empty = no refinement.
+    refine_max_volume_mm3: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for label, vol in self.refine_max_volume_mm3.items():
+            if label not in self.tissues:
+                raise ConfigError(f"[fem.refine_max_volume_mm3] {label!r} is not in fem.tissues")
+            if not vol > 0:
+                raise ConfigError(
+                    f"[fem.refine_max_volume_mm3] {label}: volume must be positive, got {vol}"
+                )
 
 
 #: How the two tangential coil axes are oriented at each sensor position.
@@ -997,7 +1012,20 @@ def _build_fem(d: dict[str, Any]) -> FemCfg:
     val = _build_dataclass(FemValidate, d.get("validate", {}), "fem.validate")
     body = {k: v for k, v in d.items() if k != "validate"}
     body["tissues"] = tuple(body.get("tissues", ()))
-    return _build_dataclass(FemCfg, {**body, "validate": val}, "fem", allow_defaults=False)
+    # Optional, and a mapping: every other fem key is required and scalar.
+    raw_refine = body.pop("refine_max_volume_mm3", None) or {}
+    if not isinstance(raw_refine, dict):
+        raise ConfigError("[fem.refine_max_volume_mm3] expected a mapping of tissue: mm^3")
+    try:
+        refine = {str(k): float(v) for k, v in raw_refine.items()}
+    except (TypeError, ValueError) as e:
+        raise ConfigError(f"[fem.refine_max_volume_mm3] volumes must be numbers: {e}") from e
+    return _build_dataclass(
+        FemCfg,
+        {**body, "validate": val, "refine_max_volume_mm3": refine},
+        "fem",
+        allow_defaults=False,
+    )
 
 
 def _build_forward(d: dict[str, Any]) -> ForwardCfg:
